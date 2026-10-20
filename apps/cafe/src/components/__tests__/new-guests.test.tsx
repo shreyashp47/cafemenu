@@ -18,6 +18,7 @@ import {
   DemoRulesRefusal,
   demoAcceptOrder,
   demoAssignDayNumber,
+  demoCloseTable,
   demoSetTableOpenUntil,
   loadDemoState,
   resetDemoStore,
@@ -277,7 +278,7 @@ describe("staff board: new guests", () => {
     const user = userEvent.setup();
     const order = await newGuestOrder(3);
     demoAcceptOrder(order.id, Date.now() + HOUR);
-    demoSetTableOpenUntil(3, Date.now()); // the group left; staff closed it
+    demoCloseTable(3); // the group left; staff closed it
     await demoAuthRepo.signInWithPin("1122");
     render(<StaffPage />);
 

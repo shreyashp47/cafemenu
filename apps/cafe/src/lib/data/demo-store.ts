@@ -447,10 +447,25 @@ export function demoAcceptOrder(id: string, openUntil: number): void {
 
 /** Staff keep an open table open (or close one: openUntil = now). */
 export function demoSetTableOpenUntil(table: number, openUntil: number): void {
+  setOpenUntil(table, openUntil, Date.now());
+}
+
+/**
+ * Staff close a table now. The Firestore adapter writes `serverTimestamp()`,
+ * which is exactly the rules' `request.time`, so reading the clock once here
+ * does the same. `demoSetTableOpenUntil(table, Date.now())` reads it twice, and
+ * is refused whenever a millisecond passes in between.
+ */
+export function demoCloseTable(table: number): void {
+  const now = Date.now();
+  setOpenUntil(table, now, now);
+}
+
+function setOpenUntil(table: number, openUntil: number, now: number): void {
   if (!Number.isInteger(table) || table < 1 || table > 50) {
     throw new DemoRulesRefusal("no such table");
   }
-  checkOpenUntil(openUntil, Date.now());
+  checkOpenUntil(openUntil, now);
   mutate((state) => ({
     ...state,
     tableSessions: { ...state.tableSessions, [table]: openUntil },

@@ -231,7 +231,7 @@ export const demoSessionRepo: SessionRepository = {
   },
   async close(table) {
     requireStaff();
-    store.demoSetTableOpenUntil(table, Date.now());
+    store.demoCloseTable(table);
   },
   subscribeSettings(listener) {
     return store.subscribeState((state) =>

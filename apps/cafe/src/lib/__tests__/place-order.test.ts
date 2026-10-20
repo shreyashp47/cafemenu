@@ -15,6 +15,7 @@ import {
 import { orderHref, parseTableNumber, readTableFromSearch } from "@/lib/tables";
 import { demoMenuRepo, demoOrderRepo, demoSessionRepo } from "@/lib/data/demo";
 import {
+  demoCloseTable,
   demoSaveOrdering,
   demoSaveTableKeys,
   demoSetTableOpenUntil,
@@ -306,8 +307,9 @@ describe("placeOrder", () => {
       // Closed two minutes ago by the server's time; the phone's clock may be
       // behind, so it guesses open, the rules refuse, and it falls back.
       const closedAt = Date.now();
-      demoSetTableOpenUntil(4, closedAt);
-      vi.useFakeTimers({ toFake: ["Date"], now: closedAt + 2 * 60_000 });
+      vi.useFakeTimers({ toFake: ["Date"], now: closedAt });
+      demoCloseTable(4);
+      vi.setSystemTime(closedAt + 2 * 60_000);
       const create = vi.spyOn(demoOrderRepo, "create");
       expect((await place()).status).toBe("pending");
       expect(create.mock.calls.map(([input]) => input.status)).toEqual([
@@ -319,8 +321,9 @@ describe("placeOrder", () => {
 
     it("does not bother trying preparing on a table closed well before", async () => {
       const closedAt = Date.now();
-      demoSetTableOpenUntil(4, closedAt);
-      vi.useFakeTimers({ toFake: ["Date"], now: closedAt + 10 * 60_000 });
+      vi.useFakeTimers({ toFake: ["Date"], now: closedAt });
+      demoCloseTable(4);
+      vi.setSystemTime(closedAt + 10 * 60_000);
       const create = vi.spyOn(demoOrderRepo, "create");
       expect((await place()).status).toBe("pending");
       expect(create.mock.calls.map(([input]) => input.status)).toEqual([
@@ -328,8 +331,17 @@ describe("placeOrder", () => {
       ]);
     });
 
+    it("closes a table even when the clock ticks between reads", () => {
+      // CI runners are slow enough for this to happen: closing with
+      // demoSetTableOpenUntil(table, Date.now()) was refused as "in the past".
+      let now = Date.now();
+      vi.spyOn(Date, "now").mockImplementation(() => now++);
+      expect(() => demoCloseTable(4)).not.toThrow();
+      expect(loadDemoState().tableSessions[4]).toBeLessThan(Date.now());
+    });
+
     it("waits again once the table's time has run out", async () => {
-      demoSetTableOpenUntil(4, Date.now());
+      demoCloseTable(4);
       expect((await place()).status).toBe("pending");
     });
 
