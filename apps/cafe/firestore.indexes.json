@@ -1,0 +1,35 @@
+{
+  "indexes": [
+    {
+      "//": "Staff board: status != completed, oldest first (requirements.md \u00a75.3). A != filter matches any value, so Firestore needs `status` indexed both ways \u2014 without the DESC entry the board query fails with failed-precondition.",
+      "collectionGroup": "orders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "orders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "ASCENDING"
+        }
+      ]
+    }
+  ],
+  "//": "Reports filter on createdAt alone (a bounded range plus an orderBy), which Firestore serves from its automatic single-field index. A one-field composite here is rejected as unnecessary.",
+  "fieldOverrides": []
+}

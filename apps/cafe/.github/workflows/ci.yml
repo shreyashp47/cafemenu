@@ -1,0 +1,206 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Only one run per branch; a new push cancels the run it supersedes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: lint · typecheck · test · build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+  # Proves the "professional" claim rather than asserting it: deliberately break
+  # a money rule and confirm the suite catches it.
+  self-check:
+    name: tests actually fail on a broken rule
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      - name: Introduce a deliberate bug
+        run: |
+          sed -i 's/return lines.reduce((sum, line) => sum + lineSubtotal(line), 0);/return lines.reduce((sum, line) => sum + line.qty, 0);/' src/lib/money.ts
+          git diff --stat
+
+      - name: The suite must go red
+        run: |
+          if npm test -- --run src/lib/__tests__/money.test.ts; then
+            echo "::error::money tests passed against a broken implementation"
+            exit 1
+          fi
+          echo "money tests correctly failed"
+
+  visual:
+    name: mobile layout smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install browsers
+        run: npx playwright install --with-deps chromium webkit
+
+      # A production build, not `next dev`: every route is prerendered, so the
+      # 24 screenshots take seconds instead of recompiling the app 8 times.
+      # `next/font/google` fetches the font files from Google at build time, so a
+      # flaky network on the runner fails the build with an unhelpful
+      # "Cannot read properties of null" from the font loader. Retry once: the
+      # failure is transient, and the alternative is self-hosting the woff2
+      # files (documented as the fallback in the README).
+      - name: Build
+        run: |
+          npm run build || {
+            echo "::warning::build failed, retrying once (next/font fetch is network-dependent)"
+            sleep 20
+            npm run build
+          }
+
+      # `next start` refuses to run under `output: "export"`, so the export in
+      # ./out is served instead — which is also closer to what Firebase Hosting
+      # actually serves, since that is a static host too.
+      - name: Start the server
+        run: |
+          npx --yes serve@latest out --listen 4320 --no-clipboard &
+          for i in $(seq 1 60); do
+            if curl -sf -o /dev/null http://127.0.0.1:4320/; then
+              echo "server up"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "server never came up"
+          exit 1
+
+      - name: Check every screen at phone widths
+        run: node scripts/screenshot.mjs --quick
+        env:
+          BASE_URL: http://127.0.0.1:4320
+
+      # WebKit is Safari/iOS, and colour contrast is a real gate here: the theme
+      # is a fixed warm palette, and two of its mid-tones cannot legally carry
+      # body text. This is what catches that.
+      # Every way a customer can arrive, including tapping a table number on the
+      # picker. That path was broken for as long as it existed and nothing caught
+      # it, because flow.mjs always navigated straight to /order?table=N.
+      - name: Entry paths
+        run: node scripts/entry.mjs
+        env:
+          BASE_URL: http://127.0.0.1:4320
+
+      - name: Accessibility + WebKit audit
+        run: node scripts/audit.mjs
+        env:
+          BASE_URL: http://127.0.0.1:4320
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: screenshots
+          path: .screenshots/
+          retention-days: 14
+
+  # firestore.rules is not TypeScript, so nothing else in this pipeline can see a
+  # mistake in it. It shipped once with a lambda in it — `reduce(0, function(){})`
+  # — that the rules language has no support for, and the only thing that noticed
+  # was `firebase deploy`, on the maintainer's machine, after a customer-facing
+  # release was already planned. This job is the check that should have existed.
+  rules:
+    name: firestore security rules
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      # The Firestore and Auth emulators are Java programs, and current
+      # firebase-tools refuses to run them on anything below 21.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install
+        run: npm ci
+
+      - name: Start the emulators
+        run: |
+          npx firebase-tools emulators:start --project demo-cafe \
+            --only firestore,auth > /tmp/emulators.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -sf -o /dev/null "http://127.0.0.1:8080/" \
+              && curl -sf -o /dev/null "http://127.0.0.1:9099/"; then
+              echo "emulators up"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "emulators never came up"
+          cat /tmp/emulators.log
+          exit 1
+
+      - name: Attack the rules
+        run: node scripts/rules-test.mjs
+
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: emulator-log
+          path: /tmp/emulators.log
+          retention-days: 7

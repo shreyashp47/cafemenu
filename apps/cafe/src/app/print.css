@@ -1,0 +1,69 @@
+/* ---------------------------------------------------------------------------
+   Print styles for the table QR sheet (docs/requirements.md §5.5).
+   Ink-friendly: no background washes, no shadows, one card per page-ish.
+   --------------------------------------------------------------------------- */
+
+@media print {
+  @page {
+    margin: 10mm;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+    background-image: none !important;
+    color: #000 !important;
+  }
+
+  /* everything that isn't a table card */
+  header,
+  nav,
+  .print\:hidden,
+  footer {
+    display: none !important;
+  }
+
+  * {
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  main,
+  .shell-wide,
+  .shell {
+    max-width: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .break-inside-avoid,
+  li {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* cards go two-up on A4/Letter with a visible cut line */
+  ul {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 6mm !important;
+  }
+
+  li > div {
+    border: 1px dashed #999 !important;
+    border-radius: 4mm;
+    padding: 6mm !important;
+    break-inside: avoid;
+  }
+
+  /* QR must stay crisp: never let the printer resample it */
+  svg {
+    width: 42mm !important;
+    height: 42mm !important;
+    shape-rendering: crispEdges;
+  }
+
+  a[href]::after {
+    content: "";
+  }
+}

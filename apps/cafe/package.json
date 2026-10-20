@@ -1,0 +1,66 @@
+{
+  "name": "cafe-qr-order",
+  "version": "0.1.0",
+  "private": true,
+  "description": "QR cafe ordering system — customers order from their phone, staff get live order alerts, owner gets reports. Next.js + Firebase, anime-cafe themed.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "preview": "serve out --listen 4320",
+    "emulators": "firebase emulators:start",
+    "build": "next build && node scripts/stamp-sw.mjs",
+    "start": "next start",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:rules": "node scripts/rules-test.mjs",
+    "test:entry": "node scripts/entry.mjs",
+    "flow": "node scripts/flow.mjs",
+    "audit": "node scripts/audit.mjs",
+    "verify": "npm run lint && npm run typecheck && npm run test && npm run build",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "seed:staff": "node scripts/seed-staff.mjs",
+    "cleanup:orders": "node scripts/cleanup-orders.mjs"
+  },
+  "dependencies": {
+    "firebase": "^12.19.0",
+    "next": "15.5.26",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
+    "@eslint/eslintrc": "^3",
+    "@tailwindcss/postcss": "^4",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitest/coverage-v8": "^4.1.11",
+    "axe-core": "^4.13.0",
+    "eslint": "^9",
+    "eslint-config-next": "15.5.26",
+    "jsdom": "^26.0.0",
+    "jsqr": "^1.4.0",
+    "playwright": "^1.63.0",
+    "prettier": "^3.6.2",
+    "prettier-plugin-tailwindcss": "^0.8.1",
+    "serve": "^14.2.6",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "vitest": "^4.1.11"
+  },
+  "overrides": {
+    "postcss": "^8.5.28"
+  }
+}

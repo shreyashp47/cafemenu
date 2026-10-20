@@ -1,0 +1,18 @@
+{
+  "projects": {
+    "default": "toi-cafe",
+    "prod": "toi-cafe"
+  },
+  "targets": {
+    "toi-cafe": {
+      "hosting": {
+        "app": [
+          "toe-cafe"
+        ],
+        "legacy": [
+          "toi-cafe"
+        ]
+      }
+    }
+  }
+}

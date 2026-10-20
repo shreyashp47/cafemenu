@@ -1,0 +1,361 @@
+@import "tailwindcss";
+@import "./print.css";
+
+/* ==========================================================================
+   Design tokens
+   Palette is LOCKED by docs/anime-theme.md §2 ("warm cream cafe + chibi").
+   Never hardcode a hex in a component — add a token here instead.
+   ========================================================================== */
+
+:root {
+  /* -- surfaces (light, paper-like: theme doc §2 "usage") ------------------ */
+  --cream: #f2e4d3;
+  --cream-soft: #f8efe3;
+  --tan: #e8d3b5;
+  --tan-deep: #dcc09b;
+  --paper: #fffcf7;
+
+  /* -- brand ------------------------------------------------------------- */
+  --primary: #7a3e1d; /* roasted brown — main CTAs, logo */
+  --primary-soft: #9c5730;
+  --primary-dark: #5a2d14;
+  --secondary: #c97b3d; /* terracotta — icons, chart bars, category accents */
+  --secondary-deep: #9a5522; /* same hue, darkened: terracotta as a button fill
+                                under cream text is only 2.9:1, which fails
+                                WCAG AA. --secondary stays for decorative use. */
+  --highlight: #e8a93e; /* mustard — badges, emphasis */
+  --highlight-soft: #f5d08a;
+  --sage: #6b8e5a; /* plants / success — fills, chart bars, borders */
+  --sage-deep: #3f5e33; /* same hue, darkened: sage on a light background is
+                           2.99:1, so it cannot be used as text. */
+  --sage-soft: #dfead6;
+  --berry: #c0505b; /* errors, new-order alert */
+  --berry-deep: #9c3540; /* berry as text on paper is 3.6:1 */
+
+  /* -- text (theme doc: dark coffee brown headers, soft charcoal body) ---- */
+  --ink: #3e2418;
+  --body: #4a4038;
+  --muted: #7a6a5c;
+  --on-dark: #f8efe3;
+
+  /* -- lines & depth ------------------------------------------------------ */
+  --line: #dcc8a9;
+  --line-soft: #e6d6bd;
+  --ring: #c97b3d;
+
+  /* -- elevation ---------------------------------------------------------- */
+  --shadow-soft: 0 2px 8px rgb(62 36 24 / 0.07);
+  --shadow-card: 0 3px 12px rgb(62 36 24 / 0.09);
+  --shadow-lift: 0 10px 28px rgb(62 36 24 / 0.16);
+  --shadow-sheet: 0 -8px 32px rgb(62 36 24 / 0.2);
+  --scrim: rgb(62 36 24 / 0.44);
+
+  /* -- geometry (theme doc §4 "rounded corners everywhere") --------------- */
+  --r-sm: 0.625rem;
+  --r-md: 1rem;
+  --r-lg: 1.375rem;
+  --r-xl: 1.75rem;
+  --r-pill: 999px;
+
+  /* -- layout ------------------------------------------------------------- */
+  --tap: 2.75rem; /* 44px minimum touch target */
+  --shell: 34rem; /* comfortable one-handed reading column */
+  --shell-wide: 60rem;
+}
+
+@theme inline {
+  --color-cream: var(--cream);
+  --color-cream-soft: var(--cream-soft);
+  --color-tan: var(--tan);
+  --color-tan-deep: var(--tan-deep);
+  --color-paper: var(--paper);
+
+  --color-primary: var(--primary);
+  --color-primary-soft: var(--primary-soft);
+  --color-primary-dark: var(--primary-dark);
+  --color-secondary: var(--secondary);
+  --color-secondary-deep: var(--secondary-deep);
+  --color-highlight: var(--highlight);
+  --color-highlight-soft: var(--highlight-soft);
+  --color-sage: var(--sage);
+  --color-sage-deep: var(--sage-deep);
+  --color-sage-soft: var(--sage-soft);
+  --color-berry: var(--berry);
+  --color-berry-deep: var(--berry-deep);
+
+  --color-ink: var(--ink);
+  --color-body: var(--body);
+  --color-muted: var(--muted);
+  --color-on-dark: var(--on-dark);
+
+  --color-line: var(--line);
+  --color-line-soft: var(--line-soft);
+  --color-ring: var(--ring);
+
+  --font-display: var(--font-caveat);
+  --font-round: var(--font-fredoka);
+  --font-sans: var(--font-nunito);
+
+  --radius-sm: var(--r-sm);
+  --radius-md: var(--r-md);
+  --radius-lg: var(--r-lg);
+  --radius-xl: var(--r-xl);
+  /* `rounded-pill` is used across the app; without this token Tailwind emits
+     nothing for it and every pill renders square. */
+  --radius-pill: var(--r-pill);
+
+  --shadow-soft: var(--shadow-soft);
+  --shadow-card: var(--shadow-card);
+  --shadow-lift: var(--shadow-lift);
+  --shadow-sheet: var(--shadow-sheet);
+
+  --text-2xs: 0.6875rem;
+
+  --animate-sheet-up: sheet-up 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+  --animate-sheet-down: sheet-down 0.22s ease-in forwards;
+  --animate-fade-in: fade-in 0.2s ease-out both;
+  --animate-pop-in: pop-in 0.28s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  --animate-badge-pop: badge-pop 0.34s cubic-bezier(0.34, 1.56, 0.64, 1);
+  --animate-bob: bob 3.4s ease-in-out infinite;
+  --animate-wiggle: wiggle 0.5s ease-in-out;
+  --animate-alert-flash: alert-flash 1.1s ease-out 3;
+  --animate-rise: rise 1.9s ease-out forwards;
+  --animate-drift: drift 4.5s linear infinite;
+  --animate-spin-slow: spin 1.1s linear infinite;
+
+  @keyframes sheet-up {
+    from {
+      transform: translateY(100%);
+    }
+    to {
+      transform: translateY(0);
+    }
+  }
+  @keyframes sheet-down {
+    from {
+      transform: translateY(0);
+    }
+    to {
+      transform: translateY(100%);
+    }
+  }
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes pop-in {
+    from {
+      opacity: 0;
+      transform: scale(0.94);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+  @keyframes badge-pop {
+    0% {
+      transform: scale(0.6);
+    }
+    60% {
+      transform: scale(1.15);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+  @keyframes bob {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-4px);
+    }
+  }
+  @keyframes wiggle {
+    0%,
+    100% {
+      transform: rotate(-2.5deg);
+    }
+    50% {
+      transform: rotate(2.5deg);
+    }
+  }
+  @keyframes alert-flash {
+    0%,
+    100% {
+      box-shadow: var(--shadow-card);
+    }
+    40% {
+      box-shadow:
+        0 0 0 4px color-mix(in srgb, var(--berry) 45%, transparent),
+        var(--shadow-lift);
+    }
+  }
+  @keyframes rise {
+    0% {
+      opacity: 0;
+      transform: translateY(6px) scale(0.6) rotate(0deg);
+    }
+    25% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(-64px) scale(1.05) rotate(var(--spin, 12deg));
+    }
+  }
+  @keyframes drift {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(50px);
+    }
+  }
+}
+
+/* ==========================================================================
+   Base
+   ========================================================================== */
+
+@layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    /* keep the sticky category rail from covering a section heading */
+    scroll-padding-top: 5.5rem;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--cream);
+    color: var(--body);
+    font-family: var(--font-nunito), ui-rounded, system-ui, sans-serif;
+    font-size: 1rem;
+    line-height: 1.55;
+    overscroll-behavior-y: none;
+    /* faint paper grain: two very low-opacity radial washes, no image request */
+    background-image:
+      radial-gradient(
+        circle at 12% 8%,
+        color-mix(in srgb, var(--highlight) 12%, transparent),
+        transparent 45%
+      ),
+      radial-gradient(
+        circle at 88% 4%,
+        color-mix(in srgb, var(--secondary) 10%, transparent),
+        transparent 40%
+      );
+    background-attachment: fixed;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    color: var(--ink);
+    font-family: var(--font-fredoka), var(--font-nunito), sans-serif;
+    font-weight: 600;
+    line-height: 1.15;
+    text-wrap: balance;
+  }
+
+  /* Prices and item names must stay fast to read (theme doc §3) */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+
+  :focus-visible {
+    outline: 3px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  button,
+  [role="button"] {
+    touch-action: manipulation;
+  }
+
+  /* iOS zooms any input whose font-size is under 16px on focus */
+  input,
+  select,
+  textarea {
+    font-size: max(1rem, 16px);
+    font-family: inherit;
+  }
+
+  ::selection {
+    background: var(--highlight-soft);
+    color: var(--ink);
+  }
+}
+
+@layer components {
+  .shell {
+    width: 100%;
+    max-width: var(--shell);
+    margin-inline: auto;
+    padding-inline: 1rem;
+  }
+
+  .shell-wide {
+    width: 100%;
+    max-width: var(--shell-wide);
+    margin-inline: auto;
+    padding-inline: 1rem;
+  }
+
+  /* theme doc §3: handwritten fonts stay decorative only */
+  .font-hand {
+    font-family: var(--font-caveat), cursive;
+  }
+}
+
+@layer utilities {
+  .safe-b {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+  .safe-t {
+    padding-top: max(0.5rem, env(safe-area-inset-top));
+  }
+  .pb-cart {
+    padding-bottom: calc(5.75rem + env(safe-area-inset-bottom));
+  }
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .doodle {
+    opacity: 0.12;
+    pointer-events: none;
+    user-select: none;
+  }
+}
+
+/* ==========================================================================
+   Reduced motion — theme doc §7: decoration must never cost usability
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,0 +1,21 @@
+name: Feature request
+description: Something the cafe needs that the app does not do yet
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: Who hits it, and what they do today instead.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would solve it
+  - type: checkboxes
+    id: cost
+    attributes:
+      label: Cost
+      options:
+        - label: This needs the Firebase Blaze plan (Cloud Functions, App Check, Storage, TTL)

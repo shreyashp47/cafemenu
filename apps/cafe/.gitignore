@@ -1,0 +1,35 @@
+node_modules
+.pnpm-store
+
+# env files
+.env
+.env.local
+.env*.local
+
+# next
+.next
+out
+build
+next-env.d.ts
+
+# testing
+coverage
+tsconfig.tsbuildinfo
+
+# local visual-check output (see scripts/screenshot.mjs)
+.screenshots/
+
+# misc
+.DS_Store
+*.pem
+.vscode
+.idea
+
+# Claude Code local state, including agent worktrees (full copies of this repo)
+.claude/
+
+# firebase (out/ is already ignored above, under # next)
+.firebase
+firebase-debug.log
+firestore-debug.log
+ui-debug.log

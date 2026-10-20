@@ -1,0 +1,540 @@
+rules_version = '2';
+
+// ---------------------------------------------------------------------------
+// Cafe QR ordering — Firestore security rules
+//
+// Mirrors requirements.md §6:
+//   "customers can only create orders, not read/modify others' orders or menu
+//    data", and staff/owner routes protected by authentication.
+//
+// Deploy with:  firebase deploy --only firestore:rules
+// ---------------------------------------------------------------------------
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // -- helpers -----------------------------------------------------------
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function role() {
+      return signedIn() && exists(/databases/$(database)/documents/staff/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/staff/$(request.auth.uid)).data.role
+        : "staff";
+    }
+
+    // A staff account is one that has a document in /staff. It used to be simply
+    // `signedIn()`, which was safe while the only people who ever signed in were
+    // staff. It is no longer: customers sign in anonymously so that the order
+    // rules can give each one read access to its own order, and `signedIn()` on
+    // its own would hand the entire order book to every customer who scans a QR
+    // code. Membership is now explicit, and the default is closed.
+    function isStaff() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/staff/$(request.auth.uid));
+    }
+
+    function isOwner() {
+      return signedIn() && role() == "owner";
+    }
+
+    // The caller's throttle document as it will stand once this commit lands.
+    // See /orderThrottle below.
+    function throttleAfter() {
+      return getAfter(/databases/$(database)/documents/orderThrottle/$(request.auth.uid)).data;
+    }
+
+    // The order's table code checks out. See /tableKeys below.
+    //
+    // A table with a code document needs that exact code on the order. A table
+    // without one takes orders without it: that is the transition, so deploying
+    // these rules changes nothing until the owner presses "Create codes" on
+    // /admin/qr. Costs one document read per order (exists() and get() on the
+    // same path are billed once).
+    function tableKeyOk() {
+      let path = /databases/$(database)/documents/tableKeys/$(string(request.resource.data.tableNumber));
+      return !exists(path)
+        || request.resource.data.get("tableKey", "") == get(path).data.key;
+    }
+
+    // The order may skip the "check the table" step: the owner has not
+    // switched confirmation on, or the table is open. See /tableSessions below.
+    //
+    // Confirmation is OFF unless config/ordering says confirmNewGuests: true
+    // (a missing document or field means off), so by default every order goes
+    // straight to the kitchen, as it did before this step existed.
+    //
+    // Called only for a `preparing` order, and last, so a `pending` order and
+    // a malformed one cost no extra read. One read when confirmation is off
+    // (config/ordering), two when it is on (and the table's session).
+    function tableOpenOrUnconfirmed() {
+      let session = /databases/$(database)/documents/tableSessions/$(string(request.resource.data.tableNumber));
+      let ordering = /databases/$(database)/documents/config/ordering;
+      return !exists(ordering)
+        || get(ordering).data.get("confirmNewGuests", false) != true
+        || (exists(session) && get(session).data.openUntil > request.time);
+    }
+
+    // -- menu: public read, owner write ------------------------------------
+
+    match /menu/{itemId} {
+      allow read: if true;
+      allow create, update, delete: if isOwner();
+    }
+
+    // -- orders -------------------------------------------------------------
+    // Public create (no customer login, §3), everything else staff-only.
+    // The create rule pins status, createdAt and the field set rather than
+    // trusting whatever the phone sent. It does not re-derive the total — see
+    // the long comment on `allow create` below for why it cannot.
+
+    match /orders/{orderId} {
+      // Split deliberately into `get` and `list`, because a single `allow read`
+      // cannot express this.
+      //
+      // Staff see the whole board. A customer sees only the order they placed,
+      // which is what the confirmation and live-status screens need — they hold
+      // an anonymous uid, and the create rule pins it to the document.
+      //
+      // Written as one `allow read: if isStaff() || resource.data.customerUid ==
+      // request.auth.uid`, the staff board stops working. Firestore has to be
+      // able to *prove* a list query only returns documents the caller may read,
+      // and an OR with a content-dependent branch leaves it unable to, so it
+      // refuses the whole query with "Missing or insufficient permissions" — the
+      // exact error that surfaced on the board while single-document reads kept
+      // working. A customer reading their own order is a `get`; the board is a
+      // `list`. Only `list` needs the proof, so only `list` is staff-only.
+      allow get: if isStaff()
+        || (signedIn() && resource.data.customerUid == request.auth.uid);
+      allow list: if isStaff();
+
+      allow delete: if isOwner();
+
+      // This is the only write any member of the public can perform, so it is
+      // written to be hostile: the client chooses the table, the items and the
+      // notes, and nothing else.
+      //
+      // What this rule pins down:
+      //   - the exact set of fields, so nothing extra can be injected
+      //   - status, which a customer could otherwise set to "completed" and
+      //     make an unpaid order look settled. An order starts `pending`
+      //     (waiting for staff to confirm the table) or `preparing`; with the
+      //     owner's "Approve new tables" on, `preparing` only on a table staff
+      //     have opened (tableOpenOrUnconfirmed above)
+      //   - createdAt == request.time, so a phone with a wrong clock cannot
+      //     backdate an order out of today's takings
+      //   - customerUid, which must equal the caller's own anonymous uid, so a
+      //     customer can only ever read back the order they placed themselves
+      //   - total as a bounded int, and the order's size (see the caps below)
+      //   - the table's secret code, when the table has one (tableKeyOk above)
+      //   - volume: the same commit must stamp the caller's /orderThrottle doc
+      //     with this order's id, and that stamp is refused within 30 seconds of
+      //     the previous one (issue #32; see /orderThrottle below)
+      //
+      // What it deliberately does NOT do: recompute `total` from the line items.
+      // Firestore rules have no loops and no lambdas — there is no `reduce` and
+      // no `function` expression — so an arbitrary-length list cannot be summed
+      // here. `total` is therefore client-supplied and a customer with devtools
+      // could post a cheap total. See docs/decisions.md and the README; the fix
+      // is a trusted backend, not a cleverer rule.
+      //
+      // There is no orderNumber, dayNumber or dayKey field. The customer's
+      // phone allocates nothing and bumps no shared counter (issue #30): the
+      // staff board numbers the order afterwards (dayCounters below). Orders
+      // placed before that change may carry an orderNumber, which is fine: this
+      // rule only governs creates.
+      // Size caps (src/lib/order-caps.ts must match): at most 20 lines, 1..20
+      // of each, and a total of at most ₹10,000. A prank order is only worth
+      // placing if it is big; a real table rarely comes near these.
+      //
+      // The rules language cannot loop, so "1..20 of each" is checked on the
+      // first and the last line only, as config/tables does. A hand-crafted
+      // order could still carry qty 500 on a middle line. What bounds the harm
+      // anyway: the ₹10,000 total cap, the staff board re-deriving every total
+      // from the lines (src/lib/order-integrity.ts), and staff being able to
+      // reject the order.
+      //
+      // tableKey is the one optional field. It is left on the saved order,
+      // where staff (who can read every order) could see it. That is accepted:
+      // staff stand next to the card anyway, and the owner can renew a code.
+      allow create: if
+        request.resource.data.keys().hasOnly([
+          "tableNumber",
+          "items",
+          "total",
+          "status",
+          "createdAt",
+          "notes",
+          "paymentMethod",
+          "customerUid",
+          "tableKey"
+        ])
+        && request.resource.data.customerUid == request.auth.uid
+        && request.resource.data.tableNumber is int
+        && request.resource.data.tableNumber >= 1
+        && request.resource.data.tableNumber <= 50
+        && request.resource.data.status in ["pending", "preparing"]
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.total is int
+        && request.resource.data.total >= 0
+        && request.resource.data.total <= 10000
+        && request.resource.data.notes is string
+        && request.resource.data.notes.size() <= 280
+        && request.resource.data.paymentMethod in ["counter", "online"]
+        && (!("tableKey" in request.resource.data)
+          || (request.resource.data.tableKey is string
+            && request.resource.data.tableKey.size() <= 64))
+        && request.resource.data.items is list
+        && request.resource.data.items.size() > 0
+        && request.resource.data.items.size() <= 20
+        // The rules language cannot loop, so only the first and last lines can
+        // be shape checked. size() > 0 above guarantees both indexes exist.
+        && request.resource.data.items[0] is map
+        && request.resource.data.items[0].name is string
+        && request.resource.data.items[0].name.size() > 0
+        && request.resource.data.items[0].name.size() <= 80
+        && request.resource.data.items[0].qty is int
+        && request.resource.data.items[0].qty >= 1
+        && request.resource.data.items[0].qty <= 20
+        && request.resource.data.items[0].price is int
+        && request.resource.data.items[0].price >= 0
+        && request.resource.data.items[0].price <= 10000
+        && request.resource.data.items[request.resource.data.items.size() - 1] is map
+        && request.resource.data.items[request.resource.data.items.size() - 1].qty is int
+        && request.resource.data.items[request.resource.data.items.size() - 1].qty >= 1
+        && request.resource.data.items[request.resource.data.items.size() - 1].qty <= 20
+        // Rate limit. Matching the id means one stamp buys exactly one order:
+        // a batch cannot write the throttle doc once and 499 orders beside it,
+        // because a document can only be written once per commit. The throttle
+        // and table-code checks come last so a malformed order is refused
+        // before any document is fetched.
+        && throttleAfter().lastOrderId == orderId
+        && throttleAfter().lastOrderAt == request.time
+        && tableKeyOk()
+        && (request.resource.data.status == "pending"
+          || tableOpenOrUnconfirmed());
+
+      // Staff advance the status and nothing else. Only the legal fields may
+      // change, and only to a legal next state, so a staff account cannot
+      // silently rewrite an order's contents after the fact.
+      //
+      // The transitions are spelled out rather than computed. The obvious
+      // `list[list.indexOf(current) + 1]` does not work: the rules language has
+      // no `indexOf`, and it fails at *runtime* as a permission error, not at
+      // compile time, so a status that should be allowed is silently refused.
+      //
+      // Accepting a new guest is pending -> preparing, the first hop below.
+      // Opening the table goes in the same commit but is its own write, to
+      // /tableSessions, checked there.
+      //
+      // Rejecting (src/lib/order-status.ts) is allowed from pending, preparing
+      // or ready, with an optional short reason the customer sees. `rejected` has no way
+      // out, so it is terminal, like `completed`. Customers cannot update at
+      // all, so they can neither reject nor un-reject.
+      //
+      // The first branch is numbering: the staff board writes today's number
+      // (dayNumber, dayKey) as an update of its own, never mixed with a status
+      // change, so each branch keeps its own short hasOnly list. See
+      // dayNumberOk below. A `pending` order is not numbered: it gets its
+      // number once staff accept it, so a new guest turned away (usually
+      // someone not in the cafe) never uses one up. Otherwise numbering does
+      // not care about status, so a rejected or finished order that somehow
+      // missed its number can still get one; and a numbered order keeps it
+      // through every later status change. The status check reads the order
+      // as it stood before the commit, which numbering never changes.
+      allow update: if isStaff()
+        && (
+          (request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(["dayNumber", "dayKey"])
+            && resource.data.status != "pending"
+            && !("dayNumber" in resource.data)
+            && !("dayKey" in resource.data)
+            && dayNumberOk(orderId))
+          || (request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(["status", "completedAt"])
+            && (
+              (resource.data.status == "pending"
+                && request.resource.data.status == "preparing")
+              || (resource.data.status == "preparing"
+                && request.resource.data.status == "ready")
+              || (resource.data.status == "ready"
+                && request.resource.data.status == "served")
+              || (resource.data.status == "served"
+                && request.resource.data.status == "completed")
+            ))
+          || (request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(["status", "rejectReason"])
+            && resource.data.status in ["pending", "preparing", "ready"]
+            && request.resource.data.status == "rejected"
+            && (!("rejectReason" in request.resource.data)
+              || (request.resource.data.rejectReason is string
+                && request.resource.data.rejectReason.size() <= 80)))
+        );
+    }
+
+    // -- daily order numbers -------------------------------------------------
+    // The owner wants orders numbered #0001, #0002, … starting again every day
+    // (src/lib/order-number.ts). The staff board assigns them, in a
+    // transaction that writes the number on the order and bumps
+    // dayCounters/{YYYY-MM-DD} = { next } in the same commit
+    // (src/lib/day-number.ts).
+    //
+    // This is safe where /meta/counters was not (issue #30) because no customer
+    // can touch it: the counter and the numbering update are staff-only.
+    //
+    // What makes the numbers unique rather than merely likely-unique: the
+    // number must equal the counter's `next` as it stood before this commit,
+    // the counter must be `next + 1` after it, and the counter must name this
+    // order as the one it was bumped for (`last`). Two boards that both read
+    // next == 7 cannot both commit — Firestore's transaction sees the counter
+    // change and retries (or refuses) the loser, who then finds the order
+    // already numbered. And one commit cannot number two orders against a
+    // single bump: the counter can name only one of them, so the other is
+    // refused. A day with no counter yet starts at 1. An order can only be
+    // numbered once, and every counter write must be the numbering of exactly
+    // the order it names (dayCounters below), so no number is ever handed out
+    // twice and the counter never moves on its own. A rejected order keeps its
+    // number, so a day's list can still have gaps; those are fine.
+    //
+    // The day is checked too. dayKey must be the IST date of the order's own
+    // createdAt, so a board with a wrong clock cannot file today's order under
+    // tomorrow, and an order placed at 23:59:59 stays in that day's sequence
+    // even when it is numbered after midnight. IST is UTC+5:30 all year (no
+    // daylight saving), so adding 330 minutes and reading the UTC date is
+    // exact. istDayKey in src/lib/order-number.ts does the same sum.
+    function dayKeyOf(t) {
+      let d = t + duration.value(330, 'm');
+      return string(d.year())
+        + "-" + (d.month() < 10 ? "0" : "") + string(d.month())
+        + "-" + (d.day() < 10 ? "0" : "") + string(d.day());
+    }
+
+    function dayNumberOk(orderId) {
+      let n = request.resource.data.dayNumber;
+      let key = request.resource.data.dayKey;
+      let counter = /databases/$(database)/documents/dayCounters/$(key);
+      return n is int
+        && n >= 1
+        && n <= 9999
+        && key is string
+        && key.matches("^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
+        && key == dayKeyOf(resource.data.createdAt)
+        && (exists(counter) ? get(counter).data.next == n : n == 1)
+        && getAfter(counter).data.next == n + 1
+        && getAfter(counter).data.last == orderId;
+    }
+
+    // { next: n, last: orderId } — the number the next order of that day will
+    // get, and the order the last bump was for. Staff and owner read and write
+    // it; customers and signed-out callers get nothing. It only ever starts at
+    // 2 (the day's first order took 1) and steps up by exactly one, and it
+    // cannot be deleted, because a reset would hand the day's numbers out a
+    // second time.
+    //
+    // Every write must BE a numbering: the order it names must have had no
+    // number before this commit and have `next - 1` for this day after it. So
+    // the counter cannot be bumped on its own (no by-hand gaps), and the order
+    // rule's `last == orderId` check pins each bump to exactly one order.
+    //
+    // What staff can still do: number every open order in a loop and so use
+    // the day's numbers up faster than orders arrive. Staff are trusted with
+    // the board anyway; see SECURITY.md.
+    function counterWriteOk(day) {
+      let d = request.resource.data;
+      let order = /databases/$(database)/documents/orders/$(d.last);
+      return d.keys().hasOnly(["next", "last"])
+        && d.next is int
+        && d.last is string
+        && !("dayNumber" in get(order).data)
+        && getAfter(order).data.get("dayNumber", 0) == d.next - 1
+        && getAfter(order).data.get("dayKey", "") == day;
+    }
+
+    match /dayCounters/{day} {
+      allow read: if isStaff();
+      allow create: if isStaff()
+        && day.matches("^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
+        && request.resource.data.next == 2
+        && counterWriteOk(day);
+      allow update: if isStaff()
+        && request.resource.data.next == resource.data.next + 1
+        && request.resource.data.next <= 10000
+        && counterWriteOk(day);
+    }
+
+    // -- orderThrottle: one order per customer per 30 seconds ---------------
+    // Issue #32. Order creation is the one public write, and it used to be
+    // unbounded: a script could post orders as fast as it liked, burying real
+    // ones on the staff board and burning the free-tier quota.
+    //
+    // App Check is the purpose-built answer, but it needs the Blaze plan. This
+    // is the free-tier version. Each customer holds an anonymous uid, so each
+    // one gets a document here recording when they last ordered. The order
+    // create rule requires the same batch to stamp it (lastOrderAt ==
+    // request.time, lastOrderId == the new order), and this rule refuses the
+    // stamp until 30 seconds have passed since the previous one. First order:
+    // the document does not exist yet, so it is a `create` and there is nothing
+    // to wait for.
+    //
+    // No delete, for anyone: deleting the document would reset the clock.
+    //
+    // What it does not stop: a script that signs in anonymously again for each
+    // order gets a fresh uid and a fresh clock. Firebase Auth limits how fast
+    // new accounts can be created from one IP address, which slows that down,
+    // but it is not a per-device guarantee. That gap is what App Check is for.
+    //
+    // 30 must match ORDER_GAP_SECONDS in src/lib/order-throttle.ts; a unit test
+    // reads this file to check.
+
+    function throttleStamp() {
+      return request.resource.data.keys().hasOnly(["lastOrderAt", "lastOrderId"])
+        && request.resource.data.lastOrderAt == request.time
+        && request.resource.data.lastOrderId is string;
+    }
+
+    match /orderThrottle/{uid} {
+      // The phone reads its own, only when an order is refused, to tell
+      // "throttled" apart from any other refusal.
+      allow get: if signedIn() && request.auth.uid == uid;
+      allow create: if signedIn() && request.auth.uid == uid && throttleStamp();
+      allow update: if signedIn() && request.auth.uid == uid && throttleStamp()
+        && request.time >= resource.data.lastOrderAt + duration.value(30, 's');
+    }
+
+    // -- tableKeys: each table's secret QR code ------------------------------
+    // { key: "…" } at tableKeys/{tableNumber}. The order create rule reads it
+    // (tableKeyOk above); rules can read any document whatever these say.
+    //
+    // Owner only, both ways. A customer must never read one — that is the whole
+    // point — and staff have no need to: the board works without them. The
+    // owner creates them on /admin/qr and prints them into the QR cards.
+    // Deleting one reopens that table to keyless orders, which is also how a
+    // table goes back to the old behaviour if the owner ever needs it.
+    match /tableKeys/{table} {
+      allow read: if isOwner();
+      allow create, update: if isOwner()
+        // Tables are 1..50, as on an order; letters and digits only, which is
+        // all the app generates and all the order page accepts from a QR code.
+        // Anything else would be a code no printed card could ever carry.
+        && table.matches("^([1-9]|[1-4][0-9]|50)$")
+        && request.resource.data.keys().hasOnly(["key"])
+        && request.resource.data.key is string
+        && request.resource.data.key.matches("^[A-Za-z0-9]{10,64}$");
+      allow delete: if isOwner();
+    }
+
+    // -- tableSessions: which tables staff have confirmed --------------------
+    // { openUntil: timestamp } at tableSessions/{tableNumber}. While openUntil
+    // is in the future the table is open and its orders go straight to the
+    // kitchen; otherwise, while the owner has "Approve new tables" on, they
+    // arrive `pending` for staff to check the table (src/lib/table-open.ts). This is what stops an order from someone who
+    // once had the QR link but is not in the cafe.
+    //
+    // Public `get`, staff-only `list`. The customer's phone reads its own
+    // table's document (by id) to choose the order's status, which says
+    // nothing about any other table. Listing them all is only for the staff
+    // board: open to anyone, it would show which tables are open right now,
+    // and so when an order from a leaked link would skip the check.
+    //
+    // Staff (the owner included) write, and only this one field, to a time
+    // from now to four hours ahead: Accept sets now + 3h, staff working on the
+    // table's orders push it forward, "Close table" sets it to now. The hour
+    // of slack covers a counter tablet whose clock runs a little fast. Four
+    // hours is the most a table can be opened for without a person at the
+    // counter doing something again, which bounds how long a stolen link
+    // could skip the check. Tables close on their own when the time passes,
+    // so nothing ever needs deleting.
+    match /tableSessions/{table} {
+      allow get: if true;
+      allow list: if isStaff();
+      allow create, update: if isStaff()
+        && table.matches("^([1-9]|[1-4][0-9]|50)$")
+        && request.resource.data.keys().hasOnly(["openUntil"])
+        && request.resource.data.openUntil is timestamp
+        && request.resource.data.openUntil >= request.time
+        && request.resource.data.openUntil <= request.time + duration.value(4, 'h');
+    }
+
+    // -- staff directory (role lookup) -------------------------------------
+
+    match /staff/{userId} {
+      // A signed-in user may read only their own record; owners read all.
+      allow read: if isOwner() || (signedIn() && request.auth.uid == userId);
+      allow write: if isOwner();
+    }
+
+    // -- config: the "today's special" board, and the table list ----------
+
+    match /config/{docId} {
+      allow read: if true;
+      // config/tables and config/ordering are excluded here and handled
+      // below. Two matching blocks are OR-ed together, so without this
+      // carve-out their shape checks could be bypassed through this broader
+      // rule.
+      allow write: if isOwner() && !(docId in ["tables", "ordering"]);
+    }
+
+    // The owner's "Approve new tables" switch, { confirmNewGuests: bool }. A
+    // missing document means OFF (see tableOpenOrUnconfirmed above): the owner
+    // chose auto-accept as the default and turns approval on when staff are
+    // ready for it. Public read, like the rest of config: the customer's phone
+    // reads it to choose the order's status.
+    match /config/ordering {
+      allow create, update: if isOwner()
+        && request.resource.data.keys().hasOnly(["confirmNewGuests"])
+        && request.resource.data.confirmNewGuests is bool;
+      allow delete: if isOwner();
+    }
+
+    // The table list /order checks a scanned number against, saved by the
+    // owner on /admin/qr as { tables: [1, 2, …] }.
+    //
+    // The rules language cannot loop, so not every entry can be checked. What is
+    // checked: the only field is `tables`, it is a list of 1..50 entries (50 is
+    // the highest table an order may carry, above), and the first and last
+    // entries are whole numbers in 1..50. The app always saves the list sorted,
+    // so for the app's own writes that bounds every entry. A hand-crafted write
+    // can still slip a bad value into the middle; the client drops any entry
+    // that is not a whole number 1..50 when it reads the list
+    // (normalizeTables in src/lib/tables.ts), and the owner is the only one who
+    // can write here at all.
+    //
+    // Delete is allowed on its own: it has no shape to check, and it simply
+    // puts the cafe back on the NEXT_PUBLIC_TABLES default.
+    function validTables() {
+      let t = request.resource.data.tables;
+      return request.resource.data.keys().hasOnly(["tables"])
+        && t is list
+        && t.size() >= 1
+        && t.size() <= 50
+        && t[0] is int
+        && t[0] >= 1
+        && t[0] <= 50
+        && t[t.size() - 1] is int
+        && t[t.size() - 1] >= 1
+        && t[t.size() - 1] <= 50;
+    }
+
+    match /config/tables {
+      allow create, update: if isOwner() && validTables();
+      allow delete: if isOwner();
+    }
+
+    // -- meta: gone ----------------------------------------------------------
+    // /meta/counters used to hold the order display number, and every customer
+    // phone incremented it — which meant anyone on the internet could write it:
+    // reset it so two orders shared a receipt number, push it to 999999, or loop
+    // on it to burn the free-tier write quota (issue #30). Numbers now come from
+    // the staff-only /dayCounters above, so nothing needs /meta and
+    // it falls through to the default deny below for everyone, staff included.
+    // A leftover /meta/counters document in an existing project is inert and can
+    // be deleted from the console.
+
+    // default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

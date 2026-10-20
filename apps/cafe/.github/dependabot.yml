@@ -1,0 +1,46 @@
+# Keeps the free-tier stack's dependencies — and therefore its CVEs — current.
+# Grouped so a busy week produces one PR instead of twenty.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    # Major versions are upgraded on purpose, one at a time, from a tracking
+    # issue — not as a stack of red PRs that each fail on their own. Security
+    # updates are unaffected: Dependabot raises those regardless of this rule.
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
+    groups:
+      # vitest and its coverage provider are version-locked to each other; bump
+      # one without the other and `npm ci` fails to resolve.
+      test-runner:
+        patterns:
+          - vitest
+          - "@vitest/*"
+      # Patch/minor for runtime deps: a safe, reviewable bump.
+      production:
+        dependency-type: production
+        update-types:
+          - minor
+          - patch
+      # Dev tooling: same, so a vitest/jest bump does not need its own PR.
+      development:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
+    labels:
+      - dependencies
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    labels:
+      - ci
+      - dependencies
