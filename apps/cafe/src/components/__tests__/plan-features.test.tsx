@@ -14,6 +14,7 @@ import { demoAuthRepo } from "@/lib/data/demo";
 import { demoSeedOrders, resetDemoStore } from "@/lib/data/demo-store";
 import { buildSampleOrders } from "@/lib/data/sample-orders";
 import { DEMO_CREDENTIALS } from "@/lib/data/seed";
+import { SUITE_SETTINGS } from "@/test/cafe";
 
 // A real module with one function swappable, so a test can stand in a plan
 // without the feature. Every other export is the real one.
@@ -28,7 +29,7 @@ const { features: realFeatures } =
 beforeEach(async () => {
   vi.mocked(shared.features).mockReset().mockImplementation(realFeatures);
   resetDemoStore();
-  demoSeedOrders(buildSampleOrders(40));
+  demoSeedOrders(buildSampleOrders(40), SUITE_SETTINGS.timeZone);
   await demoAuthRepo.signIn(
     DEMO_CREDENTIALS.owner.email,
     DEMO_CREDENTIALS.owner.password,
