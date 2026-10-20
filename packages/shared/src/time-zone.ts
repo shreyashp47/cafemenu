@@ -1,12 +1,14 @@
 /**
- * Time zones, as far as the settings need them.
+ * Time zones: the cafe's day, and what the settings carry for the rules.
  *
  * A cafe's day (its order numbers, its reports) starts at local midnight. The
- * app can ask `Intl` where that is, but firestore.rules cannot: the rules
- * language has no time zone database. So the settings carry the zone's two UTC
- * offsets, standard and daylight-saving, and the rules accept a day that
- * matches either (PLAN.md, Phase 1). For a zone without daylight saving, such
- * as Asia/Kolkata, the two are the same.
+ * app asks `Intl` where that is (`dayKeyIn`, `dayStartIn`), whatever zone the
+ * phone or laptop itself is set to. firestore.rules cannot: the rules language
+ * has no time zone database. So the settings carry the zone's two UTC offsets,
+ * standard and daylight-saving, and the rules accept a day that matches either
+ * (`dayKeysAt`; apps/cafe/docs/decisions.md, "Any time zone"). For a zone
+ * without daylight saving, such as Asia/Kolkata, the two are the same and so is
+ * the day.
  */
 
 export interface UtcOffsets {
@@ -33,46 +35,159 @@ export function isTimeZone(value: unknown): value is string {
   }
 }
 
+// One formatter per zone: building one costs far more than using it, and the
+// history and reports pages ask for hundreds of dates at a time.
+const wallFormats = new Map<string, Intl.DateTimeFormat>();
+
+interface WallClock {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+}
+
+/** The date and time a clock in `timeZone` shows at the instant `ms`. */
+function wallClock(timeZone: string, ms: number): WallClock {
+  let format = wallFormats.get(timeZone);
+  if (!format) {
+    format = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      calendar: "gregory",
+      numberingSystem: "latn",
+      hourCycle: "h23",
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+      hour: "numeric",
+      minute: "numeric",
+    });
+    wallFormats.set(timeZone, format);
+  }
+  const parts = format.formatToParts(ms);
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    Number(parts.find((p) => p.type === type)?.value);
+  return {
+    year: part("year"),
+    month: part("month"),
+    day: part("day"),
+    hour: part("hour"),
+    minute: part("minute"),
+  };
+}
+
+const pad = (n: number, width = 2) => String(n).padStart(width, "0");
+
+const DAY_MS = 86_400_000;
+
 /** Minutes east of UTC in `timeZone` at the instant `ms`. */
 export function utcOffsetAt(timeZone: string, ms: number): number {
   // Reads the zone's wall clock back as if it were UTC; the difference is the
   // offset. This works on every engine, unlike the newer "longOffset" format.
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    hourCycle: "h23",
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-    hour: "numeric",
-    minute: "numeric",
-  }).formatToParts(ms);
-  const part = (type: Intl.DateTimeFormatPartTypes) =>
-    Number(parts.find((p) => p.type === type)?.value);
-  const wall = Date.UTC(
-    part("year"),
-    part("month") - 1,
-    part("day"),
-    part("hour"),
-    part("minute"),
-  );
+  const w = wallClock(timeZone, ms);
+  const wall = Date.UTC(w.year, w.month - 1, w.day, w.hour, w.minute);
   const minute = Math.floor(ms / 60_000) * 60_000;
   return Math.round((wall - minute) / 60_000);
 }
 
 /**
- * The zone's standard and daylight-saving offsets in `year`, from its offset on
- * the first of every month. The smaller is called standard, which also holds in
- * the southern hemisphere, where daylight saving spans the new year.
+ * The zone's standard and daylight-saving offsets in `year`, from its offset at
+ * noon UTC on every day of it, so a few weeks of daylight saving (or of its
+ * suspension, as in Morocco for Ramadan) are not missed. The smaller is called
+ * standard, which also holds in the southern hemisphere, where daylight saving
+ * spans the new year.
  */
 export function utcOffsetsOf(
   timeZone: string,
   year = new Date().getUTCFullYear(),
 ): UtcOffsets {
-  const seen: number[] = [];
-  for (let month = 0; month < 12; month += 1) {
-    seen.push(utcOffsetAt(timeZone, Date.UTC(year, month, 1, 12)));
+  const seen = new Set<number>();
+  const end = Date.UTC(year + 1, 0, 1);
+  for (let ms = Date.UTC(year, 0, 1, 12); ms < end; ms += DAY_MS) {
+    seen.add(utcOffsetAt(timeZone, ms));
   }
   return { standard: Math.min(...seen), daylight: Math.max(...seen) };
+}
+
+// --- the cafe's day ---------------------------------------------------------
+
+/**
+ * The cafe day an instant belongs to, "YYYY-MM-DD": the date a clock in
+ * `timeZone` shows at `ms`. Daily order numbers count within it, and reports
+ * bucket by it. The device's own zone plays no part, so a laptop set to
+ * another zone still files an order under the cafe's day.
+ */
+export function dayKeyIn(timeZone: string, ms: number): string {
+  const w = wallClock(timeZone, ms);
+  return `${pad(w.year, 4)}-${pad(w.month)}-${pad(w.day)}`;
+}
+
+/** "YYYY-MM-DD HH:MM", the cafe's own date and time at `ms` (24-hour). */
+export function wallTimeIn(timeZone: string, ms: number): string {
+  const w = wallClock(timeZone, ms);
+  return `${pad(w.year, 4)}-${pad(w.month)}-${pad(w.day)} ${pad(w.hour)}:${pad(w.minute)}`;
+}
+
+/** The day `days` after `key` (before, when negative), by the calendar. */
+export function addDays(key: string, days: number): string {
+  const [y, m, d] = key.split("-").map(Number);
+  return keyOf(y, m - 1, d + days);
+}
+
+/** The first day of the month `months` after the one `key` is in. */
+export function addMonths(key: string, months: number): string {
+  const [y, m] = key.split("-").map(Number);
+  return keyOf(y, m - 1 + months, 1);
+}
+
+/** "YYYY-MM-DD" for a calendar date, overflow carried: (2026, 12, 1) is 2027-01-01. */
+function keyOf(year: number, month0: number, day: number): string {
+  const date = new Date(midnightUtc(year, month0, day));
+  return `${pad(date.getUTCFullYear(), 4)}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`;
+}
+
+function midnightUtc(year: number, month0: number, day: number): number {
+  const date = new Date(0);
+  // Unlike Date.UTC, this does not read years 0-99 as 1900-1999.
+  date.setUTCFullYear(year, month0, day);
+  return date.getTime();
+}
+
+/**
+ * The first instant of the day `key` in `timeZone`: local midnight, or, on the
+ * rare day a daylight-saving jump skips midnight (America/Santiago, say), the
+ * moment the clock jumps. A day is `[dayStartIn(key), dayStartIn(next))`,
+ * which is 23 or 25 hours long on a change day; never add 24 hours instead.
+ */
+export function dayStartIn(timeZone: string, key: string): number {
+  const [y, m, d] = key.split("-").map(Number);
+  const midnight = midnightUtc(y, m - 1, d);
+  // Wherever the zone is, its clock reads `key` 00:00 within this window: an
+  // hour beyond the furthest offsets either way. Halve it down to the minute
+  // (offsets and daylight-saving jumps are whole minutes), keeping `lo`
+  // before the day and `hi` in it.
+  let lo = midnight - (MAX_UTC_OFFSET + 60) * 60_000;
+  let hi = midnight - (MIN_UTC_OFFSET - 60) * 60_000;
+  while (hi - lo > 60_000) {
+    const mid = lo + Math.floor((hi - lo) / 120_000) * 60_000;
+    if (dayKeyIn(timeZone, mid) < key) lo = mid;
+    else hi = mid;
+  }
+  return hi;
+}
+
+/**
+ * The day keys firestore.rules accepts for an order placed at `ms`, given the
+ * zone's offsets from the settings: the UTC date of `ms` plus each offset. One
+ * key for a zone without daylight saving; for one with it, the two differ each
+ * night between midnight by one offset and by the other (an hour, or half an
+ * hour on Lord Howe Island), and the rules take either (apps/cafe
+ * docs/decisions.md, "Any time zone"). `dayKeyIn` is always one of them.
+ */
+export function dayKeysAt(ms: number, offsets: UtcOffsets): string[] {
+  const at = (minutes: number) =>
+    new Date(ms + minutes * 60_000).toISOString().slice(0, 10);
+  return [...new Set([at(offsets.standard), at(offsets.daylight)])];
 }
 
 /** Whole minutes in range, with daylight at least standard and at most 2 h on. */
