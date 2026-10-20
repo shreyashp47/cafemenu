@@ -15,6 +15,10 @@ which the sign-up form (#26), onboarding (#27), owner area (#29) and admin
 Same stack as the cafe app, on the same versions: Next.js 15 (static export),
 React 19, TypeScript, Tailwind CSS v4, Firebase 12, Vitest.
 
+<p align="center">
+  <img src="docs/screens/landing-phone.jpg" width="320" alt="The landing page on a phone: the early-development notice, the CafeMenu header with Sign up, the headline 'QR table ordering for your cafe, on your own Firebase.', Sign up and Try the demo buttons, and the cafe app's menu and order board side by side">
+</p>
+
 ## Run it
 
 From the repository root, once:
