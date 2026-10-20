@@ -1,0 +1,218 @@
+name: Console
+
+# apps/console, and what it is built from: the shared settings package and the
+# lockfile.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/console/**"
+      - "packages/shared/**"
+      - "package-lock.json"
+      - ".github/workflows/console.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "apps/console/**"
+      - "packages/shared/**"
+      - "package-lock.json"
+      - ".github/workflows/console.yml"
+
+# Only one run per branch; a new push cancels the run it supersedes.
+concurrency:
+  group: console-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+# The console (the CafeMenu website) lives in apps/console. Dependencies install
+# once at the repository root, because this is an npm workspace; everything
+# else runs inside the app's folder. The cafe app has its own workflow, ci.yml.
+defaults:
+  run:
+    working-directory: apps/console
+
+jobs:
+  verify:
+    name: lint · typecheck · test · build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install
+        working-directory: .
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Formatting
+        run: npm run format:check
+
+      # `next/font/google` fetches the heading font at build time, so a flaky
+      # network on the runner can fail the build. Retry once.
+      - name: Build
+        run: |
+          npm run build || {
+            echo "::warning::build failed, retrying once (next/font fetch is network-dependent)"
+            sleep 20
+            npm run build
+          }
+
+  # The landing page is most of what the console is today, and it is the first
+  # thing a cafe owner sees: check it on phones, in Chromium and WebKit, against
+  # WCAG A/AA, on every pull request.
+  pages:
+    name: phone layout and accessibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install
+        working-directory: .
+        run: npm ci
+
+      - name: Install browsers
+        run: npx playwright install --with-deps chromium webkit
+
+      - name: Build
+        run: |
+          npm run build || {
+            echo "::warning::build failed, retrying once (next/font fetch is network-dependent)"
+            sleep 20
+            npm run build
+          }
+
+      # The static export is what Firebase Hosting serves, so that is what is
+      # checked, not `next dev`.
+      - name: Start the server
+        run: |
+          npx serve out --listen 4330 --no-clipboard &
+          for i in $(seq 1 60); do
+            if curl -sf -o /dev/null http://127.0.0.1:4330/; then
+              echo "server up"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "server never came up"
+          exit 1
+
+      - name: Every page at phone widths
+        run: node scripts/screenshot.mjs
+        env:
+          BASE_URL: http://127.0.0.1:4330
+
+      - name: Accessibility + WebKit audit
+        run: node scripts/audit.mjs
+        env:
+          BASE_URL: http://127.0.0.1:4330
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: console-screenshots
+          path: apps/console/.screenshots/
+          retention-days: 14
+
+  # firestore.rules is the only thing between one cafe owner and another, and
+  # between owners and what only the deployer may write. It is not TypeScript,
+  # so nothing else here can see a mistake in it.
+  rules:
+    name: platform security rules
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      # The Firestore and Auth emulators are Java programs, and current
+      # firebase-tools refuses to run them on anything below 21.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install
+        working-directory: .
+        run: npm ci
+
+      # Ports from apps/console/firebase.json, which differ from the cafe
+      # app's so both can run on one machine.
+      - name: Start the emulators
+        run: |
+          npx firebase-tools emulators:start --project demo-cafemenu \
+            --only firestore,auth > /tmp/emulators.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -sf -o /dev/null "http://127.0.0.1:8180/" \
+              && curl -sf -o /dev/null "http://127.0.0.1:9199/"; then
+              echo "emulators up"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "emulators never came up"
+          cat /tmp/emulators.log
+          exit 1
+
+      - name: Attack the rules
+        run: node scripts/rules-test.mjs
+
+      # The console's own Firebase code, through the same rules.
+      - name: Firebase adapters against the emulators
+        run: npm run test:emulators
+
+      # Proves the suite catches a broken rule rather than asserting it: let an
+      # owner write release.current, and the rules test must go red. The
+      # emulator reloads firestore.rules when it changes, a few seconds later,
+      # so a green run before the reload is tried again, for up to 30 seconds.
+      - name: The rules test must fail on a broken rule
+        run: |
+          sed -i "s/.hasOnly(\['channel', 'pinned'\])/.hasOnly(['channel', 'pinned', 'current', 'previous'])/" firestore.rules
+          git diff --stat -- firestore.rules
+          git diff --quiet -- firestore.rules && { echo "::error::the deliberate break did not apply"; exit 1; }
+          for i in $(seq 1 6); do
+            sleep 5
+            if ! node scripts/rules-test.mjs > /tmp/broken.log 2>&1; then
+              grep "FAIL" /tmp/broken.log
+              echo "the rules test correctly failed"
+              git checkout -- firestore.rules
+              exit 0
+            fi
+          done
+          cat /tmp/broken.log
+          echo "::error::the rules test passed against broken rules"
+          exit 1
+
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: console-emulator-log
+          path: /tmp/emulators.log
+          retention-days: 7
