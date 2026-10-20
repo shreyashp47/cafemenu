@@ -293,7 +293,8 @@ transaction on a staff-only counter.**
   recompute (`createdAt + 5h30m`, read as a UTC date; India has no daylight
   saving). So a board with a wrong clock cannot file an order under another
   day, and an order placed at 23:59:59 is numbered in that day's sequence even
-  if the board gets to it after midnight.
+  if the board gets to it after midnight. (CafeMenu: the date in the cafe's own
+  time zone; see "Any time zone" in §4.)
 - The board does it one order at a time, oldest first, so numbers follow
   arrival; it backs off when a transaction fails and stops (with a note on the
   board) after repeated permission refusals rather than looping on them.
@@ -313,8 +314,9 @@ until the next day. Staff are trusted with the board; see SECURITY.md.
   shows a stand-in number that would later change. If numbering stops on the
   board, the ticket shows the older three-digit number instead.
 - **Per order:** one more transaction — two document reads (the order and the
-  counter) plus the rules' own read of the counter, and two writes. At the free
-  tier's 20,000 writes and 50,000 reads a day that is negligible for a cafe.
+  counter) plus the rules' own reads of the counter and (since CafeMenu)
+  `config/site`, and two writes. At the free tier's 20,000 writes and 50,000
+  reads a day that is negligible for a cafe.
 - **Gaps.** A rejected order keeps its number. So does an order numbered by a
   board and then deleted by the owner. Gaps are harmless; duplicates would not
   be.
@@ -681,3 +683,93 @@ settings next to the bundle; Firestore `config/site` holds the live copy. The
   and the settings, and a static export can no longer put the cafe's name in
   `<title>` or the manifest: the title is set once the settings are known, and
   the deployer writes `manifest.webmanifest` per cafe.
+
+### Any time zone: the rules take either of the zone's two offsets
+
+TOE's day was India's: daily numbers and reports cut at IST midnight, the app
+by adding a fixed 5h30m (`IST_OFFSET_MS`) and the rules by adding 330 minutes
+(`dayKeyOf`). That is exact only because India has no daylight saving.
+CafeMenu serves cafes in any zone (#13).
+
+**Decision: the app works out the cafe's day with `Intl`; the rules accept a
+day that matches either of the zone's two UTC offsets, read from
+`config/site`.**
+
+- **The app** computes the day key with the cafe's IANA zone
+  (`settings.timeZone`): `dayKeyIn` in `@cafemenu/shared`. The device's own
+  zone plays no part, so a board on a laptop set to another zone still files an
+  order under the cafe's day. The board numbers nothing until the settings are
+  known, since the placeholder before them is the demo cafe's zone.
+- **The rules** cannot look a zone up: the rules language has no time zone
+  database. So the settings carry the zone's offsets in minutes,
+  `utcOffsets: { standard, daylight }`, which the platform works out from the
+  zone (`utcOffsetsOf`, sampled on every day of the year) and only the platform
+  can write. `dayKeyOk` reads them with one `get()` of `config/site` and accepts
+  `dayKey` if it is the UTC date of `createdAt` plus either offset.
+  - Without daylight saving the two offsets are the same and the check is
+    exact. Asia/Kolkata is 330 and 330: TOE's old sum, unchanged.
+  - With daylight saving the two dates differ for one hour each night, between
+    local midnight by one offset and by the other, and either date is accepted
+    in that hour. The rest of the day, and every other day, is refused as
+    before.
+  - No `config/site` (a TOE project from before CafeMenu) means 330, as before.
+    Offsets that are not whole numbers fail the sum and refuse numbering rather
+    than guess a day.
+- **Reports and history** count the cafe's days too: report day buckets, the
+  month and date-range pickers, "Today" and "This month" on the history page,
+  and the dates on its rows. Ranges run from one local midnight to the next
+  (`dayStartIn`), so a change day is 23 or 25 hours, never 24 by assumption.
+  Before, they used the zone of whatever device the owner opened them on, which
+  could disagree with the day the numbers counted in.
+- **The CSV's local-time column names the zone**: "Placed (Europe/London)".
+  India's keeps TOE's "Placed (IST)", so sheets built on it keep working. When
+  the clocks go back, an hour of local times happens twice; the UTC "Placed at"
+  column beside it tells those orders apart.
+
+**What the hour a night lets through:** a staff account (not a customer, who
+cannot number at all) could file an order from that hour under the
+neighbouring day. It would be numbered in that day's own sequence against that
+day's counter, so every protection the numbers rely on holds: one number per
+order, the counter steps by exactly one and names the order it numbered, and no
+number is handed out twice. The order keeps its own `createdAt`, so reports
+(which bucket by `createdAt`) are unaffected. The app never does it:
+`dayKeyIn` is always one of the two accepted keys, which a unit test checks
+every 20 minutes of 2026 for eleven zones, and the rules tests check either side
+of midnight on every 2026 change day for Europe/London, America/New_York and
+Pacific/Auckland, and on an ordinary day for Asia/Kolkata and Asia/Kathmandu
+(+5:45).
+
+**What it costs:** one more document read per numbered order (`config/site`;
+the `exists()` and `get()` on it are billed once), and one more of the ten
+document accesses a single write may make: the numbering update now makes four
+(the staff record, `config/site`, the counter before and after the commit), and
+the whole numbering commit at most seven of its twenty. A cafe with 300 orders a
+day spends 300 of the free tier's 50,000 daily reads on it.
+
+**Considered and not taken:**
+
+- **Exact daylight saving in the rules.** Store the zone's rule in the
+  settings, POSIX `TZ` style ("last Sunday of March at 01:00 UTC"), and compute
+  the change instants with `timestamp.date()` and `dayOfWeek()`. The same one
+  read, and exact. But it is some 25 lines of date arithmetic in the file that
+  guards the order book, each zone's rule would have to be inferred by probing
+  `Intl`, and all it would close is the hour above, which cannot produce a
+  duplicate number.
+- **The zone's next change instants in the settings.** Exact, but they run out:
+  a cafe nobody touches for a year would stop numbering.
+- **The offsets written into `firestore.rules` at deploy time.** No read at all.
+  But the release package's rules are one verified file for every cafe (#19),
+  and moving a cafe's zone would need a rules deploy rather than a settings
+  write.
+- **Any date the instant has somewhere on Earth** (UTC−12 to UTC+14). No read,
+  but the day would be loose by up to a day either way for most of every day.
+- **The offset on the order when it is placed.** It moves the read onto the
+  public create rule, which already makes the most document accesses, and the
+  customer's phone is the one writer nothing can trust.
+
+**Limits:** the offsets are only as current as the platform's copy of the zone
+rules. A country that changes its clocks needs `config/site` rewritten; until
+then, the board may be refused for an hour around midnight, and stops numbering
+after three refusals (the ticket shows the older number), as for any refusal.
+A browser whose own zone data is out of date can disagree with the platform the
+same way.
