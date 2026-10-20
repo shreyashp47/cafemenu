@@ -1,0 +1,25 @@
+{
+  "name": "@cafemenu/deployer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sets up a cafe owner's Firebase project and deploys CafeMenu releases to it, over Google's REST APIs.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "deployer": "./bin/deployer.mjs"
+  },
+  "exports": {
+    ".": "./src/index.mjs"
+  },
+  "files": [
+    "bin",
+    "src"
+  ],
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "scripts": {
+    "test": "node --test",
+    "deployer": "node bin/deployer.mjs"
+  }
+}
