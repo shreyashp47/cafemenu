@@ -1,0 +1,166 @@
+name: Release
+
+# A version tag becomes a GitHub Release holding one package: the cafe app's
+# static build, its Firestore rules and indexes, Hosting's config, migrations,
+# release notes and release.json, plus SHA256SUMS. docs/releases.md says how to
+# cut one and what the deployer does with it.
+#
+#   vX.Y.Z           stable
+#   vX.Y.Z-beta.N    beta (a prerelease)
+#   vX.Y.Z-rc.N      beta (a prerelease)
+#
+# Any other tag that matches the pattern below fails at "Check the tag".
+on:
+  push:
+    tags: ["v*.*.*"]
+
+# Nothing by default; each job asks for what it needs.
+permissions: {}
+
+# Two pushes of the same tag never race to publish.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+# Naming bash turns on pipefail (the implicit default shell has no pipefail),
+# so a failing command on the left of a pipe fails the step.
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  # Installs, tests and builds with a read-only token: npm ci runs other
+  # people's install scripts, so this job can't write to the repository.
+  package:
+    name: test · build · package
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.tag.outputs.version }}
+      prerelease: ${{ steps.tag.outputs.prerelease }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Check the tag
+        id: tag
+        run: node scripts/release/version.mjs "$GITHUB_REF_NAME" | tee -a "$GITHUB_OUTPUT"
+
+      - name: Install
+        run: npm ci
+
+      - name: Test the cafe app
+        run: npm test -w @cafemenu/cafe
+
+      - name: Test the release scripts
+        run: node --test scripts/release/__tests__/*.test.mjs
+
+      # `next/font/google` fetches the font files at build time, so a flaky
+      # network on the runner can fail the build (see the visual job in ci.yml).
+      # Retry once rather than fail a release on it.
+      - name: Build
+        run: |
+          npm run build -w @cafemenu/cafe || {
+            echo "::warning::build failed, retrying once (next/font fetch is network-dependent)"
+            sleep 20
+            npm run build -w @cafemenu/cafe
+          }
+
+      - name: Package
+        run: node scripts/release/package.mjs --version "$VERSION" --out dist
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+
+      - name: Verify
+        run: node scripts/release/verify.mjs "dist/cafemenu-cafe-$VERSION.tar.gz" --version "$VERSION"
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release
+          path: |
+            dist/cafemenu-cafe-${{ steps.tag.outputs.version }}.tar.gz
+            dist/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 7
+
+  # The only job that can write: it runs no npm code, just Node's built-ins,
+  # verify.mjs and gh.
+  publish:
+    name: publish the GitHub release
+    needs: package
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.package.outputs.version }}
+      PRERELEASE: ${{ needs.package.outputs.prerelease }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: release
+          path: dist
+
+      # Again, on exactly the bytes that are about to be published. Unpacking
+      # gives the release notes that went into the package.
+      - name: Verify
+        run: |
+          node scripts/release/verify.mjs "dist/cafemenu-cafe-$VERSION.tar.gz" \
+            --version "$VERSION" --extract dist/unpacked
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          flags=(--verify-tag --title "$GITHUB_REF_NAME")
+
+          if [ "$PRERELEASE" = "true" ]; then
+            flags+=(--prerelease)
+          else
+            # GitHub would make any new stable release "Latest". A patch on an
+            # older line (1.4.3 after 1.5.0) must not take that from 1.5.0.
+            newest=$(
+              {
+                gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts \
+                  --exclude-pre-releases --limit 1000 --json tagName --jq '.[].tagName'
+                echo "$GITHUB_REF_NAME"
+              } | node scripts/release/version.mjs --newest
+            )
+            if [ "$newest" = "$GITHUB_REF_NAME" ]; then
+              flags+=(--latest)
+            else
+              flags+=(--latest=false)
+            fi
+          fi
+
+          # Notes: the version's CHANGELOG.md section, as packaged in NOTES.md;
+          # GitHub's generated notes when there isn't one.
+          if [ -s dist/unpacked/NOTES.md ]; then
+            flags+=(--notes-file dist/unpacked/NOTES.md)
+          else
+            echo "::warning::CHANGELOG.md has no section for $VERSION; using generated notes"
+            flags+=(--generate-notes)
+          fi
+
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" "${flags[@]}" \
+            "dist/cafemenu-cafe-$VERSION.tar.gz" dist/SHA256SUMS
