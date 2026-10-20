@@ -1,0 +1,46 @@
+name: Release tooling
+
+# The release scripts' own tests, on a tiny fixture build, whenever the scripts,
+# the migrations they check, or the release workflow change. The real package
+# is built and verified by release.yml, on a version tag.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/release/**"
+      - "migrations/**"
+      - ".github/workflows/release.yml"
+      - ".github/workflows/release-tooling.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/release/**"
+      - "migrations/**"
+      - ".github/workflows/release.yml"
+      - ".github/workflows/release-tooling.yml"
+
+concurrency:
+  group: release-tooling-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: package · verify tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # No npm ci: the release scripts use nothing but Node itself.
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      - name: Test
+        run: node --test scripts/release/__tests__/*.test.mjs
