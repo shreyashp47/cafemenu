@@ -55,6 +55,13 @@ jobs:
       - name: Test
         run: npm test
 
+      # The same suite as TOE Cafe, the first cafe on the platform (issue #18):
+      # every page runs with TOE's settings instead of the demo cafe's.
+      - name: Test as TOE Cafe (fixtures/toe.json)
+        run: npm test
+        env:
+          CAFE_FIXTURE: toe
+
       - name: Build
         run: npm run build
 
@@ -170,6 +177,87 @@ jobs:
           path: apps/cafe/.screenshots/
           retention-days: 14
 
+  # TOE is live and becomes the first cafe on the platform, so every pull
+  # request drives the real build as TOE Cafe in a browser (issue #18): its
+  # settings from fixtures/toe.json, deployed as a preview (site.json with
+  # "demo": true), so the demo store stands in for Firestore. Demo mode only,
+  # and on purpose: flow.mjs places real orders, and nothing here may ever
+  # reach toe-cafe.web.app.
+  toe:
+    name: TOE Cafe fixture (browser, demo mode)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install
+        working-directory: .
+        run: npm ci
+
+      - name: Install browsers
+        run: npx playwright install --with-deps chromium
+
+      # Retried once, as in the visual job: next/font fetches from Google at
+      # build time.
+      - name: Build
+        run: |
+          npm run build || {
+            echo "::warning::build failed, retrying once (next/font fetch is network-dependent)"
+            sleep 20
+            npm run build
+          }
+
+      - name: Deploy TOE's settings into the build, as a demo
+        run: node scripts/use-fixture.mjs toe
+
+      - name: Start the server
+        run: |
+          npx --yes serve@latest out --listen 4320 --no-clipboard &
+          for i in $(seq 1 60); do
+            if curl -sf -o /dev/null http://127.0.0.1:4320/site.json; then
+              echo "server up, serving TOE's site.json"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "server never came up"
+          exit 1
+
+      - name: The pages are TOE's
+        run: |
+          curl -sf http://127.0.0.1:4320/site.json | grep -q '"name": "TOE Cafe"'
+          curl -sf http://127.0.0.1:4320/site.json | grep -q '"demo": true'
+
+      # First: it clears .screenshots/, where flow.mjs also saves its own.
+      # For comparing by eye with TOE v0.3.0 in docs/screens/.
+      - name: Every screen at phone widths
+        run: node scripts/screenshot.mjs --quick
+        env:
+          BASE_URL: http://127.0.0.1:4320
+
+      - name: Entry paths
+        run: node scripts/entry.mjs
+        env:
+          BASE_URL: http://127.0.0.1:4320
+
+      - name: Customer to staff to customer
+        run: node scripts/flow.mjs
+        env:
+          BASE_URL: http://127.0.0.1:4320
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: toe-fixture-screens
+          path: apps/cafe/.screenshots/
+          retention-days: 14
+
   # firestore.rules is not TypeScript, so nothing else in this pipeline can see a
   # mistake in it. It shipped once with a lambda in it — `reduce(0, function(){})`
   # — that the rules language has no support for, and the only thing that noticed
@@ -215,8 +303,11 @@ jobs:
           cat /tmp/emulators.log
           exit 1
 
+      # As TOE Cafe: config/site is seeded with fixtures/toe.json (issue #18).
       - name: Attack the rules
         run: node scripts/rules-test.mjs
+        env:
+          CAFE_FIXTURE: toe
 
       - uses: actions/upload-artifact@v7
         if: failure()

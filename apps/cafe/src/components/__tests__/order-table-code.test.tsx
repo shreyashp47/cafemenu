@@ -4,7 +4,6 @@
  * the real pages on the demo store, which mirrors the rules on codes.
  */
 
-import { DEFAULT_SETTINGS } from "@cafemenu/shared";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -25,6 +24,7 @@ import {
   readTableKey,
   rememberTableKey,
 } from "@/lib/table-keys";
+import { SUITE_SETTINGS } from "@/test/cafe";
 
 const replace = vi.fn();
 vi.mock("next/navigation", () => ({
@@ -45,7 +45,7 @@ function openAt(search: string) {
 }
 
 const menuShown = () =>
-  screen.findByRole("heading", { name: DEFAULT_SETTINGS.name });
+  screen.findByRole("heading", { name: SUITE_SETTINGS.name });
 
 beforeEach(async () => {
   resetDemoStore();

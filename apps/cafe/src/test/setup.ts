@@ -2,14 +2,15 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
 import { afterEach, vi } from "vitest";
 
-import { primeBoot } from "@/lib/boot";
 import { resetSettings } from "@/lib/settings";
+import { primeSuiteBoot } from "@/test/cafe";
 
 // Every page starts in demo mode, as `npm run dev` does: neither
-// /__/firebase/init.json nor /site.json exists. Settled up front, so pages
-// render straight away instead of fetching. src/lib/__tests__/boot.test.ts
-// covers the boot itself.
-primeBoot({ backend: { kind: "demo" }, site: { status: "missing" } });
+// /__/firebase/init.json nor /site.json exists. Or, with CAFE_FIXTURE set, as
+// that fixture cafe's preview deploy (src/test/cafe.ts). Settled up front, so
+// pages render straight away instead of fetching.
+// src/lib/__tests__/boot.test.ts covers the boot itself.
+primeSuiteBoot();
 
 afterEach(() => {
   cleanup();

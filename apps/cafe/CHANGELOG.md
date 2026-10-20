@@ -31,6 +31,21 @@ Work that is built but not yet merged is tracked in
   counter phone that loaded once still starts offline.
 - `firestore.rules`: anyone may read `config/site`; no client may write it.
 
+- **Plans and features** (#17): `features(settings)` in `@cafemenu/shared` says
+  what a cafe's plan includes. The only plan, `free`, includes everything, so
+  nothing changes; the CSV download on _Monthly reports_ is the first feature
+  asked for through it.
+- **TOE Cafe as a fixture** (#18): `fixtures/toe.json`, and CI runs the unit
+  tests, the rules attack, `test:entry` and `flow` as TOE Cafe on every pull
+  request (demo mode only).
+
+### Fixed
+
+- The browser checks no longer fail on a demo build's expected 404 for
+  `init.json` and `site.json`, nor on WebKit reporting an abandoned Next.js
+  prefetch. The audit also plants its demo session before the page loads
+  instead of loading the app first, which is what caused that prefetch.
+
 ### Upgrading
 
 - Before deploying this release by hand, write the cafe's settings to

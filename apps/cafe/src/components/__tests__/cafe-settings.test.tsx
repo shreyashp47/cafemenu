@@ -22,6 +22,7 @@ import { demoAuthRepo } from "@/lib/data/demo";
 import { demoSetSite, resetDemoStore } from "@/lib/data/demo-store";
 import { DEMO_CREDENTIALS } from "@/lib/data/seed";
 import { resetSettings } from "@/lib/settings";
+import { primeSuiteBoot } from "@/test/cafe";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn(), push: vi.fn(), prefetch: vi.fn() }),
@@ -65,7 +66,7 @@ beforeEach(async () => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
-  primeBoot({ backend: { kind: "demo" }, site: { status: "missing" } });
+  primeSuiteBoot();
 });
 
 describe("the same build, two cafes", () => {
@@ -88,6 +89,7 @@ describe("the same build, two cafes", () => {
   });
 
   it("is the demo cafe with no site.json, as on npm run dev", async () => {
+    boot({ backend: { kind: "demo" }, site: { status: "missing" } });
     render(<OrderPage />);
     expect(
       await screen.findByRole("heading", { name: DEFAULT_SETTINGS.name }),

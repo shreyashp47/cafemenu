@@ -781,7 +781,7 @@ npm run verify     # lint → typecheck → test → build
 | `npm run preview`        | Serve `./out` on port 4320, with clean URLs as Firebase does |
 | `npm run lint`           | ESLint 9, `next/core-web-vitals` + TypeScript rules          |
 | `npm run typecheck`      | `tsc --noEmit`, `strict`                                     |
-| `npm test`               | Vitest + Testing Library, 423 tests in 28 files              |
+| `npm test`               | Vitest + Testing Library, 717 tests in 47 files              |
 | `npm run test:coverage`  | Coverage, fails below 70% on all four metrics                |
 | `npm run test:rules`     | Attack `firestore.rules` (needs `npm run emulators`)         |
 | `npm run test:entry`     | Every way a customer reaches the menu, in a real browser     |
@@ -817,11 +817,40 @@ first.
 - **`flow.mjs`** places a real order and asserts the staff board sees it and the
   customer's screen tracks the status changes.
 
-CI (`.github/workflows/ci.yml`) runs lint, typecheck, tests and the build on
-every push and pull request, and the rules attack against the emulators. On
-`main` it also runs the browser checks and a `self-check` job that deliberately
-breaks the money calculation and fails if the suite stays green. A test suite
-nobody has seen go red is not a quality gate.
+All four fail on any console error except two, each forgiven narrowly and
+explained in [`scripts/lib/page-noise.mjs`](./scripts/lib/page-noise.mjs): a
+demo's 404 for `/__/firebase/init.json` and `/site.json` (that 404 is how the
+boot knows it is a demo), and WebKit's report of a Next.js prefetch abandoned
+on navigation.
+
+#### Fixture cafes
+
+The suite runs as the demo cafe by default. [`fixtures/`](./fixtures) holds
+real cafes' settings to run it as instead, each checked against the strict
+settings validator. Today that is **TOE Cafe** (`fixtures/toe.json`: ₹,
+Asia/Kolkata, `en-IN`, the Cozy theme, tables 1–8), the first cafe on the
+platform, which this work must not break:
+
+```bash
+CAFE_FIXTURE=toe npm test                    # every unit test as TOE Cafe
+npm run build && node scripts/use-fixture.mjs toe   # out/site.json, as a demo
+CAFE_FIXTURE=toe npm run test:rules          # config/site seeded as TOE's
+```
+
+`use-fixture.mjs` always writes `"demo": true`, so the build runs on the demo
+store with TOE's settings and never looks for a Firebase project. A fixture's
+`baseUrl` is always `null`: `flow.mjs` reads the address printed on the QR
+cards, and nothing in a test may reach a live cafe.
+
+CI (`.github/workflows/ci.yml`) runs lint, typecheck, tests (once as the demo
+cafe, once as TOE Cafe) and the build on every push and pull request, the rules
+attack against the emulators as TOE Cafe, and the `toe` job: the real build as
+TOE Cafe, through `screenshot.mjs`, `test:entry` and `flow`, with the
+screenshots kept as an artifact to compare with TOE v0.3.0 in
+[`docs/screens/`](./docs/screens). On `main` it also runs the browser checks
+on the plain demo build and a `self-check` job that deliberately breaks the
+money calculation and fails if the suite stays green. A test suite nobody has
+seen go red is not a quality gate.
 
 ### What the tests cover
 
