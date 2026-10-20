@@ -1,0 +1,22 @@
+name: Feature request
+description: Something cafes need that CafeMenu doesn't do yet
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: Who hits it (customer, staff, owner, you as the platform), and what they do today instead.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would solve it
+  - type: checkboxes
+    id: cost
+    attributes:
+      label: Cost
+      options:
+        - label: This needs the Firebase Blaze plan on the cafe's project (Cloud Functions, App Check, Storage, TTL)
+        - label: This changes stored data, so it needs a migration

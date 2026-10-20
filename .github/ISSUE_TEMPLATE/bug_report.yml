@@ -1,0 +1,61 @@
+name: Bug report
+description: Something in the cafe app, the console or the deployer isn't working
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you saw instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open /order?table=3
+        2. …
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where
+      multiple: true
+      options:
+        - Cafe app, customer screens
+        - Cafe app, staff board
+        - Cafe app, owner dashboard
+        - Console, signup and onboarding
+        - Console, owner updates page
+        - Console, admin
+        - Deployer or release
+        - Docs
+    validations:
+      required: true
+  - type: dropdown
+    id: env
+    attributes:
+      label: Running
+      options:
+        - Locally, demo mode
+        - Locally, against the emulators
+        - My own test Firebase project
+        - A connected cafe
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Release version
+      placeholder: e.g. 1.2.0 (shown in the owner dashboard)
+  - type: input
+    id: device
+    attributes:
+      label: Device and browser
+      placeholder: e.g. Android 15, Chrome 140
+  - type: textarea
+    id: logs
+    attributes:
+      label: Console errors or screenshots
