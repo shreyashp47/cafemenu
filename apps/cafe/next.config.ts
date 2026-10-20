@@ -14,6 +14,10 @@ const nextConfig: NextConfig = {
 
   poweredByHeader: false,
 
+  // @cafemenu/shared is TypeScript source in the workspace (packages/shared),
+  // with no build step of its own, so Next compiles it along with the app.
+  transpilePackages: ["@cafemenu/shared"],
+
   async headers() {
     return [
       {

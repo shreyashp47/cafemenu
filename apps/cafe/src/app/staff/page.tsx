@@ -24,7 +24,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { TicketTotal, TotalWarning } from "@/components/TotalWarning";
 import { useDayNumbers } from "@/hooks/useDayNumbers";
 import { useOrderChime } from "@/hooks/useOrderChime";
-import { getCafeName } from "@/lib/config";
+import { useCafeSettings } from "@/hooks/useCafeSettings";
 import {
   friendlySignInError,
   friendlyStatusError,
@@ -60,6 +60,7 @@ export default function StaffPage() {
 function StaffScreen() {
   const { user, loading, signIn, signInWithPin, signOut } = useStaffSession();
   const isDemo = useIsDemo();
+  const cafeName = useCafeSettings().settings.name;
   const router = useRouter();
   // The owner signing in here usually wants the dashboard, so send them there —
   // but only straight after signing in on this screen. Redirecting every owner
@@ -313,7 +314,7 @@ function StaffScreen() {
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-lg leading-tight">Order board</h1>
             <p className="text-2xs text-muted truncate font-semibold tracking-[0.12em] uppercase">
-              {getCafeName()} · {user.displayName}
+              {cafeName} · {user.displayName}
               {user.role === "owner" ? " (owner)" : ""}
             </p>
           </div>
@@ -382,7 +383,7 @@ function StaffScreen() {
         ) : null}
       </header>
 
-      <InstallHint appName={getCafeName()} />
+      <InstallHint appName={cafeName} />
 
       <main className="shell-wide pt-4">
         {error ? (
@@ -837,6 +838,7 @@ function StaffLogin({
   isDemo: boolean;
   onFirstGesture: () => void;
 }) {
+  const cafeName = useCafeSettings().settings.name;
   const [mode, setMode] = useState<"pin" | "password">(
     isDemo ? "pin" : "password",
   );
@@ -874,7 +876,9 @@ function StaffLogin({
       <Mascot mood="worry" size={120} />
       <div className="text-center">
         <h1 className="font-hand text-primary text-4xl">Staff only</h1>
-        <p className="text-muted text-sm">Counter view for {getCafeName()}</p>
+        <p className="text-muted text-sm">
+          {cafeName ? `Counter view for ${cafeName}` : "Counter view"}
+        </p>
       </div>
 
       <form

@@ -9,6 +9,34 @@ Work that is built but not yet merged is tracked in
 
 ## [Unreleased]
 
+### Changed
+
+- **One build serves any cafe.** The Firebase project is read when the page
+  loads, from Hosting's `/__/firebase/init.json`, instead of six
+  `NEXT_PUBLIC_FIREBASE_*` values at build time; those still work in
+  `.env.local` for local development (#8).
+- **The cafe's settings** (name, tagline, default tables, QR card address,
+  theme, currency, locale, time zone) come from `site.json` and Firestore
+  `config/site`, over the defaults ("Mochi & Beans"). `NEXT_PUBLIC_CAFE_NAME`,
+  `NEXT_PUBLIC_TABLES` and `NEXT_PUBLIC_BASE_URL` are gone (#9).
+- The build's page titles and manifest no longer name a cafe: the title is set
+  at runtime, and the deployer writes `manifest.webmanifest` per cafe.
+
+### Added
+
+- A **"Can't reach the cafe · Try again"** screen for a real cafe that cannot
+  load its config, which also retries when the phone comes back online. A real
+  cafe never falls back to demo data.
+- The service worker keeps `init.json` and `site.json` (network-first), so a
+  counter phone that loaded once still starts offline.
+- `firestore.rules`: anyone may read `config/site`; no client may write it.
+
+### Upgrading
+
+- Before deploying this release by hand, write the cafe's settings to
+  `out/site.json` (README, "Point the app at it"). Without it, or a
+  `config/site`, the app shows the demo cafe's name.
+
 ## [0.3.0] — 2026-09-30
 
 The owner's release: order history, a redesigned menu screen, the cafe's own

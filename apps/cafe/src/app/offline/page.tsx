@@ -1,5 +1,5 @@
+import { CafeName } from "@/components/CafeIdentity";
 import { Mascot } from "@/components/Mascot";
-import { getCafeName } from "@/lib/config";
 import Link from "next/link";
 
 export const metadata = {
@@ -35,7 +35,9 @@ export default function OfflinePage() {
           Order board
         </Link>
       </div>
-      <p className="text-2xs text-muted">{getCafeName()}</p>
+      <p className="text-2xs text-muted">
+        <CafeName />
+      </p>
     </main>
   );
 }

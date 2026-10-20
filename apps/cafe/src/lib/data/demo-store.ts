@@ -50,7 +50,7 @@ interface DemoState {
   menu: MenuItem[];
   orders: Order[];
   offer: SpecialOffer;
-  /** null until the owner saves a list: the env default applies meanwhile. */
+  /** null until the owner saves a list: the settings' default applies meanwhile. */
   tables: number[] | null;
   /** The owner's per-table QR codes (tableKeys/{n} in Firestore). */
   tableKeys: Record<number, string>;
@@ -66,6 +66,13 @@ interface DemoState {
   tableSessions: TableSessions;
   /** config/ordering. Missing means confirmation OFF, as in Firestore. */
   ordering: OrderingSettings;
+  /**
+   * config/site, the cafe's settings, raw. null (the usual case) means no
+   * document, so the demo cafe is the defaults, or site.json's settings on a
+   * preview deploy. Nothing in the app writes it, as nothing may in
+   * Firestore; demoSetSite stands in for the platform in tests.
+   */
+  site: Record<string, unknown> | null;
 }
 
 function emptyState(): DemoState {
@@ -78,6 +85,7 @@ function emptyState(): DemoState {
     dayCounters: {},
     tableSessions: {},
     ordering: parseOrderingSettings(undefined),
+    site: null,
   };
 }
 
@@ -91,6 +99,7 @@ function seedState(): DemoState {
     dayCounters: {},
     tableSessions: {},
     ordering: parseOrderingSettings(undefined),
+    site: null,
   };
 }
 
@@ -154,6 +163,9 @@ function load(): DemoState {
       // and confirmation is off, exactly like a fresh Firestore project.
       tableSessions: parseTableSessions((parsed as DemoState)?.tableSessions),
       ordering: parseOrderingSettings((parsed as DemoState)?.ordering),
+      // States from before cafe settings have none: the defaults, exactly
+      // like a Firestore project the platform has not written to yet.
+      site: parseSite((parsed as DemoState)?.site),
       // Older saved states also carry a `seq` counter from the original public
       // counter. It is ignored, as /meta/counters is in Firestore.
     };
@@ -296,6 +308,16 @@ export function selectTableSessions(state: DemoState): TableSessions {
 
 export function selectOrdering(state: DemoState): OrderingSettings {
   return state.ordering;
+}
+
+export function selectSite(state: DemoState): Record<string, unknown> | null {
+  return state.site;
+}
+
+function parseSite(raw: unknown): Record<string, unknown> | null {
+  return typeof raw === "object" && raw !== null && !Array.isArray(raw)
+    ? (raw as Record<string, unknown>)
+    : null;
 }
 
 /**
@@ -669,6 +691,14 @@ export function demoSaveOffer(offer: SpecialOffer): void {
 
 export function demoSaveTables(tables: number[]): void {
   mutate((state) => ({ ...state, tables }));
+}
+
+/**
+ * Writes config/site as the platform would, with its service account. No
+ * screen calls this: in Firestore no client may write that document.
+ */
+export function demoSetSite(site: Record<string, unknown> | null): void {
+  mutate((state) => ({ ...state, site: parseSite(site) }));
 }
 
 export { subscribeState, load as loadDemoState, emptyState, seedState };

@@ -4,9 +4,9 @@
  * customers or lets the owner save one the order rules will refuse.
  */
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { DEFAULT_SETTINGS, parseCafeSettings } from "@cafemenu/shared";
+import { describe, expect, it } from "vitest";
 
-import { getTableNumbers } from "@/lib/config";
 import {
   MAX_TABLE_NUMBER,
   checkTablesForSave,
@@ -105,25 +105,28 @@ describe("parseTableText", () => {
   });
 });
 
-describe("getTableNumbers (the env default)", () => {
-  afterEach(() => vi.unstubAllEnvs());
-
-  it("drops numbers above 50, which no order could carry", () => {
-    vi.stubEnv("NEXT_PUBLIC_TABLES", "3, 1, 60, 3");
-    expect(getTableNumbers()).toEqual([1, 3]);
+describe("the default tables (the cafe's settings)", () => {
+  it("drops a list with a table above 50, which no order could carry", () => {
+    expect(parseCafeSettings({ tables: [3, 1, 60, 3] }).tables).toEqual(
+      DEFAULT_SETTINGS.tables,
+    );
   });
 
   it("falls back to 1..6 when unset or unusable", () => {
-    vi.stubEnv("NEXT_PUBLIC_TABLES", "");
-    expect(getTableNumbers()).toEqual([1, 2, 3, 4, 5, 6]);
-    vi.stubEnv("NEXT_PUBLIC_TABLES", "99");
-    expect(getTableNumbers()).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(DEFAULT_SETTINGS.tables).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(parseCafeSettings({ tables: [] }).tables).toEqual([
+      1, 2, 3, 4, 5, 6,
+    ]);
+    expect(parseCafeSettings({ tables: [99] }).tables).toEqual([
+      1, 2, 3, 4, 5, 6,
+    ]);
   });
 
   it("never offers a table the order rules would refuse", () => {
-    for (const n of getTableNumbers()) {
+    for (const n of DEFAULT_SETTINGS.tables) {
       expect(n).toBeGreaterThanOrEqual(1);
       expect(n).toBeLessThanOrEqual(MAX_TABLE_NUMBER);
     }
+    expect(MAX_TABLE_NUMBER).toBe(50);
   });
 });

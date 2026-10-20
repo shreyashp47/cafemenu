@@ -34,14 +34,19 @@ import { TableListEditor } from "@/components/TableListEditor";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Field, Input } from "@/components/ui/Input";
-import { getBaseUrl, getCafeName, getCafeTagline } from "@/lib/config";
+import { useCafeSettings } from "@/hooks/useCafeSettings";
 import { qrToSvg } from "@/lib/qr";
 import { generateTableKey, tablesWithoutKey } from "@/lib/table-keys";
 import { orderHref } from "@/lib/tables";
 
 export default function QrPage() {
-  const pinned = getBaseUrl();
-  const [origin, setOrigin] = useState(pinned);
+  const { settings } = useCafeSettings();
+  // The cafe's own address from its settings, else whatever address this
+  // page is open on, until the owner types another.
+  const pinned = settings.baseUrl ?? "";
+  const [here, setHere] = useState("");
+  const [typed, setTyped] = useState<string | null>(null);
+  const origin = typed ?? (pinned || here);
   const repo = useConfigRepo();
   // Cards follow the *saved* list, not the editor's draft: a card printed for
   // a table that was never saved would send customers to "that table number
@@ -75,10 +80,10 @@ export default function QrPage() {
   );
 
   useEffect(() => {
-    // Without a pinned base URL, bake in whatever host this page is served
-    // from, so the printed card works before a domain cutover.
-    if (!pinned) setOrigin(window.location.origin);
-  }, [pinned]);
+    // Without an address in the settings, bake in whatever host this page is
+    // served from, so the printed card works before a domain cutover.
+    setHere(window.location.origin);
+  }, []);
 
   const base = origin.replace(/\/+$/, "");
   const valid =
@@ -125,7 +130,7 @@ export default function QrPage() {
             <Input
               id="base-url"
               value={origin}
-              onChange={(e) => setOrigin(e.target.value)}
+              onChange={(e) => setTyped(e.target.value)}
               placeholder="https://yourcafe.web.app"
               inputMode="url"
             />
@@ -176,6 +181,7 @@ function TableCard({
   hasCode: boolean;
   onRenew: () => Promise<void>;
 }) {
+  const { settings } = useCafeSettings();
   const [confirming, setConfirming] = useState(false);
   const [state, setState] = useState<"idle" | "busy" | "done" | "error">(
     "idle",
@@ -205,10 +211,10 @@ function TableCard({
     <li className="print:break-inside-avoid">
       <Card className="flex flex-col items-center gap-3 p-5 text-center">
         <p className="font-hand text-primary text-3xl leading-none">
-          {getCafeName()}
+          {settings.name}
         </p>
         <p className="text-2xs text-muted font-semibold tracking-[0.18em] uppercase">
-          {getCafeTagline()}
+          {settings.tagline}
         </p>
 
         <div className="border-line-soft rounded-md border-2 bg-white p-3">

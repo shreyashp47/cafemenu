@@ -7,6 +7,11 @@
  *  - switching backends is a one-line change in /lib/data
  *  - components never import the SDK directly
  *  - `useSyncExternalStore` gives tear-free live updates for free
+ *
+ * Which backend is decided when the page loads (src/lib/boot.ts), not at build
+ * time. Until it is, every repository hook returns null, which the screens
+ * already show as loading. A real cafe that cannot reach its config gets
+ * <CafeUnreachable> and a retry, never the demo store.
  */
 
 import {
@@ -21,8 +26,22 @@ import {
   type ReactNode,
 } from "react";
 
-import { getTableNumbers, isDemoMode } from "@/lib/config";
-import { demoBundle, loadBundle, type DataBundle } from "@/lib/data";
+import { CafeUnreachable } from "@/components/CafeUnreachable";
+import { useCafeSettings } from "@/hooks/useCafeSettings";
+import {
+  boot,
+  peekBoot,
+  readDeviceConfig,
+  retryBoot,
+  type Boot,
+} from "@/lib/boot";
+import {
+  demoBundle,
+  loadBundle,
+  preloadFirestore,
+  type DataBundle,
+} from "@/lib/data";
+import { setLiveSettings } from "@/lib/settings";
 import type {
   AuthRepository,
   ConfigRepository,
@@ -40,48 +59,97 @@ import {
 import type { MenuItem, Order, SpecialOffer } from "@/lib/types";
 
 interface DataContextValue {
+  /** null until the page has booted and its backend has loaded. */
   bundle: DataBundle | null;
-  loading: boolean;
-  error: Error | null;
 }
 
-const DataContext = createContext<DataContextValue>({
-  bundle: null,
-  loading: true,
-  error: null,
-});
+const DataContext = createContext<DataContextValue>({ bundle: null });
+
+/**
+ * Where the page is on its way to a backend: still booting (src/lib/boot.ts)
+ * or loading the SDK, ready, or stuck, with the reason for the retry screen.
+ */
+type DataState =
+  | { status: "loading" }
+  | { status: "ready"; bundle: DataBundle }
+  | { status: "unreachable"; reason: "offline" | "no-config" };
+
+/** What can be shown without waiting: only demo mode, or a known dead end. */
+function stateFor(started: Boot | null): DataState {
+  switch (started?.backend.kind) {
+    case "demo":
+      return { status: "ready", bundle: demoBundle };
+    case "unreachable":
+      return { status: "unreachable", reason: started.backend.reason };
+    default:
+      return { status: "loading" };
+  }
+}
 
 export function DataProvider({ children }: { children: ReactNode }) {
-  const [value, setValue] = useState<DataContextValue>(() => ({
-    bundle: isDemoMode ? demoBundle : null,
-    loading: !isDemoMode,
-    error: null,
-  }));
+  // A page opened after the boot settled (a client-side navigation, or every
+  // unit test, which primes it) starts in its final state, with no loader.
+  const [state, setState] = useState<DataState>(() => stateFor(peekBoot()));
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
-    if (isDemoMode) return;
     let alive = true;
-    loadBundle()
-      .then((bundle) => {
-        if (alive) setValue({ bundle, loading: false, error: null });
-      })
-      .catch((error: unknown) => {
-        if (alive) {
-          setValue({
-            bundle: null,
-            loading: false,
-            error:
-              error instanceof Error
-                ? error
-                : new Error("Could not reach Firebase."),
-          });
-        }
-      });
+    // A device that kept a Firebase config last time is a real cafe's: fetch
+    // the SDK while init.json is still on its way.
+    if (attempt === 0 && !peekBoot() && readDeviceConfig()) preloadFirestore();
+
+    void (async () => {
+      const started = attempt === 0 ? await boot() : await retryBoot();
+      if (!alive) return;
+      if (started.backend.kind !== "firebase") {
+        const next = stateFor(started);
+        setState((prev) =>
+          prev.status === next.status &&
+          (prev.status !== "ready" ||
+            (next.status === "ready" && prev.bundle === next.bundle))
+            ? prev
+            : next,
+        );
+        return;
+      }
+      try {
+        const bundle = await loadBundle();
+        if (alive) setState({ status: "ready", bundle });
+      } catch {
+        // The SDK itself did not download: as good as offline.
+        if (alive) setState({ status: "unreachable", reason: "offline" });
+      }
+    })();
     return () => {
       alive = false;
     };
+  }, [attempt]);
+
+  const retry = useCallback(() => {
+    setState({ status: "loading" });
+    setAttempt((n) => n + 1);
   }, []);
 
+  // Back online: try again without waiting for a tap.
+  const unreachable = state.status === "unreachable";
+  useEffect(() => {
+    if (!unreachable) return;
+    window.addEventListener("online", retry);
+    return () => window.removeEventListener("online", retry);
+  }, [unreachable, retry]);
+
+  // The cafe's live settings (config/site) for the whole page.
+  const bundle = state.status === "ready" ? state.bundle : null;
+  useEffect(() => {
+    if (!bundle) return;
+    return bundle.config.subscribeSite(setLiveSettings);
+  }, [bundle]);
+
+  const value = useMemo<DataContextValue>(() => ({ bundle }), [bundle]);
+
+  if (state.status === "unreachable") {
+    return <CafeUnreachable reason={state.reason} onRetry={retry} />;
+  }
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }
 
@@ -89,8 +157,9 @@ function useData(): DataContextValue {
   return useContext(DataContext);
 }
 
+/** False until the backend is known, so no demo banner flashes on a real cafe. */
 export function useIsDemo(): boolean {
-  return useData().bundle?.isDemo ?? isDemoMode;
+  return useData().bundle?.isDemo ?? false;
 }
 
 export function useMenuRepo(): MenuRepository | null {
@@ -249,8 +318,8 @@ export function useSpecialOffer(): SpecialOffer {
 }
 
 /**
- * The cafe's tables: the owner's saved list, or the NEXT_PUBLIC_TABLES default
- * until one is saved.
+ * The cafe's tables: the owner's saved list, or the `tables` in the cafe's
+ * settings until one is saved.
  *
  * Unlike the hooks above this reports `loading` until the first snapshot has
  * actually arrived, not merely until the repository exists. The customer's
@@ -279,8 +348,14 @@ export function useTables(): {
 
   const loaded = snapshot !== null && snapshot.repo === repo;
   const saved = loaded ? snapshot.saved : null;
-  const fallback = useMemo(() => getTableNumbers(), []);
-  return { tables: saved ?? fallback, saved, loading: !loaded };
+  // Without a saved list the default comes from the settings, so they have to
+  // be known too, for the same reason.
+  const { settings, ready } = useCafeSettings();
+  return {
+    tables: saved ?? settings.tables,
+    saved,
+    loading: !loaded || (saved === null && !ready),
+  };
 }
 
 /**

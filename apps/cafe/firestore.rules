@@ -465,15 +465,28 @@ service cloud.firestore {
       allow write: if isOwner();
     }
 
-    // -- config: the "today's special" board, and the table list ----------
+    // -- config: the "today's special" board, the table list, the settings --
 
     match /config/{docId} {
       allow read: if true;
       // config/tables and config/ordering are excluded here and handled
       // below. Two matching blocks are OR-ed together, so without this
       // carve-out their shape checks could be bypassed through this broader
-      // rule.
-      allow write: if isOwner() && !(docId in ["tables", "ordering"]);
+      // rule. config/site is excluded so that nobody writes it at all.
+      allow write: if isOwner()
+        && !(docId in ["tables", "ordering", "site"]);
+    }
+
+    // The cafe's settings (CafeSettings in packages/shared): name, theme,
+    // currency, time zone and the rest. Every page reads it, signed in or not,
+    // through the `allow read` above. No client writes it, the owner included:
+    // these are edited in the CafeMenu console, which writes this document and
+    // the deploy-time site.json together, with the platform's service account.
+    // Server credentials bypass these rules, so "no client" costs the platform
+    // nothing, and a stolen owner password cannot rename the cafe or move its
+    // time zone under the order rules.
+    match /config/site {
+      allow write: if false;
     }
 
     // The owner's "Approve new tables" switch, { confirmNewGuests: bool }. A

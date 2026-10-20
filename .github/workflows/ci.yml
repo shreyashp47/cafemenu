@@ -14,9 +14,10 @@ concurrency:
 permissions:
   contents: read
 
-# The cafe app (TOE, generalised) lives in apps/cafe. Dependencies install once
-# at the repository root, because this is an npm workspace; everything else runs
-# inside the app's folder.
+# The cafe app (TOE, generalised) lives in apps/cafe, and the code it shares
+# with the rest of CafeMenu in packages/shared. Dependencies install once at the
+# repository root, because this is an npm workspace; everything else runs
+# inside the app's folder unless a step says otherwise.
 defaults:
   run:
     working-directory: apps/cafe
@@ -38,6 +39,12 @@ jobs:
       - name: Install
         working-directory: .
         run: npm ci
+
+      # The cafe settings type and its validator, which the cafe app, the
+      # console and the deployer all build on.
+      - name: Shared package (typecheck · test · format)
+        working-directory: packages/shared
+        run: npm run verify
 
       - name: Lint
         run: npm run lint

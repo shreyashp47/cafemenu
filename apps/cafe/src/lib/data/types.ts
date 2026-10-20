@@ -137,9 +137,19 @@ export interface ConfigRepository {
   subscribe(listener: Listener<SpecialOffer>): Unsubscribe;
   save(offer: SpecialOffer): Promise<void>;
   /**
+   * config/site, the cafe's live settings, as the raw document data, or `null`
+   * when there is none. Unparsed on purpose: src/lib/settings.ts reads it over
+   * site.json with parseCafeSettings. Anyone may read it; only the platform
+   * writes it, so there is no `save` here.
+   */
+  subscribeSite(
+    listener: Listener<Record<string, unknown> | null>,
+  ): Unsubscribe;
+  /**
    * The owner's saved table list, or `null` while nothing has been saved (the
-   * app then falls back to NEXT_PUBLIC_TABLES). Live, so a change on /admin/qr
-   * reaches the customer's table picker without a redeploy.
+   * app then falls back to the `tables` in the cafe's settings). Live, so a
+   * change on /admin/qr reaches the customer's table picker without a
+   * redeploy.
    */
   subscribeTables(listener: Listener<number[] | null>): Unsubscribe;
   /** Rejects a list with no usable table rather than saving an empty cafe. */

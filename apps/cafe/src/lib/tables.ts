@@ -1,14 +1,15 @@
 /** Table-number plumbing for `/order?table=N` (docs/requirements.md §5.5). */
 
-import { getTableNumbers } from "./config";
+import { MAX_TABLE_NUMBER } from "@cafemenu/shared";
 
 /**
  * The highest table number an order can carry. firestore.rules refuses an
  * order with `tableNumber` outside 1..50, so a table above this could be
  * printed and scanned but never ordered from. The owner's table list is capped
- * here for the same reason.
+ * here for the same reason, and so are the default tables in the cafe's
+ * settings (@cafemenu/shared).
  */
-export const MAX_TABLE_NUMBER = 50;
+export { MAX_TABLE_NUMBER };
 
 /** Accepts `?table=4`, `#table=4`, or a bare `4`. */
 export function parseTableNumber(value: unknown): number | null {
@@ -119,8 +120,6 @@ export function parseTableText(text: string): {
   }
   return { tables: [...new Set(found)].sort((a, b) => a - b), rejected };
 }
-
-export { getTableNumbers };
 
 /**
  * The list a save will actually write, or an error. Both backends call this so

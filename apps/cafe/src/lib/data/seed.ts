@@ -1,4 +1,3 @@
-import { getCafeName, getCafeTagline } from "../config";
 import type { MenuItem } from "../types";
 
 /**
@@ -152,6 +151,3 @@ export const DEMO_CREDENTIALS = {
   staff: { email: "staff@demo.cafe", password: "cafe1122" },
   owner: { email: "owner@demo.cafe", password: "cafe1122" },
 } as const;
-
-export const SEED_TITLE = getCafeName();
-export const SEED_TAGLINE = getCafeTagline();

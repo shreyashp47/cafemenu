@@ -43,6 +43,8 @@ every Playwright script that starts it, will talk to that real project.
    Hosting) to `toe-cafe.web.app`. **Merging to `main` is deploying**, once the
    repository has the `FIREBASE_SERVICE_ACCOUNT` secret and the `NEXT_PUBLIC_*`
    variables that workflow needs (README, "Automatic deploys from `main`").
+   That is TOE's own repository; in CafeMenu a build takes no configuration
+   and the deployer ships it (README, "Point the app at it").
 
 Don't push straight to `main`, and don't deploy from your own machine unless
 you are the owner and the automatic deploy is unavailable. The manual deploy is:

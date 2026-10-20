@@ -126,6 +126,9 @@ function fakeCacheStorage(initial) {
         async match(req) {
           return entries.get(String(req.url ?? req));
         },
+        async delete(req) {
+          return entries.delete(String(req.url ?? req));
+        },
       };
     },
     async keys() {
@@ -291,5 +294,80 @@ describe("public/sw.js page router data (*.txt)", () => {
     expect(
       await worker.request("https://cafe.test/staff.txt?_rsc=1"),
     ).toBeUndefined();
+  });
+});
+
+describe("public/sw.js deploy files (init.json, site.json)", () => {
+  const files = [
+    "https://cafe.test/__/firebase/init.json",
+    "https://cafe.test/site.json",
+  ];
+  const deployCache = (caches) => caches.store.get("cafe-deploy");
+
+  it("fetches each fresh and keeps a copy", async () => {
+    const caches = fakeCacheStorage([]);
+    const worker = bootWorker("aaaaaaaaaaaa", caches, {
+      fetch: async () => ({
+        ok: true,
+        status: 200,
+        body: "live",
+        clone: () => "copy",
+      }),
+    });
+    for (const url of files) {
+      expect((await worker.request(url)).body).toBe("live");
+    }
+    expect([...deployCache(caches).keys()].sort()).toEqual([
+      "/__/firebase/init.json",
+      "/site.json",
+    ]);
+  });
+
+  it("starts an offline phone from the kept copy", async () => {
+    const caches = fakeCacheStorage([]);
+    const worker = bootWorker("aaaaaaaaaaaa", caches);
+    const cache = await caches.open("cafe-deploy");
+    await cache.put("/__/firebase/init.json", "kept config");
+    await cache.put("/site.json", "kept settings");
+    expect(await worker.request(files[0])).toBe("kept config");
+    expect(await worker.request(files[1])).toBe("kept settings");
+  });
+
+  it("fails, rather than invent an answer, offline with no copy", async () => {
+    const worker = bootWorker("aaaaaaaaaaaa", fakeCacheStorage([]));
+    expect(await worker.request(files[1])).toEqual({ error: true });
+  });
+
+  it("drops the copy when the file is gone", async () => {
+    const caches = fakeCacheStorage([]);
+    const worker = bootWorker("aaaaaaaaaaaa", caches, {
+      fetch: async () => ({ ok: false, status: 404, body: "not found" }),
+    });
+    await (await caches.open("cafe-deploy")).put("/site.json", "old");
+    expect((await worker.request(files[1])).status).toBe(404);
+    expect(deployCache(caches).has("/site.json")).toBe(false);
+  });
+
+  it("keeps the copy through a new build's activation", async () => {
+    const caches = fakeCacheStorage(["cafe-deploy", "cafe-shell-aaaaaaaaaaaa"]);
+    const worker = bootWorker("bbbbbbbbbbbb", caches);
+    await worker.fire("install");
+    await worker.fire("activate");
+    expect([...caches.store.keys()].sort()).toEqual([
+      "cafe-deploy",
+      "cafe-shell-bbbbbbbbbbbb",
+    ]);
+  });
+});
+
+describe("public/", () => {
+  it("never ships a site.json, whose presence means a real cafe", async () => {
+    // src/lib/boot.ts: a site.json tells the app it is a real cafe, so one in
+    // the build would turn every demo into a retry screen. Only the deployer
+    // writes it, per cafe.
+    const { readdir } = await import("node:fs/promises");
+    expect(await readdir(join(HERE, "../../public"))).not.toContain(
+      "site.json",
+    );
   });
 });

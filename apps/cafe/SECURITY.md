@@ -60,9 +60,13 @@ requests against it.
 
 **Out of scope**, because they are public by design or already known:
 
-- **The Firebase web config.** The `NEXT_PUBLIC_FIREBASE_*` values (API key,
-  project id, app id and so on) ship in every page's JavaScript. They identify
-  the project; they grant nothing. `firestore.rules` is what protects the data.
+- **The Firebase web config.** The API key, project id, app id and so on are
+  served to anyone at `/__/firebase/init.json`, which is how the app finds its
+  project, and end up in every page's memory. They identify the project; they
+  grant nothing. `firestore.rules` is what protects the data.
+- **The cafe's settings.** `site.json` and Firestore `config/site` (name,
+  tables, currency, time zone, …) are public by design; every page reads them.
+  Writing `config/site` from any client, the owner's included, is in scope.
 - **A forged order total being stored** (issue #27). The rules language cannot
   sum a list, so a tampered client can post any bounded total. The staff board
   re-derives every order from its lines and the live menu and flags the

@@ -21,10 +21,10 @@ import { Button } from "@/components/ui/Button";
 import { EmptyState, Loading } from "@/components/ui/Loading";
 import { Sheet } from "@/components/ui/Sheet";
 import { SpeechBubble, WashiNote } from "@/components/ui/SpeechBubble";
+import { useCafeSettings } from "@/hooks/useCafeSettings";
 import { useCart } from "@/hooks/useCart";
 import { useTableCode, useTakeKeyFromAddress } from "@/hooks/useTableCode";
 import { useTableQuery } from "@/hooks/useTableQuery";
-import { getCafeName, getCafeTagline } from "@/lib/config";
 import { formatINR, lineSubtotal, priceCart } from "@/lib/money";
 import { orderCapProblems } from "@/lib/order-caps";
 import { readTableCode, type TableCode } from "@/lib/table-keys";
@@ -117,6 +117,7 @@ function MenuScreen({
   const code = useTableCode(tableNumber, urlKey);
   const offer = useSpecialOffer();
   const isDemo = useIsDemo();
+  const { settings } = useCafeSettings();
   const cart = useCart(tableNumber, items);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string>("All");
@@ -169,10 +170,10 @@ function MenuScreen({
           <Mascot size={58} className="shrink-0" />
           <div className="min-w-0 flex-1">
             <h1 className="font-hand text-primary truncate text-[2rem] leading-none">
-              {getCafeName()}
+              {settings.name}
             </h1>
             <p className="text-2xs text-muted truncate font-semibold tracking-[0.14em] uppercase">
-              {getCafeTagline()}
+              {settings.tagline}
             </p>
           </div>
           <span className="rounded-pill border-primary bg-paper font-round text-primary flex shrink-0 items-center gap-1.5 border-2 px-3 py-1.5 text-sm">
