@@ -5,3 +5,6 @@ out/
 .DS_Store
 .firebase/
 *.log
+
+# Claude Code local state, including agent worktrees (full copies of this repo)
+.claude/

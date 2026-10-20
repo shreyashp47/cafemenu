@@ -1,0 +1,29 @@
+{
+  "name": "cafemenu",
+  "private": true,
+  "description": "QR table ordering for any small cafe, built from TOE.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shreyashp47/cafemenu.git"
+  },
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @cafemenu/cafe",
+    "build": "npm run build --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm test --workspaces --if-present",
+    "verify": "npm run verify --workspaces --if-present",
+    "format:check": "npm run format:check --workspaces --if-present"
+  },
+  "overrides": {
+    "postcss": "^8.5.28"
+  }
+}

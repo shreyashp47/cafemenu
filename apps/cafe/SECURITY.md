@@ -1,5 +1,15 @@
 # Security policy
 
+> **In CafeMenu:** this is [TOE](https://github.com/shreyashp47/TOE) v0.3.0
+> (TOE `main` at `74cff3c`), brought in as CafeMenu's cafe app. What follows is
+> TOE's own documentation, and it still describes how the app works. The parts
+> about the `toi-cafe` project, `toe-cafe.web.app` and deploying are
+> TOE-specific: TOE is still deployed from its own repository until it moves onto
+> CafeMenu's release pipeline
+> ([#23](https://github.com/shreyashp47/cafemenu/issues/23)). Install from the
+> repository root (`npm ci`); app scripts run here in `apps/cafe`, or from the
+> root with `-w @cafemenu/cafe`.
+
 TOE Cafe runs at <https://toe-cafe.web.app>, a Firebase Hosting site in the
 Firebase project `toi-cafe`. <https://toi-cafe.web.app> only redirects there.
 There is one supported version: whatever is on `main`. It is deployed by hand

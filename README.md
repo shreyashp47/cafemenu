@@ -1,7 +1,8 @@
 # CafeMenu
 
 [![License: MIT](https://img.shields.io/github/license/shreyashp47/cafemenu)](./LICENSE)
-[![Status: planning](https://img.shields.io/badge/status-planning-orange)](./PLAN.md)
+[![Status: early development](https://img.shields.io/badge/status-early%20development-orange)](./PLAN.md)
+[![CI](https://github.com/shreyashp47/cafemenu/actions/workflows/ci.yml/badge.svg)](https://github.com/shreyashp47/cafemenu/actions/workflows/ci.yml)
 [![Open issues](https://img.shields.io/github/issues/shreyashp47/cafemenu)](https://github.com/shreyashp47/cafemenu/issues)
 
 QR-code table ordering for small cafes. Customers scan the code on their table
@@ -13,10 +14,26 @@ CafeMenu turns [TOE](https://github.com/shreyashp47/TOE), a QR ordering app
 already running at a real cafe, into something any cafe can set up for itself in
 a few minutes. It then keeps every cafe updated with releases the owner chooses.
 
-> **Status: planning.** Nothing is usable yet. The design is in
-> [PLAN.md](./PLAN.md), and the work is tracked as
+> **Status: early development.** The cafe app runs locally in demo mode, but
+> signing a cafe up doesn't work yet. The design is in [PLAN.md](./PLAN.md), and
+> the work is tracked as
 > [issues](https://github.com/shreyashp47/cafemenu/issues) grouped into
 > [milestones](https://github.com/shreyashp47/cafemenu/milestones), one per phase.
+
+## Try the cafe app locally
+
+```bash
+git clone https://github.com/shreyashp47/cafemenu.git
+cd cafemenu
+npm ci
+npm run dev
+```
+
+Open <http://localhost:3000>. No Firebase account is needed: the app starts in
+demo mode, with a sample menu stored in your browser. Open
+<http://localhost:3000/order?table=3> as the customer and
+<http://localhost:3000/staff> as the staff phone (PIN `1122`) side by side, and
+place an order. More in the [cafe app's README](./apps/cafe/README.md).
 
 ## How it will work
 
@@ -68,14 +85,14 @@ The full design, including how releases and versions work, is in
 
 ## Roadmap
 
-| Phase | What it delivers | Estimate (working days) |
-| --- | --- | --- |
-| [0 · Spike](https://github.com/shreyashp47/cafemenu/milestone/1) | Proof that CafeMenu can set up and deploy to an owner's own Firebase project | 8–13 |
-| [1 · Config-free cafe app](https://github.com/shreyashp47/cafemenu/milestone/2) | One build for every cafe: themes, any currency and time zone, staff invites | 27–41 |
-| [2 · Release pipeline](https://github.com/shreyashp47/cafemenu/milestone/3) | Versioned releases, deploy and rollback, data migrations; TOE moves onto it | 11–17 |
-| [3 · Console](https://github.com/shreyashp47/cafemenu/milestone/4) | Signup, onboarding, automatic setup, owner updates page | 22–31 |
-| [4 · Automatic rollouts](https://github.com/shreyashp47/cafemenu/milestone/5) | Releases roll out in waves, with auto-rollback and owner emails | 8–12 |
-| [v1.0 · Release testing](https://github.com/shreyashp47/cafemenu/milestone/7) | Every feature tested end to end before v1.0 | 10–17 |
+| Phase                                                                           | What it delivers                                                             | Estimate (working days) |
+| ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ----------------------- |
+| [0 · Spike](https://github.com/shreyashp47/cafemenu/milestone/1)                | Proof that CafeMenu can set up and deploy to an owner's own Firebase project | 8–13                    |
+| [1 · Config-free cafe app](https://github.com/shreyashp47/cafemenu/milestone/2) | One build for every cafe: themes, any currency and time zone, staff invites  | 27–41                   |
+| [2 · Release pipeline](https://github.com/shreyashp47/cafemenu/milestone/3)     | Versioned releases, deploy and rollback, data migrations; TOE moves onto it  | 11–17                   |
+| [3 · Console](https://github.com/shreyashp47/cafemenu/milestone/4)              | Signup, onboarding, automatic setup, owner updates page                      | 22–31                   |
+| [4 · Automatic rollouts](https://github.com/shreyashp47/cafemenu/milestone/5)   | Releases roll out in waves, with auto-rollback and owner emails              | 8–12                    |
+| [v1.0 · Release testing](https://github.com/shreyashp47/cafemenu/milestone/7)   | Every feature tested end to end before v1.0                                  | 10–17                   |
 
 About **86–131 working days** in total for one developer: roughly 4–6 months
 full-time. How the estimate was made is in
@@ -83,9 +100,8 @@ full-time. How the estimate was made is in
 
 ## Contributing
 
-Contributions are welcome once the first code lands. Read
-[CONTRIBUTING.md](./CONTRIBUTING.md) first, and pick an issue from the current
-milestone.
+Contributions are welcome. Read [CONTRIBUTING.md](./CONTRIBUTING.md) first, and
+pick an issue from the current milestone.
 
 Security problems go through [SECURITY.md](./SECURITY.md), never a public
 issue. Everyone taking part follows the

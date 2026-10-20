@@ -1,11 +1,45 @@
 # Contributing
 
-Thanks for helping. CafeMenu is at the planning stage: the design is in
-[PLAN.md](./PLAN.md) and every piece of work is an
-[issue](https://github.com/shreyashp47/cafemenu/issues) in a phase
-[milestone](https://github.com/shreyashp47/cafemenu/milestones). Setup
-instructions arrive with the first code
-([#1](https://github.com/shreyashp47/cafemenu/issues/1)).
+Thanks for helping. The design is in [PLAN.md](./PLAN.md) and every piece of
+work is an [issue](https://github.com/shreyashp47/cafemenu/issues) in a phase
+[milestone](https://github.com/shreyashp47/cafemenu/milestones).
+
+## Getting set up
+
+```bash
+git clone https://github.com/shreyashp47/cafemenu.git
+cd cafemenu
+npm ci
+npm run dev        # the cafe app, in demo mode, on http://localhost:3000
+```
+
+Node 20.9+ (`.nvmrc` pins 20). This is an npm workspace:
+
+| Folder         | What it is                                                                                                                                                                                     |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/cafe`    | The cafe website: TOE v0.3.0, being generalised. Its own [README](./apps/cafe/README.md) and [CONTRIBUTING](./apps/cafe/CONTRIBUTING.md) cover its scripts, rules tests and Playwright checks. |
+| `apps/console` | The CafeMenu website (Phase 3, not started).                                                                                                                                                   |
+| `packages/*`   | Shared code and the deployer.                                                                                                                                                                  |
+
+Install once at the root. Run a workspace's scripts from its folder, or from
+the root with `-w`, e.g. `npm run verify -w @cafemenu/cafe`. From the root,
+`npm run verify` runs every workspace's checks.
+
+**Never delete `package-lock.json` to start fresh.** Resolving this workspace
+from nothing crashes npm (10.2 and 10.8 alike) with
+`Cannot read properties of null (reading 'edgesOut')`, on the peer dependencies
+around `vitest` 4. With the lockfile, `npm ci` and `npm install` work normally.
+The lockfile started as TOE's, so the cafe app runs on exactly TOE's versions.
+
+### Bringing a fix across from TOE
+
+Until TOE moves onto CafeMenu
+([#23](https://github.com/shreyashp47/cafemenu/issues/23)), a fix made in the
+TOE repository can be applied here with its history:
+
+```bash
+git -C ../TOE format-patch -1 <commit> --stdout | git am --directory=apps/cafe
+```
 
 ## Picking something up
 

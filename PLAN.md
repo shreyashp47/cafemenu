@@ -8,17 +8,17 @@ _"CafeMenu" is a working name._
 
 ## Decisions so far
 
-| Question | Decision |
-| --- | --- |
+| Question                       | Decision                                                                                                                                                            |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Where does a cafe's data live? | In **the owner's own Firebase project**, in their own Google account. They own the data and pay any Firebase bill (usually ₹0 on the free Spark plan, same as TOE). |
-| Who updates the sites? | **You.** Your platform has deploy access to each owner's project and pushes new releases. |
-| "Versions" | **Releases** (v1, v2, …). Each owner picks which release their cafe runs and when to upgrade. |
-| Look | **Preset themes** + the cafe's own name, tagline, logo and accent colour. |
-| Countries | **Any country from day one**: currency, time zone, date and number formats are per cafe. |
-| Language | **English first**, with every string in a translation file so more languages are a drop-in later. |
-| Pricing | **Free for now, paid later.** Leave room for plans without building billing yet. |
-| Code and tracking | Public, MIT-licensed repo [shreyashp47/cafemenu](https://github.com/shreyashp47/cafemenu). One milestone per phase, one issue per piece of work. |
-| Version 1.0 | Phases 0–4, then a full test of every feature ([v1.0 release testing](#v10-release-testing)) before tagging `v1.0.0`. |
+| Who updates the sites?         | **You.** Your platform has deploy access to each owner's project and pushes new releases.                                                                           |
+| "Versions"                     | **Releases** (v1, v2, …). Each owner picks which release their cafe runs and when to upgrade.                                                                       |
+| Look                           | **Preset themes** + the cafe's own name, tagline, logo and accent colour.                                                                                           |
+| Countries                      | **Any country from day one**: currency, time zone, date and number formats are per cafe.                                                                            |
+| Language                       | **English first**, with every string in a translation file so more languages are a drop-in later.                                                                   |
+| Pricing                        | **Free for now, paid later.** Leave room for plans without building billing yet.                                                                                    |
+| Code and tracking              | Public, MIT-licensed repo [shreyashp47/cafemenu](https://github.com/shreyashp47/cafemenu). One milestone per phase, one issue per piece of work.                    |
+| Version 1.0                    | Phases 0–4, then a full test of every feature ([v1.0 release testing](#v10-release-testing)) before tagging `v1.0.0`.                                               |
 
 ## What TOE gives us, and what has to change
 
@@ -34,14 +34,14 @@ TOE (v0.3.0) is solid and already half generic:
 
 Tied to one cafe today:
 
-| Today in TOE | Needs to become |
-| --- | --- |
-| Firebase keys baked in at build time (`NEXT_PUBLIC_FIREBASE_*`), `.firebaserc` → `toi-cafe` | **One build per release, shared by every cafe.** Config is read at runtime. |
-| Name from an env var; tagline, colours (`globals.css`), fonts, "Mochi" mascot, icons, manifest colours hardcoded | Per-cafe settings + theme presets |
-| ₹/INR, `en-IN`, whole rupees, IST midnight for order numbers and reports (also inside `firestore.rules`, `dayKeyOf`) | Per-cafe currency (stored in minor units: paise, cents), locale and time zone |
-| Owner and staff accounts made with `npm run seed:staff` from a terminal | Owner account made by the platform; staff added from the owner dashboard by invite link |
-| Manual `firebase deploy` | Automatic deploys of a chosen release to each cafe's project |
-| English text written inline in components | Strings in `messages/en.json` |
+| Today in TOE                                                                                                         | Needs to become                                                                         |
+| -------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Firebase keys baked in at build time (`NEXT_PUBLIC_FIREBASE_*`), `.firebaserc` → `toi-cafe`                          | **One build per release, shared by every cafe.** Config is read at runtime.             |
+| Name from an env var; tagline, colours (`globals.css`), fonts, "Mochi" mascot, icons, manifest colours hardcoded     | Per-cafe settings + theme presets                                                       |
+| ₹/INR, `en-IN`, whole rupees, IST midnight for order numbers and reports (also inside `firestore.rules`, `dayKeyOf`) | Per-cafe currency (stored in minor units: paise, cents), locale and time zone           |
+| Owner and staff accounts made with `npm run seed:staff` from a terminal                                              | Owner account made by the platform; staff added from the owner dashboard by invite link |
+| Manual `firebase deploy`                                                                                             | Automatic deploys of a chosen release to each cafe's project                            |
+| English text written inline in components                                                                            | Strings in `messages/en.json`                                                           |
 
 ## How it fits together
 
@@ -158,15 +158,15 @@ Each phase is a milestone on GitHub, and each bullet below is roughly one issue.
 Every issue says why it's needed, what to do, when it's done and what it depends
 on.
 
-| Phase | Milestone | Issues | Estimate |
-| --- | --- | --- | --- |
-| 0 · Spike | [Phase 0](https://github.com/shreyashp47/cafemenu/milestone/1) | [#1](https://github.com/shreyashp47/cafemenu/issues/1)–[#7](https://github.com/shreyashp47/cafemenu/issues/7) | 8–13 days |
-| 1 · Config-free cafe app | [Phase 1](https://github.com/shreyashp47/cafemenu/milestone/2) | [#8](https://github.com/shreyashp47/cafemenu/issues/8)–[#18](https://github.com/shreyashp47/cafemenu/issues/18) | 27–41 days |
-| 2 · Release pipeline | [Phase 2](https://github.com/shreyashp47/cafemenu/milestone/3) | [#19](https://github.com/shreyashp47/cafemenu/issues/19)–[#23](https://github.com/shreyashp47/cafemenu/issues/23) | 11–17 days |
-| 3 · Console | [Phase 3](https://github.com/shreyashp47/cafemenu/milestone/4) | [#24](https://github.com/shreyashp47/cafemenu/issues/24)–[#31](https://github.com/shreyashp47/cafemenu/issues/31) | 22–31 days |
-| 4 · Automatic rollouts | [Phase 4](https://github.com/shreyashp47/cafemenu/milestone/5) | [#32](https://github.com/shreyashp47/cafemenu/issues/32)–[#35](https://github.com/shreyashp47/cafemenu/issues/35) | 8–12 days |
-| v1.0 · Release testing | [v1.0 testing](https://github.com/shreyashp47/cafemenu/milestone/7) | [#41](https://github.com/shreyashp47/cafemenu/issues/41) | 10–17 days |
-| Later | [Later](https://github.com/shreyashp47/cafemenu/milestone/6) | [#36](https://github.com/shreyashp47/cafemenu/issues/36)–[#40](https://github.com/shreyashp47/cafemenu/issues/40) | not estimated |
+| Phase                    | Milestone                                                           | Issues                                                                                                            | Estimate      |
+| ------------------------ | ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------- |
+| 0 · Spike                | [Phase 0](https://github.com/shreyashp47/cafemenu/milestone/1)      | [#1](https://github.com/shreyashp47/cafemenu/issues/1)–[#7](https://github.com/shreyashp47/cafemenu/issues/7)     | 8–13 days     |
+| 1 · Config-free cafe app | [Phase 1](https://github.com/shreyashp47/cafemenu/milestone/2)      | [#8](https://github.com/shreyashp47/cafemenu/issues/8)–[#18](https://github.com/shreyashp47/cafemenu/issues/18)   | 27–41 days    |
+| 2 · Release pipeline     | [Phase 2](https://github.com/shreyashp47/cafemenu/milestone/3)      | [#19](https://github.com/shreyashp47/cafemenu/issues/19)–[#23](https://github.com/shreyashp47/cafemenu/issues/23) | 11–17 days    |
+| 3 · Console              | [Phase 3](https://github.com/shreyashp47/cafemenu/milestone/4)      | [#24](https://github.com/shreyashp47/cafemenu/issues/24)–[#31](https://github.com/shreyashp47/cafemenu/issues/31) | 22–31 days    |
+| 4 · Automatic rollouts   | [Phase 4](https://github.com/shreyashp47/cafemenu/milestone/5)      | [#32](https://github.com/shreyashp47/cafemenu/issues/32)–[#35](https://github.com/shreyashp47/cafemenu/issues/35) | 8–12 days     |
+| v1.0 · Release testing   | [v1.0 testing](https://github.com/shreyashp47/cafemenu/milestone/7) | [#41](https://github.com/shreyashp47/cafemenu/issues/41)                                                          | 10–17 days    |
+| Later                    | [Later](https://github.com/shreyashp47/cafemenu/milestone/6)        | [#36](https://github.com/shreyashp47/cafemenu/issues/36)–[#40](https://github.com/shreyashp47/cafemenu/issues/40) | not estimated |
 
 Estimates are in working days; see [Timeline](#timeline) for how they add up.
 
@@ -196,7 +196,7 @@ the owner's manual steps.
 - Runtime config: `init.json` + `site.json` + `config/site`, no
   `NEXT_PUBLIC_*` needed in production. Keep demo mode.
 - Theme presets as CSS variable sets (`data-theme="cozy" | "minimal" | "dark"
-  | …`; TOE's look becomes "Cozy"), plus accent override and logo. The mascot
+| …`; TOE's look becomes "Cozy"), plus accent override and logo. The mascot
   and doodles belong to the Cozy theme only.
 - Money in minor units with per-cafe currency; `formatINR` → `formatMoney`.
   Order caps per currency.
@@ -287,22 +287,22 @@ milestone. v1.0 ships when no `v1-blocker` is open and every check has passed.
 Estimated in **working days for one developer**, at TOE's standard: tests and
 docs included. Each issue carries its own estimate; these are the totals.
 
-| Phase | Low | High |
-| --- | ---: | ---: |
-| 0 · Spike | 8 | 13 |
-| 1 · Config-free cafe app | 27 | 41 |
-| 2 · Release pipeline | 11 | 17 |
-| 3 · Console | 22 | 31 |
-| 4 · Automatic rollouts | 8 | 12 |
-| v1.0 release testing (5–7 days testing, 5–10 days fixing) | 10 | 17 |
-| **Total to v1.0** | **86** | **131** |
+| Phase                                                     |    Low |    High |
+| --------------------------------------------------------- | -----: | ------: |
+| 0 · Spike                                                 |      8 |      13 |
+| 1 · Config-free cafe app                                  |     27 |      41 |
+| 2 · Release pipeline                                      |     11 |      17 |
+| 3 · Console                                               |     22 |      31 |
+| 4 · Automatic rollouts                                    |      8 |      12 |
+| v1.0 release testing (5–7 days testing, 5–10 days fixing) |     10 |      17 |
+| **Total to v1.0**                                         | **86** | **131** |
 
 What that means on the calendar:
 
-| Pace | To a first outside cafe (end of Phase 3) | To v1.0 |
-| --- | --- | --- |
-| Full-time, 5 days a week | 14–20 weeks | 17–26 weeks (about 4–6 months) |
-| Part-time, about 2 focused days a week | 34–51 weeks | 43–66 weeks (about 10–15 months) |
+| Pace                                   | To a first outside cafe (end of Phase 3) | To v1.0                          |
+| -------------------------------------- | ---------------------------------------- | -------------------------------- |
+| Full-time, 5 days a week               | 14–20 weeks                              | 17–26 weeks (about 4–6 months)   |
+| Part-time, about 2 focused days a week | 34–51 weeks                              | 43–66 weeks (about 10–15 months) |
 
 Starting full-time in late October 2026, v1.0 lands roughly between
 mid-February and late April 2027, not counting holidays.
@@ -332,44 +332,44 @@ mid-February and late April 2027, not counting holidays.
 <details>
 <summary>Estimate for each issue</summary>
 
-| Issue | Days |
-| --- | --- |
-| #1 Monorepo + TOE import | 1–2 |
+| Issue                                           | Days  |
+| ----------------------------------------------- | ----- |
+| #1 Monorepo + TOE import                        | 1–2   |
 | #2 Platform project, service account, test cafe | 0.5–1 |
-| #3 Spike: access and roles | 1–2 |
-| #4 Spike: set up a project | 2–3 |
-| #5 Spike: deploy rules, indexes, site | 2–3 |
-| #6 Spike: owner account and email | 1 |
-| #7 Spike write-up, go/no-go | 0.5–1 |
-| #8 Runtime Firebase config | 1–2 |
-| #9 Cafe settings | 3–4 |
-| #10 Theme presets and accent | 4–6 |
-| #11 Logo and app icons | 2–3 |
-| #12 Any currency (minor units) | 3–5 |
-| #13 Any time zone | 3–5 |
-| #14 UI text into `messages/en.json` | 4–6 |
-| #15 Staff invite links | 3–4 |
-| #16 Starter menus and import | 2–3 |
-| #17 Plan field and feature flags | 1 |
-| #18 TOE fixture in CI | 1–2 |
-| #19 Release package | 2–3 |
-| #20 Deploy, rollback, sync-branding | 4–6 |
-| #21 Migrations (TOE prices to paise) | 3–4 |
-| #22 Post-deploy smoke test | 1–2 |
-| #23 TOE onto the pipeline | 1–2 |
-| #24 Console app and platform database | 3–4 |
-| #25 Landing page and demo | 2–3 |
-| #26 Signup form | 3–4 |
-| #27 Onboarding wizard | 3–4 |
-| #28 Provisioning job | 4–5 |
-| #29 Owner area | 3–5 |
-| #30 Platform admin | 3–4 |
-| #31 Privacy policy and terms | 1–2 |
-| #32 Rollout waves | 3–4 |
-| #33 Auto-rollback | 2–3 |
-| #34 Owner emails | 2–3 |
-| #35 Support window | 1–2 |
-| #41 v1.0 release testing | 10–17 |
+| #3 Spike: access and roles                      | 1–2   |
+| #4 Spike: set up a project                      | 2–3   |
+| #5 Spike: deploy rules, indexes, site           | 2–3   |
+| #6 Spike: owner account and email               | 1     |
+| #7 Spike write-up, go/no-go                     | 0.5–1 |
+| #8 Runtime Firebase config                      | 1–2   |
+| #9 Cafe settings                                | 3–4   |
+| #10 Theme presets and accent                    | 4–6   |
+| #11 Logo and app icons                          | 2–3   |
+| #12 Any currency (minor units)                  | 3–5   |
+| #13 Any time zone                               | 3–5   |
+| #14 UI text into `messages/en.json`             | 4–6   |
+| #15 Staff invite links                          | 3–4   |
+| #16 Starter menus and import                    | 2–3   |
+| #17 Plan field and feature flags                | 1     |
+| #18 TOE fixture in CI                           | 1–2   |
+| #19 Release package                             | 2–3   |
+| #20 Deploy, rollback, sync-branding             | 4–6   |
+| #21 Migrations (TOE prices to paise)            | 3–4   |
+| #22 Post-deploy smoke test                      | 1–2   |
+| #23 TOE onto the pipeline                       | 1–2   |
+| #24 Console app and platform database           | 3–4   |
+| #25 Landing page and demo                       | 2–3   |
+| #26 Signup form                                 | 3–4   |
+| #27 Onboarding wizard                           | 3–4   |
+| #28 Provisioning job                            | 4–5   |
+| #29 Owner area                                  | 3–5   |
+| #30 Platform admin                              | 3–4   |
+| #31 Privacy policy and terms                    | 1–2   |
+| #32 Rollout waves                               | 3–4   |
+| #33 Auto-rollback                               | 2–3   |
+| #34 Owner emails                                | 2–3   |
+| #35 Support window                              | 1–2   |
+| #41 v1.0 release testing                        | 10–17 |
 
 </details>
 

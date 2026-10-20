@@ -14,6 +14,13 @@ concurrency:
 permissions:
   contents: read
 
+# The cafe app (TOE, generalised) lives in apps/cafe. Dependencies install once
+# at the repository root, because this is an npm workspace; everything else runs
+# inside the app's folder.
+defaults:
+  run:
+    working-directory: apps/cafe
+
 jobs:
   verify:
     name: lint · typecheck · test · build
@@ -29,6 +36,7 @@ jobs:
           cache: npm
 
       - name: Install
+        working-directory: .
         run: npm ci
 
       - name: Lint
@@ -59,7 +67,9 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
 
-      - run: npm ci
+      - name: Install
+        working-directory: .
+        run: npm ci
 
       - name: Introduce a deliberate bug
         run: |
@@ -88,7 +98,9 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
 
-      - run: npm ci
+      - name: Install
+        working-directory: .
+        run: npm ci
 
       - name: Install browsers
         run: npx playwright install --with-deps chromium webkit
@@ -148,7 +160,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: screenshots
-          path: .screenshots/
+          path: apps/cafe/.screenshots/
           retention-days: 14
 
   # firestore.rules is not TypeScript, so nothing else in this pipeline can see a
@@ -177,6 +189,7 @@ jobs:
           java-version: "21"
 
       - name: Install
+        working-directory: .
         run: npm ci
 
       - name: Start the emulators

@@ -1,8 +1,8 @@
 {
-  "name": "cafe-qr-order",
+  "name": "@cafemenu/cafe",
   "version": "0.1.0",
   "private": true,
-  "description": "QR cafe ordering system — customers order from their phone, staff get live order alerts, owner gets reports. Next.js + Firebase, anime-cafe themed.",
+  "description": "The cafe website for CafeMenu: customers order from their phone by QR code, staff get live order alerts, owners get the menu and reports. Next.js + Firebase. Built from TOE.",
   "license": "MIT",
   "engines": {
     "node": ">=20.9.0"
@@ -59,8 +59,5 @@
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.11"
-  },
-  "overrides": {
-    "postcss": "^8.5.28"
   }
 }
