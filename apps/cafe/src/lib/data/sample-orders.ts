@@ -10,6 +10,13 @@
  * Demo mode only. Never imported by the Firestore path.
  */
 
+import {
+  addMonths,
+  dayKeyIn,
+  dayStartIn,
+  DEFAULT_SETTINGS,
+} from "@cafemenu/shared";
+
 import { SEED_MENU } from "./seed";
 import type { Order } from "../types";
 import type { OrderStatus } from "../order-status";
@@ -29,18 +36,16 @@ function pick<T>(list: T[]): T {
 }
 
 /**
- * Builds `count` orders spread across the month containing `now`, ending at
- * roughly the current time so the "today" figures look plausible.
+ * Builds `count` orders spread across the month containing `now` at the cafe
+ * (in `timeZone`), ending at roughly the current time so the "today" figures
+ * look plausible.
  */
 export function buildSampleOrders(
   count = 240,
   now = Date.now(),
+  timeZone = DEFAULT_SETTINGS.timeZone,
 ): Array<Omit<Order, "id" | "orderNumber">> {
-  const start = new Date(
-    new Date(now).getFullYear(),
-    new Date(now).getMonth(),
-    1,
-  ).getTime();
+  const start = dayStartIn(timeZone, addMonths(dayKeyIn(timeZone, now), 0));
   const elapsed = Math.max(60_000, now - start);
 
   // A cafe never has zero orders on the board, and the demo should not either.

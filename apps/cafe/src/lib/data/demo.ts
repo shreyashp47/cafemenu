@@ -149,12 +149,12 @@ export const demoOrderRepo: OrderRepository = {
   },
 
   // Staff and owner only, as in firestore.rules (/dayCounters).
-  async assignDayNumber(id) {
+  async assignDayNumber(id, timeZone) {
     const role = readSession()?.role;
     if (role !== "staff" && role !== "owner") {
       throw new store.DemoRulesRefusal("only staff number orders");
     }
-    return store.demoAssignDayNumber(id);
+    return store.demoAssignDayNumber(id, timeZone);
   },
 
   async listRange(fromMs, toMs, limit) {

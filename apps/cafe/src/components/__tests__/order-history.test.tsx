@@ -4,6 +4,7 @@
  * whole order, and totals that agree with the Reports page.
  */
 
+import { addDays, dayStartIn } from "@cafemenu/shared";
 import {
   fireEvent,
   render,
@@ -35,10 +36,15 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/admin/orders",
 }));
 
-/** 28 Sept 2026, 3 pm local: a fixed "now" so the ranges are predictable. */
-const NOW = new Date(2026, 8, 28, 15, 0).getTime();
+/**
+ * Times at the demo cafe, in its zone, whatever zone the machine running the
+ * tests is in: the page counts days the cafe's way.
+ */
+const KOLKATA = "Asia/Kolkata";
 const at = (daysAgo: number, hour: number) =>
-  new Date(2026, 8, 28 - daysAgo, hour, 0).getTime();
+  dayStartIn(KOLKATA, addDays("2026-09-28", -daysAgo)) + hour * 3_600_000;
+/** 28 Sept 2026, 3 pm at the cafe: a fixed "now" so the ranges are predictable. */
+const NOW = at(0, 15);
 
 function line(name: string, price: number, qty = 1) {
   return { menuItemId: `m-${name}`, name, price, qty };
@@ -82,7 +88,7 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(NOW);
   resetDemoStore();
-  demoSeedOrders(SEEDS);
+  demoSeedOrders(SEEDS, KOLKATA);
 });
 
 function renderPage() {
@@ -107,7 +113,7 @@ describe("order history: ranges", () => {
   it("loads today by default, with one capped range query", async () => {
     const spy = vi.spyOn(demoOrderRepo, "listRange");
     renderPage();
-    const today = presetRange("today", NOW);
+    const today = presetRange("today", KOLKATA, NOW);
     await waitFor(() =>
       expect(spy).toHaveBeenCalledWith(today.from, today.to, HISTORY_LIMIT),
     );
@@ -130,7 +136,7 @@ describe("order history: ranges", () => {
     await screen.findByText(/3 orders ·/);
 
     await user.click(screen.getByRole("button", { name: label }));
-    const r = presetRange(id, NOW);
+    const r = presetRange(id, KOLKATA, NOW);
     await waitFor(() =>
       expect(spy).toHaveBeenLastCalledWith(r.from, r.to, HISTORY_LIMIT),
     );
@@ -169,7 +175,7 @@ describe("order history: ranges", () => {
 
   it("offers the sample month in demo mode when a range is empty", async () => {
     resetDemoStore();
-    demoSeedOrders([]);
+    demoSeedOrders([], KOLKATA);
     renderPage();
     expect(
       await screen.findByText("No orders in this range"),
@@ -207,8 +213,8 @@ describe("order history: summary", () => {
     await screen.findByText(/3 orders ·/);
     await user.click(screen.getByRole("button", { name: "This month" }));
 
-    const month = presetRange("month", NOW);
-    const report = buildReport(await allStored(), month);
+    const month = presetRange("month", KOLKATA, NOW);
+    const report = buildReport(await allStored(), month, KOLKATA);
     expect(
       await screen.findByText(
         `${report.orderCount} orders · ${formatINR(report.revenue)}`,
@@ -424,6 +430,7 @@ describe("order history: rows", () => {
       Array.from({ length: 60 }, (_, i) =>
         seed({ createdAt: at(0, 0) + i * 60_000 }),
       ),
+      KOLKATA,
     );
     renderPage();
     await screen.findByText(/60 orders ·/);

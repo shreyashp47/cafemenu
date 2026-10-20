@@ -319,7 +319,7 @@ describe("customer: waiting for the counter", () => {
     // Accepted: now the number is coming (the board hands it out).
     expect(screen.getByText("Your number is coming…")).toBeVisible();
     await act(async () => {
-      await demoAssignDayNumber(order.id);
+      await demoAssignDayNumber(order.id, "Asia/Kolkata");
     });
     expect(await screen.findAllByText(/#0001/)).not.toHaveLength(0);
   });

@@ -49,7 +49,10 @@ export interface Order {
    * orders. See ./day-number.ts.
    */
   dayNumber?: number;
-  /** The IST day `dayNumber` counts within, "YYYY-MM-DD". Set with it. */
+  /**
+   * The cafe's day (in settings.timeZone) `dayNumber` counts within,
+   * "YYYY-MM-DD". Set with it.
+   */
   dayKey?: string;
   tableNumber: number;
   items: OrderLine[];

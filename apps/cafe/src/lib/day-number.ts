@@ -18,7 +18,9 @@
  *   board that the rules refuse does not loop on them.
  */
 
-import { DAY_NUMBER_MAX, istDayKey, isDayNumber } from "./order-number";
+import { dayKeyIn } from "@cafemenu/shared";
+
+import { DAY_NUMBER_MAX, isDayNumber } from "./order-number";
 
 /** What a numbering transaction needs from the store it runs against. */
 export interface DayNumberTx {
@@ -72,20 +74,22 @@ export function awaitsNumbering(status: unknown): boolean {
 }
 
 /**
- * One numbering attempt. Returns what was assigned, or null when there was
- * nothing to do: the order is gone, it already has a number (another board
- * got there first), or it is still waiting for the counter.
+ * One numbering attempt, in the cafe's `timeZone` (settings.timeZone). Returns
+ * what was assigned, or null when there was nothing to do: the order is gone,
+ * it already has a number (another board got there first), or it is still
+ * waiting for the counter.
  */
 export async function assignInTransaction(
   tx: DayNumberTx,
   id: string,
+  timeZone: string,
 ): Promise<Assigned | null> {
   const order = await tx.readOrder(id);
   if (!order || order.dayNumber !== undefined) return null;
   if (!awaitsNumbering(order.status)) return null;
   // From when the order was placed, not from now: an order placed at 23:59:59
   // and numbered at 00:00:02 belongs to the day it was placed.
-  const dayKey = istDayKey(order.createdAt);
+  const dayKey = dayKeyIn(timeZone, order.createdAt);
   const next = await tx.readCounter(dayKey);
   const dayNumber = next ?? 1;
   if (!isDayNumber(dayNumber)) throw new DayNumbersExhausted(dayKey);

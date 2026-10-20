@@ -7,6 +7,8 @@
  * takings.
  */
 
+import { addDays, addMonths, dayKeyIn, dayStartIn } from "@cafemenu/shared";
+
 import { ACTIVE_STATUSES, ORDER_STATUSES } from "./order-status";
 import type { Range } from "./reports";
 import type { Order } from "./types";
@@ -36,64 +38,69 @@ export const PRESETS: ReadonlyArray<{ id: PresetId; label: string }> = [
   { id: "month", label: "This month" },
 ];
 
-function dayStart(ms: number, offsetDays = 0): number {
-  const d = new Date(ms);
-  // Date arithmetic, not `+ n * DAY_MS`, so a DST change can't shift a day
-  return new Date(
-    d.getFullYear(),
-    d.getMonth(),
-    d.getDate() + offsetDays,
-  ).getTime();
-}
+/*
+ * Every day here is the cafe's, in its time zone (settings.timeZone), so
+ * "Today" is the cafe's today, the one its order numbers count in, even for
+ * an owner looking from abroad. Ranges run from one local midnight to another
+ * (dayStartIn), never by adding 24 hours, so a daylight-saving change cannot
+ * shift a day.
+ */
 
-/** Local-time range for a quick chip. `to` is exclusive. */
-export function presetRange(id: PresetId, now = Date.now()): Range {
+/** The cafe's range for a quick chip. `to` is exclusive. */
+export function presetRange(
+  id: PresetId,
+  timeZone: string,
+  now = Date.now(),
+): Range {
+  const today = dayKeyIn(timeZone, now);
+  const days = (first: string, afterLast: string): Range => ({
+    from: dayStartIn(timeZone, first),
+    to: dayStartIn(timeZone, afterLast),
+  });
   switch (id) {
     case "today":
-      return { from: dayStart(now), to: dayStart(now, 1) };
+      return days(today, addDays(today, 1));
     case "yesterday":
-      return { from: dayStart(now, -1), to: dayStart(now) };
+      return days(addDays(today, -1), today);
     case "last7":
       // today and the six days before it
-      return { from: dayStart(now, -6), to: dayStart(now, 1) };
-    case "month": {
-      const d = new Date(now);
-      return {
-        from: new Date(d.getFullYear(), d.getMonth(), 1).getTime(),
-        to: dayStart(now, 1),
-      };
-    }
+      return days(addDays(today, -6), addDays(today, 1));
+    case "month":
+      return days(addMonths(today, 0), addDays(today, 1));
   }
 }
 
-/** "2026-09-28" in local time, for <input type="date">. */
-export function toInputDate(ms: number): string {
-  const d = new Date(ms);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+/** "2026-09-28", the cafe's date at `ms`, for <input type="date">. */
+export function toInputDate(ms: number, timeZone: string): string {
+  return dayKeyIn(timeZone, ms);
 }
 
-export function fromInputDate(value: string): number | null {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (!match) return null;
-  const [, y, m, d] = match;
-  return new Date(Number(y), Number(m) - 1, Number(d)).getTime();
+/** The start of that day at the cafe, or null for anything but a date. */
+export function fromInputDate(value: string, timeZone: string): number | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  // A date the calendar does not have ("2026-02-30") rolls over, as Date did.
+  return dayStartIn(timeZone, addDays(value, 0));
 }
 
 export type RangeCheck =
   { ok: true; range: Range; days: number } | { ok: false; reason: string };
 
 /** Turns the two date inputs (both inclusive) into a query range, or says why not. */
-export function inputRange(from: string, to: string): RangeCheck {
-  const start = fromInputDate(from);
-  const end = fromInputDate(to);
+export function inputRange(
+  from: string,
+  to: string,
+  timeZone: string,
+): RangeCheck {
+  const start = fromInputDate(from, timeZone);
+  const end = fromInputDate(to, timeZone);
   if (start === null || end === null) {
     return { ok: false, reason: "Pick both a start and an end date." };
   }
   if (end < start) {
     return { ok: false, reason: "The end date is before the start date." };
   }
-  const range = { from: start, to: dayStart(end, 1) };
+  const range = { from: start, to: dayStartIn(timeZone, addDays(to, 1)) };
+  // Rounded: a range with a daylight-saving change in it is an hour off.
   const days = Math.round((range.to - range.from) / DAY_MS);
   if (days > MAX_RANGE_DAYS) {
     return {
@@ -108,11 +115,17 @@ export function inputRange(from: string, to: string): RangeCheck {
 export function matchingPreset(
   from: string,
   to: string,
+  timeZone: string,
   now = Date.now(),
 ): PresetId | null {
   for (const { id } of PRESETS) {
-    const r = presetRange(id, now);
-    if (toInputDate(r.from) === from && toInputDate(r.to - 1) === to) return id;
+    const r = presetRange(id, timeZone, now);
+    if (
+      toInputDate(r.from, timeZone) === from &&
+      toInputDate(r.to - 1, timeZone) === to
+    ) {
+      return id;
+    }
   }
   return null;
 }

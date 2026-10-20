@@ -337,7 +337,7 @@ describe("reports leave rejected orders out", () => {
   const range = { from: at - 1000, to: at + 1000 };
 
   it("from revenue, order count, best sellers and the chart", () => {
-    const report = buildReport(orders, range);
+    const report = buildReport(orders, range, "Asia/Kolkata");
     expect(report.revenue).toBe(300);
     expect(report.orderCount).toBe(2);
     expect(report.averageOrderValue).toBe(150);
@@ -346,13 +346,13 @@ describe("reports leave rejected orders out", () => {
   });
 
   it("but still counts them, so the owner can see how many there were", () => {
-    const report = buildReport(orders, range);
+    const report = buildReport(orders, range, "Asia/Kolkata");
     expect(report.rejectedCount).toBe(1);
     expect(report.statusCounts.rejected).toBe(1);
   });
 
   it("and keeps them in the CSV, marked, with the reason", () => {
-    const csv = ordersToCsv(orders).split("\n");
+    const csv = ordersToCsv(orders, "Asia/Kolkata").split("\n");
     expect(csv[0]).toContain("Status");
     expect(csv[0]).toContain("Reject reason");
     const row = csv.find((l) => l.includes("Item b"));

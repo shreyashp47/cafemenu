@@ -96,12 +96,13 @@ export interface OrderRepository {
   /** Staff turn an order away. `reason` is optional and shown to the customer. */
   reject(id: string, reason?: string): Promise<void>;
   /**
-   * Staff only: give the order today's next number (#0001, #0002, …) in one
-   * transaction with the day's counter. Resolves null when the order already
-   * had one, e.g. because another board numbered it first. See
-   * src/lib/day-number.ts.
+   * Staff only: give the order its day's next number (#0001, #0002, …) in one
+   * transaction with the day's counter, the day being the date of its
+   * createdAt in `timeZone` (the cafe's, settings.timeZone). Resolves null
+   * when the order already had one, e.g. because another board numbered it
+   * first. See src/lib/day-number.ts.
    */
-  assignDayNumber(id: string): Promise<Assigned | null>;
+  assignDayNumber(id: string, timeZone: string): Promise<Assigned | null>;
   /**
    * Bounded range query — keeps Firestore reads inside the free tier.
    * Always returned oldest first. With `limit`, only the newest `limit` orders

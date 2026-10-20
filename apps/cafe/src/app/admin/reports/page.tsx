@@ -7,6 +7,7 @@
  * small, and a monthly bar chart of 31 bars does not need a charting library.
  */
 
+import { addDays, dayStartIn } from "@cafemenu/shared";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Icon } from "@/components/icons";
@@ -19,11 +20,13 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Field, Input } from "@/components/ui/Input";
 import { EmptyState, Loading } from "@/components/ui/Loading";
+import { useCafeSettings } from "@/hooks/useCafeSettings";
 import { useFeatures } from "@/hooks/useFeatures";
 import { demoSeedOrders } from "@/lib/data/demo-store";
 import { buildSampleOrders } from "@/lib/data/sample-orders";
 import { formatINR } from "@/lib/money";
 import { summariseIntegrity } from "@/lib/order-integrity";
+import { fromInputDate, presetRange, toInputDate } from "@/lib/order-history";
 import { orderLabel } from "@/lib/order-number";
 import {
   buildReport,
@@ -38,32 +41,19 @@ import type { Order } from "@/lib/types";
 
 type Mode = "month" | "range";
 
-function toInputDate(ms: number): string {
-  const d = new Date(ms);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
-function fromInputDate(value: string): number | null {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (!match) return null;
-  const [, y, m, d] = match;
-  return new Date(Number(y), Number(m) - 1, Number(d)).getTime();
-}
-
 export default function ReportsPage() {
   const repo = useOrderRepo();
   const isDemo = useIsDemo();
   // The plan's say on the CSV download (issue #17). Every plan has it today.
   const { csvExport } = useFeatures();
+  // Months and days are the cafe's, wherever the owner is looking from.
+  const { timeZone } = useCafeSettings().settings;
   const [mode, setMode] = useState<Mode>("month");
-  const [cursor, setCursor] = useState(() => currentMonth());
+  const [cursor, setCursor] = useState(() => currentMonth(timeZone));
   const [from, setFrom] = useState(() =>
-    toInputDate(
-      new Date(new Date().getFullYear(), new Date().getMonth(), 1).getTime(),
-    ),
+    toInputDate(presetRange("month", timeZone).from, timeZone),
   );
-  const [to, setTo] = useState(() => toInputDate(Date.now()));
+  const [to, setTo] = useState(() => toInputDate(Date.now(), timeZone));
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -72,7 +62,7 @@ export default function ReportsPage() {
   async function seedSampleMonth() {
     setSeeding(true);
     try {
-      demoSeedOrders(buildSampleOrders(240));
+      demoSeedOrders(buildSampleOrders(240, Date.now(), timeZone), timeZone);
       await load();
     } finally {
       setSeeding(false);
@@ -80,13 +70,15 @@ export default function ReportsPage() {
   }
 
   const range = useMemo(() => {
-    if (mode === "month") return monthRange(cursor.year, cursor.month0);
-    const start = fromInputDate(from);
-    const end = fromInputDate(to);
+    if (mode === "month")
+      return monthRange(cursor.year, cursor.month0, timeZone);
+    const start = fromInputDate(from, timeZone);
+    const end = fromInputDate(to, timeZone);
     if (start === null || end === null) return null;
-    // `to` is inclusive in the UI, exclusive in the query
-    return { from: start, to: end + 86_400_000 };
-  }, [mode, cursor, from, to]);
+    // `to` is inclusive in the UI, exclusive in the query: up to the next
+    // midnight, which a daylight-saving change can put 23 or 25 hours on.
+    return { from: start, to: dayStartIn(timeZone, addDays(to, 1)) };
+  }, [mode, cursor, from, to, timeZone]);
 
   const load = useCallback(async () => {
     if (!repo || !range) return;
@@ -107,8 +99,8 @@ export default function ReportsPage() {
   }, [load]);
 
   const report = useMemo(
-    () => (range ? buildReport(orders, range) : null),
-    [orders, range],
+    () => (range ? buildReport(orders, range, timeZone) : null),
+    [orders, range, timeZone],
   );
 
   // Issue #27: order totals are written by the customer's phone. The figures
@@ -124,12 +116,12 @@ export default function ReportsPage() {
   );
 
   function downloadCsv() {
-    const csv = ordersToCsv(orders);
+    const csv = ordersToCsv(orders, timeZone);
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `cafe-orders-${toInputDate(range?.from ?? Date.now())}-to-${toInputDate((range?.to ?? Date.now()) - 1)}.csv`;
+    a.download = `cafe-orders-${toInputDate(range?.from ?? Date.now(), timeZone)}-to-${toInputDate((range?.to ?? Date.now()) - 1, timeZone)}.csv`;
     document.body.appendChild(a);
     a.click();
     a.remove();
