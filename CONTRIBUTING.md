@@ -60,6 +60,8 @@ git -C ../TOE format-patch -1 <commit> --stdout | git am --directory=apps/cafe
 3. Open a pull request that closes its issue (`Closes #12`). CI has to be green.
 4. Squash or rebase merge; no merge commits on `main`.
 
+Releases are cut by pushing a version tag; [docs/releases.md](./docs/releases.md) covers how, and what CI publishes.
+
 ## Commit messages
 
 [Conventional Commits](https://www.conventionalcommits.org/), as in TOE:
