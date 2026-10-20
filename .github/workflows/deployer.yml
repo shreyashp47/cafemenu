@@ -1,0 +1,44 @@
+name: Deployer
+
+# packages/deployer only: its unit tests run against a fake Google, so they
+# need no credentials and no network beyond npm.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/deployer/**"
+      - ".github/workflows/deployer.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "packages/deployer/**"
+      - ".github/workflows/deployer.yml"
+
+# Only one run per branch; a new push cancels the run it supersedes.
+concurrency:
+  group: deployer-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: deployer tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      # Installed once at the root, because this is an npm workspace.
+      - name: Install
+        run: npm ci
+
+      - name: Test
+        run: npm test -w @cafemenu/deployer

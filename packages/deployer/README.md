@@ -32,9 +32,9 @@ deployer rollback  --project <id> --site <name>
 deployer owner     --project <id> --email <email> --name <name>
 ```
 
-From the repo root, `node packages/deployer/bin/deployer.mjs <command> …`, or
-`npm run deployer -w @cafemenu/deployer -- <command> …` once the root
-workspace is in place. `deployer <command> --help` lists every option.
+From the repo root, `npm run deployer -w @cafemenu/deployer -- <command> …`
+or `node packages/deployer/bin/deployer.mjs <command> …`.
+`deployer <command> --help` lists every option.
 
 Every command takes:
 
@@ -360,9 +360,13 @@ Each item is a `// UNVERIFIED: run in spike #N` comment above the call in
 ## Development
 
 ```bash
-node --test packages/deployer        # from the repo root
-npm test                             # from packages/deployer
+npm test -w @cafemenu/deployer       # from the repo root, as CI does
+node --test packages/deployer        # the same, without npm
 ```
+
+`.github/workflows/deployer.yml` runs them on every pull request and push to
+`main` that touches `packages/deployer/`. The root `npm test` and
+`npm run verify` include them too.
 
 The tests run every command end to end against `tests/helpers/fake-google.mjs`,
 a stateful model of the documented API behaviour: a second run sees what the
