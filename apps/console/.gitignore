@@ -1,0 +1,29 @@
+node_modules
+
+# env files
+.env
+.env.local
+.env*.local
+
+# next
+.next
+out
+build
+next-env.d.ts
+
+# testing
+coverage
+tsconfig.tsbuildinfo
+
+# local visual-check output (see scripts/screenshot.mjs)
+.screenshots/
+
+# misc
+.DS_Store
+*.pem
+
+# firebase
+.firebase
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
