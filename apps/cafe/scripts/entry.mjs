@@ -25,6 +25,9 @@ import { spawn } from "node:child_process";
 import process from "node:process";
 import { chromium, devices } from "playwright";
 
+// The demo's expected 404s for init.json and site.json (src/lib/boot.ts).
+import { isBootFileMiss } from "./lib/page-noise.mjs";
+
 const PORT = 4313;
 const BASE = process.env.BASE_URL ?? `http://127.0.0.1:${PORT}`;
 
@@ -126,7 +129,10 @@ step(1, "Land on / — should land on the order page");
   const page = await context.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
+  page.on(
+    "console",
+    (m) => m.type() === "error" && !isBootFileMiss(m) && errors.push(m.text()),
+  );
   await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
   await page.waitForURL(/\/order/, { timeout: 15_000 }).catch(() => {});
   await settle(page);
@@ -169,7 +175,10 @@ for (const query of ["?table=3", "?table=3&k=PrintedCode12"]) {
   const page = await context.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
+  page.on(
+    "console",
+    (m) => m.type() === "error" && !isBootFileMiss(m) && errors.push(m.text()),
+  );
   await page.goto(`${BASE}/order${query}`, { waitUntil: "domcontentloaded" });
   await waitForMenu(page);
   await settle(page);

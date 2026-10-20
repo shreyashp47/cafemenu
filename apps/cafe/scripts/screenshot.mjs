@@ -16,6 +16,9 @@ import { spawn } from "node:child_process";
 import process from "node:process";
 import { chromium, devices } from "playwright";
 
+// The demo's expected 404s for init.json and site.json (src/lib/boot.ts).
+import { isBootFileMiss } from "./lib/page-noise.mjs";
+
 const OUT = ".screenshots";
 const PORT = 4310;
 const BASE = process.env.BASE_URL ?? `http://127.0.0.1:${PORT}`;
@@ -133,7 +136,7 @@ for (const vp of VIEWPORTS) {
   for (const route of routes) {
     const page = await context.newPage();
     page.on("console", (msg) => {
-      if (msg.type() === "error") {
+      if (msg.type() === "error" && !isBootFileMiss(msg)) {
         consoleErrors.push(`[${route.name}/${vp.name}] ${msg.text()}`);
       }
     });
