@@ -1,0 +1,68 @@
+/**
+ * Typed access to the environment.
+ *
+ * The console must boot with **zero** configuration (see .env.example), so the
+ * Firebase block is optional. Without it the console runs in demo mode against
+ * a localStorage store; see src/lib/data/.
+ *
+ * NOTE: every read is a direct `process.env.NEXT_PUBLIC_*` member expression on
+ * purpose. Next.js can only inline those statically; routing them through an
+ * alias (`const env = process.env`) leaves a live `process` reference that
+ * throws in the browser.
+ */
+
+import type { Backend } from "./data/types";
+
+const read = (value: string | undefined) => (value ?? "").trim();
+
+/**
+ * The emulators' project. A `demo-` project ID can never reach a real Firebase
+ * project, so nothing done against the emulators can leak out.
+ */
+export const EMULATOR_PROJECT = "demo-cafemenu";
+
+/** The ports in firebase.json. */
+export const EMULATOR_HOSTS = {
+  host: "127.0.0.1",
+  authPort: 9199,
+  firestorePort: 8180,
+} as const;
+
+const useEmulators = ["1", "true"].includes(
+  read(process.env.NEXT_PUBLIC_FIREBASE_EMULATORS).toLowerCase(),
+);
+
+const firebaseKeysFilled = [
+  read(process.env.NEXT_PUBLIC_FIREBASE_API_KEY),
+  read(process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN),
+  read(process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID),
+  read(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET),
+  read(process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID),
+  read(process.env.NEXT_PUBLIC_FIREBASE_APP_ID),
+].every((value) => value.length > 0);
+
+/** The platform project's web config, or `null` when there is none. */
+export const firebaseConfig: Record<string, string> | null = firebaseKeysFilled
+  ? {
+      apiKey: read(process.env.NEXT_PUBLIC_FIREBASE_API_KEY),
+      authDomain: read(process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN),
+      projectId: read(process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID),
+      storageBucket: read(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET),
+      messagingSenderId: read(
+        process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+      ),
+      appId: read(process.env.NEXT_PUBLIC_FIREBASE_APP_ID),
+    }
+  : null;
+
+/** Emulators win over a real config, so a stray .env.local cannot leak in. */
+export const backend: Backend = useEmulators
+  ? "emulators"
+  : firebaseKeysFilled
+    ? "firebase"
+    : "demo";
+
+export const isDemoMode = backend === "demo";
+
+/** The public repository, for "read the code" and "run it yourself" links. */
+export const REPO_URL = "https://github.com/shreyashp47/cafemenu";
