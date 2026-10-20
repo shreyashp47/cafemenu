@@ -10,7 +10,9 @@
  *     roles, landmark structure.
  *
  * Fails on: any console error, any horizontal overflow, any WCAG A/AA violation,
- * and any route that fails to render in WebKit.
+ * and any route that fails to render in WebKit. The one exception is WebKit
+ * reporting an abandoned Next.js prefetch, and a demo's expected 404 for
+ * init.json and site.json (scripts/lib/page-noise.mjs).
  *
  *   npm run audit                          # this script; NOT `npm audit`
  *   npm run audit -- --engine=webkit       # iOS/Safari only
@@ -26,6 +28,8 @@ import { spawn } from "node:child_process";
 import process from "node:process";
 import { chromium, webkit, devices } from "playwright";
 import AxeBuilder from "@axe-core/playwright";
+
+import { isBootFileMiss, withoutAbortedPrefetches } from "./lib/page-noise.mjs";
 
 const OUT = ".screenshots/audit";
 const PORT = 4321;
@@ -118,13 +122,17 @@ for (const { name, type } of engines) {
     let attemptErrors = [];
     const page = await context.newPage();
     page.on("console", (m) => {
-      if (m.type() === "error") attemptErrors.push(`console: ${m.text()}`);
+      if (m.type() === "error" && !isBootFileMiss(m))
+        attemptErrors.push(`console: ${m.text()}`);
     });
     page.on("pageerror", (e) => attemptErrors.push(`pageerror: ${e.message}`));
 
+    // The demo session goes in before the page's own scripts run. Loading
+    // the app first to plant it, then navigating away, left that first page's
+    // requests (the boot's init.json and site.json, the /order prefetch) to be
+    // cancelled mid-flight, which WebKit reports as errors on the page.
     if (route.auth) {
-      await page.goto(BASE, { waitUntil: "domcontentloaded" });
-      await page.evaluate(
+      await page.addInitScript(
         ([key, value]) => localStorage.setItem(key, value),
         [SESSION_KEY, JSON.stringify(SESSIONS[route.auth])],
       );
@@ -139,6 +147,7 @@ for (const { name, type } of engines) {
       await page.waitForTimeout(700);
     };
     await open();
+    attemptErrors = withoutAbortedPrefetches(name, attemptErrors);
 
     const TRANSIENT =
       /Loading chunk \d+ failed|Failed to fetch|net::ERR|NetworkError|504 asset unavailable/i;
@@ -149,6 +158,7 @@ for (const { name, type } of engines) {
           `  ..   ${route.name}: transient load failure, reloading once`,
         );
         await open();
+        attemptErrors = withoutAbortedPrefetches(name, attemptErrors);
         const survived = attemptErrors.filter((e) => TRANSIENT.test(e));
         if (survived.length) {
           console.log(

@@ -24,6 +24,9 @@ import { spawn } from "node:child_process";
 import process from "node:process";
 import { chromium, devices } from "playwright";
 
+// The demo's expected 404s for init.json and site.json (src/lib/boot.ts).
+import { isBootFileMiss } from "./lib/page-noise.mjs";
+
 const OUT = ".screenshots/flow";
 const PORT = 4311;
 const BASE = process.env.BASE_URL ?? `http://127.0.0.1:${PORT}`;
@@ -86,7 +89,8 @@ async function browserContext() {
 
 function watch(page, tag) {
   page.on("console", (m) => {
-    if (m.type() === "error") errors.push(`[${tag}] ${m.text()}`);
+    if (m.type() === "error" && !isBootFileMiss(m))
+      errors.push(`[${tag}] ${m.text()}`);
   });
   page.on("pageerror", (e) => errors.push(`[${tag}] pageerror: ${e.message}`));
   return page;
