@@ -1153,6 +1153,16 @@ await t(
   ),
 );
 await t(
+  "the owner cannot move the offsets the order-number rules use",
+  denied(() =>
+    setDoc(
+      siteDoc(ownerC),
+      { utcOffsets: { standard: 0, daylight: 0 } },
+      { merge: true },
+    ),
+  ),
+);
+await t(
   "the owner cannot delete them",
   denied(() => deleteDoc(siteDoc(ownerC))),
 );
@@ -1741,6 +1751,242 @@ const assignTxOnce = (c, id) =>
       );
       await numberOrder(staffC, guest, key, 1);
     }),
+  );
+}
+
+// Daily numbers in the cafe's own time zone (issue #13). The rules read the
+// zone's two offsets from config/site and take a day key that matches either
+// (dayKeyOk). Each zone below is seeded into config/site in turn, and orders
+// are placed a second either side of local midnight on real 2026 dates: on an
+// ordinary day, and on each daylight-saving change day, whose two midnights are
+// an hour apart from the day before's in UTC.
+//
+// The expected day comes from Intl, not from the app's code, so this is an
+// independent check of both. Numbers come from whatever the day's counter
+// says (numberUnder), so a rerun against the same emulators still works:
+// only the day is under test here.
+console.log("\n daily order numbers in any time zone (config/site offsets)");
+const cafeDay = (zone, ms) => {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: zone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(ms);
+  const part = (type) => parts.find((p) => p.type === type).value;
+  return `${part("year")}-${part("month")}-${part("day")}`;
+};
+const shiftDay = (key, days) =>
+  new Date(Date.parse(key) + days * DAY_MS).toISOString().slice(0, 10);
+const setSite = async (fields) => {
+  const r = await adminDoc("config/site", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      fields: restFields({ ...SITE_SETTINGS, ...fields }),
+    }),
+  });
+  if (!r.ok) throw new Error(`could not seed config/site: ${r.status}`);
+};
+const numberUnder = async (c, id, key) => {
+  const counter = await getDoc(counterDoc(staffC, key));
+  return numberOrder(c, id, key, counter.exists() ? counter.data().next : 1);
+};
+
+{
+  // No daylight saving: one offset, and the day is exact on both sides of
+  // midnight. Kathmandu is UTC+5:45, so its midnight is 18:15 UTC.
+  const exact = [
+    ["Asia/Kolkata", 330, "2026-06-14T18:30:00Z"],
+    ["Asia/Kathmandu", 345, "2026-06-14T18:15:00Z"],
+  ];
+  for (const [zone, offset, iso] of exact) {
+    await setSite({
+      timeZone: zone,
+      utcOffsets: { standard: offset, daylight: offset },
+    });
+    const midnight = Date.parse(iso);
+    const before = cafeDay(zone, midnight - 1000);
+    const after = cafeDay(zone, midnight);
+    if (after !== shiftDay(before, 1))
+      throw new Error(`${iso} is not midnight in ${zone}`);
+    const late = await seedOrderAt(midnight - 1000);
+    const early = await seedOrderAt(midnight);
+    await t(
+      `${zone}: 23:59:59 cannot be filed under the next day`,
+      denied(() => numberUnder(staffC, late, after)),
+    );
+    await t(
+      `${zone}: 00:00:00 cannot be filed under the day before`,
+      denied(() => numberUnder(staffC, early, before)),
+    );
+    await t(
+      `${zone}: 23:59:59 and 00:00:00 are filed under their own days`,
+      allowed(async () => {
+        await numberUnder(staffC, late, before);
+        await numberUnder(staffC, early, after);
+      }),
+    );
+  }
+}
+
+{
+  // Daylight saving: the midnights that start and end each 2026 change day,
+  // and the offset the clocks are on at each. Between midnight by one offset
+  // and by the other, the two keys differ for an hour, and the rules take
+  // either (the documented hour): before a midnight on standard time, the
+  // next day's key is also taken; after one on daylight time, the day
+  // before's. The other side of each midnight is exact.
+  const changing = [
+    [
+      "Europe/London",
+      { standard: 0, daylight: 60 },
+      [
+        ["2026-03-29T00:00:00Z", "standard"], // the clocks go forward today
+        ["2026-03-29T23:00:00Z", "daylight"],
+        ["2026-10-24T23:00:00Z", "daylight"], // the clocks go back today
+        ["2026-10-26T00:00:00Z", "standard"],
+      ],
+    ],
+    [
+      "America/New_York",
+      { standard: -300, daylight: -240 },
+      [
+        ["2026-03-08T05:00:00Z", "standard"],
+        ["2026-03-09T04:00:00Z", "daylight"],
+        ["2026-11-01T04:00:00Z", "daylight"],
+        ["2026-11-02T05:00:00Z", "standard"],
+      ],
+    ],
+    [
+      // Southern hemisphere: back in April, forward in September.
+      "Pacific/Auckland",
+      { standard: 720, daylight: 780 },
+      [
+        ["2026-04-04T11:00:00Z", "daylight"],
+        ["2026-04-05T12:00:00Z", "standard"],
+        ["2026-09-26T12:00:00Z", "standard"],
+        ["2026-09-27T11:00:00Z", "daylight"],
+      ],
+    ],
+  ];
+  for (const [zone, utcOffsets, midnights] of changing) {
+    await setSite({ timeZone: zone, utcOffsets });
+    for (const [iso, clock] of midnights) {
+      const midnight = Date.parse(iso);
+      const before = cafeDay(zone, midnight - 1000);
+      const after = cafeDay(zone, midnight);
+      if (after !== shiftDay(before, 1))
+        throw new Error(`${iso} is not midnight in ${zone}`);
+      if ((Date.parse(after) - midnight) / 60_000 !== utcOffsets[clock])
+        throw new Error(`${iso} is not on ${clock} time in ${zone}`);
+      const late = await seedOrderAt(midnight - 1000);
+      const early = await seedOrderAt(midnight);
+      const label = `${zone}, ${after} 00:00 (${clock} time)`;
+      if (clock === "standard") {
+        await t(
+          `${label}: 00:00:00 cannot be filed under the day before`,
+          denied(() => numberUnder(staffC, early, before)),
+        );
+        // An hour before: outside the documented hour, so exact too.
+        const earlier = await seedOrderAt(midnight - 3_601_000);
+        await t(
+          `${label}: 22:59:59 cannot be filed under the next day`,
+          denied(() => numberUnder(staffC, earlier, after)),
+        );
+        const window = await seedOrderAt(midnight - 1000);
+        await t(
+          `${label}: 23:59:59 may also go under the next day (the documented hour)`,
+          allowed(() => numberUnder(staffC, window, after)),
+        );
+      } else {
+        await t(
+          `${label}: 23:59:59 cannot be filed under the next day`,
+          denied(() => numberUnder(staffC, late, after)),
+        );
+        const later = await seedOrderAt(midnight + 3_600_000);
+        await t(
+          `${label}: 01:00:00 cannot be filed under the day before`,
+          denied(() => numberUnder(staffC, later, before)),
+        );
+        const window = await seedOrderAt(midnight);
+        await t(
+          `${label}: 00:00:00 may also go under the day before (the documented hour)`,
+          allowed(() => numberUnder(staffC, window, before)),
+        );
+      }
+      await t(
+        `${label}: 23:59:59 and 00:00:00 are filed under their own days`,
+        allowed(async () => {
+          await numberUnder(staffC, late, before);
+          await numberUnder(staffC, early, after);
+        }),
+      );
+      await t(
+        `${label}: nor can an order be filed two days off`,
+        denied(async () => {
+          const stray = await seedOrderAt(midnight);
+          await numberUnder(staffC, stray, shiftDay(after, 1));
+        }),
+      );
+    }
+  }
+}
+
+{
+  // The board's own transaction in a daylight-saving zone, end to end: it
+  // files the order under the cafe's day, which here differs from both the
+  // UTC date and India's. 00:30 BST on 30 March is 23:30 UTC on the 29th.
+  await setSite({
+    timeZone: "Europe/London",
+    utcOffsets: { standard: 0, daylight: 60 },
+  });
+  const id = await seedOrderAt(Date.parse("2026-03-29T23:30:00Z"));
+  await t(
+    "the board's transaction numbers a London order under London's day",
+    allowed(async () => {
+      await runTransaction(staffC.db, async (tx) => {
+        const orderRef = doc(staffC.db, "orders", id);
+        const o = await tx.get(orderRef);
+        const key = cafeDay("Europe/London", o.data().createdAt.toMillis());
+        if (key !== "2026-03-30") throw new Error(`keyed ${key}`);
+        const cRef = counterDoc(staffC, key);
+        const counter = await tx.get(cRef);
+        const n = counter.exists() ? counter.data().next : 1;
+        tx.update(orderRef, { dayNumber: n, dayKey: key });
+        tx.set(cRef, { next: n + 1, last: id });
+      });
+    }),
+  );
+}
+
+{
+  // TOE's projects have no config/site: the day is India's, as it always was.
+  // 18:45 UTC on 20 June is 00:15 on the 21st in India.
+  await adminDoc("config/site", { method: "DELETE" });
+  const ms = Date.parse("2026-06-20T18:45:00Z");
+  const a = await seedOrderAt(ms);
+  const b = await seedOrderAt(ms);
+  await t(
+    "with no config/site, an order is filed under India's day",
+    allowed(() => numberUnder(staffC, a, "2026-06-21")),
+  );
+  await t(
+    "and not under the UTC date",
+    denied(() => numberUnder(staffC, b, "2026-06-20")),
+  );
+
+  // A config/site the platform got wrong refuses numbering rather than
+  // guessing a day.
+  await setSite({ utcOffsets: { standard: "330", daylight: "330" } });
+  await t(
+    "offsets that are not whole numbers refuse numbering",
+    denied(() => numberUnder(staffC, b, "2026-06-21")),
+  );
+  await setSite({});
+  await t(
+    "and the settings put right, the same order numbers",
+    allowed(() => numberUnder(staffC, b, "2026-06-21")),
   );
 }
 
