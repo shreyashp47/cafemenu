@@ -84,9 +84,22 @@ build uses the same function for the demo cafe, so the two never drift.
 
 ## Time zones
 
-`utcOffsetsOf(timeZone, year?)` gives a zone's standard and daylight-saving
-offsets in minutes, which is what the settings store for the rules (they cannot
-look a zone up). `isTimeZone`, `utcOffsetAt` and `isUtcOffsets` are the pieces.
+A cafe's day (its order numbers, its reports) runs from local midnight to local
+midnight in its `timeZone`, whatever zone a device is set to
+([`src/time-zone.ts`](./src/time-zone.ts)):
+
+- `dayKeyIn(timeZone, ms)` is the cafe's date at an instant, `"2026-09-28"`:
+  the day an order's number counts in, and the report bucket it goes in.
+- `dayStartIn(timeZone, key)` is the first instant of that day. A day is
+  `[dayStartIn(key), dayStartIn(addDays(key, 1)))`, 23 or 25 hours on a
+  daylight-saving change day. `addDays` and `addMonths` count on keys.
+- `wallTimeIn(timeZone, ms)` is `"2026-09-28 23:59"`, for the orders CSV.
+- `utcOffsetsOf(timeZone, year?)` gives a zone's standard and daylight-saving
+  offsets in minutes, which is what the settings store for `firestore.rules`
+  (they cannot look a zone up). The rules accept a day that matches either
+  offset; `dayKeysAt(ms, offsets)` does the same sums, and `dayKeyIn` is always
+  one of its answers. `isTimeZone`, `utcOffsetAt` and `isUtcOffsets` are the
+  pieces.
 
 ## Working on it
 
