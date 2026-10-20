@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Field, Input } from "@/components/ui/Input";
 import { EmptyState, Loading } from "@/components/ui/Loading";
+import { useFeatures } from "@/hooks/useFeatures";
 import { demoSeedOrders } from "@/lib/data/demo-store";
 import { buildSampleOrders } from "@/lib/data/sample-orders";
 import { formatINR } from "@/lib/money";
@@ -53,6 +54,8 @@ function fromInputDate(value: string): number | null {
 export default function ReportsPage() {
   const repo = useOrderRepo();
   const isDemo = useIsDemo();
+  // The plan's say on the CSV download (issue #17). Every plan has it today.
+  const { csvExport } = useFeatures();
   const [mode, setMode] = useState<Mode>("month");
   const [cursor, setCursor] = useState(() => currentMonth());
   const [from, setFrom] = useState(() =>
@@ -264,7 +267,10 @@ export default function ReportsPage() {
             <p className="border-line bg-paper text-muted rounded-md border-2 border-dashed px-3 py-2 text-sm">
               {report.rejectedCount} rejected order
               {report.rejectedCount === 1 ? " is" : "s are"} left out of these
-              figures. They are in the CSV, marked &ldquo;rejected&rdquo;.
+              figures.
+              {csvExport ? (
+                <> They are in the CSV, marked &ldquo;rejected&rdquo;.</>
+              ) : null}
             </p>
           ) : null}
 
@@ -272,8 +278,10 @@ export default function ReportsPage() {
             <p className="border-line bg-paper text-muted rounded-md border-2 border-dashed px-3 py-2 text-sm">
               {report.pendingCount} order
               {report.pendingCount === 1 ? " is" : "s are"} still waiting for
-              the counter to confirm the table, and not counted yet. They are in
-              the CSV, marked &ldquo;pending&rdquo;.
+              the counter to confirm the table, and not counted yet.
+              {csvExport ? (
+                <> They are in the CSV, marked &ldquo;pending&rdquo;.</>
+              ) : null}
             </p>
           ) : null}
 
@@ -302,10 +310,12 @@ export default function ReportsPage() {
           <Card className="overflow-hidden">
             <div className="border-line-soft flex items-center justify-between gap-3 border-b-2 px-4 py-3">
               <h2 className="text-lg">Best sellers</h2>
-              <Button size="sm" variant="secondary" onClick={downloadCsv}>
-                <Icon name="chart" size={16} />
-                CSV
-              </Button>
+              {csvExport ? (
+                <Button size="sm" variant="secondary" onClick={downloadCsv}>
+                  <Icon name="chart" size={16} />
+                  CSV
+                </Button>
+              ) : null}
             </div>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[26rem] text-left">

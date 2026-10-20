@@ -64,6 +64,17 @@ Two ways to read them:
 `newCafeSettings(fields)` fills in the defaults and the zone's offsets for a new
 cafe.
 
+## Plans and features
+
+`features(settings)` ([`src/features.ts`](./src/features.ts)) says what a cafe's
+plan includes, and `PLAN_FEATURES` is the table behind it. CafeMenu is free for
+now, so the only plan, `free`, includes every feature; asking for features
+anyway means a paid plan later is a new row, not a rework (issue #17). The
+cafe app asks through `useFeatures()`; the CSV download on its reports page is
+the first feature behind it. A plan a release does not know gets the free
+plan's features. Features decide what the app shows; anything that must be
+enforced also needs `firestore.rules`.
+
 ## The web app manifest
 
 A static export fixes `manifest.webmanifest` at build time, and one build serves
