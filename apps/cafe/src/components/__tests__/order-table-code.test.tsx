@@ -4,13 +4,13 @@
  * the real pages on the demo store, which mirrors the rules on codes.
  */
 
+import { DEFAULT_SETTINGS } from "@cafemenu/shared";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import ConfirmationPage from "@/app/order/confirmation/page";
 import OrderPage from "@/app/order/page";
-import { getCafeName } from "@/lib/config";
 import { demoAuthRepo, demoConfigRepo, demoOrderRepo } from "@/lib/data/demo";
 import {
   demoSetTableOpenUntil,
@@ -44,7 +44,8 @@ function openAt(search: string) {
   render(<OrderPage />);
 }
 
-const menuShown = () => screen.findByRole("heading", { name: getCafeName() });
+const menuShown = () =>
+  screen.findByRole("heading", { name: DEFAULT_SETTINGS.name });
 
 beforeEach(async () => {
   resetDemoStore();

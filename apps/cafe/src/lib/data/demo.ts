@@ -259,6 +259,9 @@ export const demoConfigRepo: ConfigRepository = {
       text: offer.text.trim().slice(0, 140),
     });
   },
+  subscribeSite(listener) {
+    return store.subscribeState((state) => listener(store.selectSite(state)));
+  },
   subscribeTables(listener) {
     return store.subscribeState((state) => listener(store.selectTables(state)));
   },

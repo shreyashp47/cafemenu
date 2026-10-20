@@ -1067,6 +1067,108 @@ await t(
   ),
 );
 
+// The cafe's settings (packages/shared CafeSettings). Everyone reads them;
+// nobody but the platform's service account writes them, and server
+// credentials bypass the rules, so every client write here must be refused,
+// the owner's included. Seeded over REST with the emulator's admin token,
+// which stands in for the platform.
+console.log("\n config/site (the cafe's settings)");
+const SITE_SETTINGS = {
+  schemaVersion: 1,
+  name: "Rules Test Cafe",
+  tagline: "Checked on every pull request",
+  theme: "cozy",
+  accent: null,
+  logo: null,
+  currency: "INR",
+  locale: "en-IN",
+  timeZone: "Asia/Kolkata",
+  utcOffsets: { standard: 330, daylight: 330 },
+  tables: [1, 2, 3, 4, 5, 6],
+  baseUrl: null,
+  plan: "free",
+};
+// Plain JSON to the REST API's typed values.
+const restValue = (v) => {
+  if (v === null) return { nullValue: null };
+  if (typeof v === "boolean") return { booleanValue: v };
+  if (typeof v === "number")
+    return Number.isInteger(v)
+      ? { integerValue: String(v) }
+      : { doubleValue: v };
+  if (typeof v === "string") return { stringValue: v };
+  if (Array.isArray(v)) return { arrayValue: { values: v.map(restValue) } };
+  return { mapValue: { fields: restFields(v) } };
+};
+const restFields = (o) =>
+  Object.fromEntries(Object.entries(o).map(([k, v]) => [k, restValue(v)]));
+{
+  const r = await adminDoc("config/site", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ fields: restFields(SITE_SETTINGS) }),
+  });
+  if (!r.ok) throw new Error(`could not seed config/site: ${r.status}`);
+}
+const siteDoc = (c) => doc(c.db, "config", "site");
+await t(
+  "anyone, signed out, can read the cafe's settings",
+  allowed(async () => {
+    const snap = await getDoc(siteDoc(nobodyC));
+    if (snap.data()?.name !== SITE_SETTINGS.name)
+      throw new Error("read something other than the seeded settings");
+  }),
+);
+await t(
+  "a customer can read them",
+  allowed(() => getDoc(siteDoc(publicC))),
+);
+await t(
+  "a barista can read them",
+  allowed(() => getDoc(siteDoc(staffC))),
+);
+await t(
+  "the owner can read them",
+  allowed(() => getDoc(siteDoc(ownerC))),
+);
+await t(
+  "the owner cannot replace them, even with valid settings",
+  denied(() => setDoc(siteDoc(ownerC), { ...SITE_SETTINGS, name: "Renamed" })),
+);
+await t(
+  "the owner cannot change one field with a merge",
+  denied(() =>
+    setDoc(siteDoc(ownerC), { timeZone: "Europe/London" }, { merge: true }),
+  ),
+);
+await t(
+  "the owner cannot delete them",
+  denied(() => deleteDoc(siteDoc(ownerC))),
+);
+await t(
+  "a barista cannot write them",
+  denied(() => setDoc(siteDoc(staffC), SITE_SETTINGS)),
+);
+await t(
+  "a customer cannot write them",
+  denied(() => setDoc(siteDoc(publicC), SITE_SETTINGS)),
+);
+await t(
+  "a signed-out caller cannot write them",
+  denied(() => setDoc(siteDoc(nobodyC), SITE_SETTINGS)),
+);
+await t(
+  "a signed-out caller cannot delete them",
+  denied(() => deleteDoc(siteDoc(nobodyC))),
+);
+// The carve-out must not have cost the owner the rest of config.
+await t(
+  "the owner can still save today's special after the settings carve-out",
+  allowed(() =>
+    setDoc(doc(ownerC.db, "config", "special"), { enabled: false, text: "" }),
+  ),
+);
+
 console.log("\n tableKeys (the owner's QR codes)");
 const keyDoc = (c, n) => doc(c.db, "tableKeys", String(n));
 await t(

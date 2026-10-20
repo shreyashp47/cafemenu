@@ -1,6 +1,7 @@
+import { DEFAULT_SETTINGS } from "@cafemenu/shared";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { getDemoStaffPin, getTableNumbers, isDemoMode } from "@/lib/config";
+import { envFirebaseConfig, getDemoStaffPin } from "@/lib/config";
 import { OrderRejected, placeOrder } from "@/lib/place-order";
 import {
   ORDER_GAP_SECONDS,
@@ -66,7 +67,7 @@ describe("table numbers", () => {
   });
 
   it("falls back to a sensible table list", () => {
-    const tables = getTableNumbers();
+    const tables = DEFAULT_SETTINGS.tables;
     expect(tables.length).toBeGreaterThan(0);
     expect(tables).toEqual([...tables].sort((a, b) => a - b));
     expect(new Set(tables).size).toBe(tables.length);
@@ -96,8 +97,8 @@ describe("order session", () => {
 });
 
 describe("config", () => {
-  it("runs in demo mode without Firebase env vars", () => {
-    expect(isDemoMode).toBe(true);
+  it("has no Firebase env vars in the tests, as a release build has none", () => {
+    expect(envFirebaseConfig()).toBeNull();
   });
 
   it("always yields a usable staff PIN", () => {

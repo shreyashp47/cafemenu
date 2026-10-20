@@ -24,7 +24,7 @@ import {
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Loading } from "@/components/ui/Loading";
-import { getCafeName } from "@/lib/config";
+import { useCafeSettings } from "@/hooks/useCafeSettings";
 import { DEMO_CREDENTIALS } from "@/lib/data/seed";
 
 const NAV: Array<{ href: string; label: string; icon: IconName }> = [
@@ -60,6 +60,7 @@ function Gate({ children }: { children: ReactNode }) {
 function Shell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { user, signOut } = useStaffSession();
+  const { settings } = useCafeSettings();
 
   return (
     <div className="min-h-svh pb-10">
@@ -69,7 +70,7 @@ function Shell({ children }: { children: ReactNode }) {
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-lg leading-tight">Owner dashboard</h1>
             <p className="text-2xs text-muted truncate font-semibold tracking-[0.12em] uppercase">
-              {getCafeName()}
+              {settings.name}
             </p>
           </div>
           <button

@@ -1,13 +1,15 @@
 /**
- * Firebase wiring. Loaded **only** when the Firebase env block is present, so
- * a demo-mode visitor never downloads the SDK (see issue #3 / NFR "zero/low
- * infrastructure cost, fast on mobile data").
+ * Firebase wiring. Loaded **only** once the page has booted into a Firebase
+ * project (src/lib/boot.ts), so a demo-mode visitor never downloads the SDK
+ * (see issue #3 / NFR "zero/low infrastructure cost, fast on mobile data").
+ * Which project is the boot's answer: Hosting's init.json in production, the
+ * .env.local block in development.
  *
  * `import type` is erased at compile time, so the type imports below cost
  * nothing at runtime; the value imports are behind a dynamic `import()`.
  */
 
-import { firebaseConfig } from "../config";
+import { activeFirebaseConfig } from "../boot";
 
 type FirebaseApp = import("firebase/app").FirebaseApp;
 type Auth = import("firebase/auth").Auth;
@@ -20,13 +22,15 @@ let appPromise: Promise<{
 }> | null = null;
 
 async function getFirebase() {
+  const firebaseConfig = activeFirebaseConfig();
   if (!firebaseConfig) {
     throw new Error(
-      "Firebase is not configured. Add the NEXT_PUBLIC_FIREBASE_* variables, or keep running in demo mode.",
+      "Firebase is not configured: this page booted into demo mode, or has not booted yet.",
     );
   }
 
-  appPromise ??= (async () => {
+  if (appPromise) return appPromise;
+  const created = (async () => {
     const [{ initializeApp, getApps, getApp }, authMod, fsMod] =
       await Promise.all([
         import("firebase/app"),
@@ -53,8 +57,13 @@ async function getFirebase() {
 
     return { app, auth, db };
   })();
-
-  return appPromise;
+  appPromise = created;
+  // A failed SDK download must not stick, or the retry screen could never
+  // recover without a reload.
+  created.catch(() => {
+    if (appPromise === created) appPromise = null;
+  });
+  return created;
 }
 
 export default getFirebase;

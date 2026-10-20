@@ -11,6 +11,8 @@
  *   - static assets under /_next/static: cache-first (they are immutable and
  *     content-hashed, so this is safe);
  *   - page router data (*.txt): network-first, cache only when offline;
+ *   - the deploy's own files, /__/firebase/init.json and /site.json:
+ *     network-first, kept across builds (see DEPLOY_FILES below);
  *   - icons: stale-while-revalidate.
  *
  * Deliberately NOT cached: Firestore/Auth traffic (always network) and anything
@@ -36,6 +38,16 @@ const VERSION = "__SW_VERSION__";
 const PREFIX = "cafe-";
 const SHELL_CACHE = `${PREFIX}shell-${VERSION}`;
 const ASSET_CACHE = `${PREFIX}assets-${VERSION}`;
+// Not versioned: these files belong to the deploy, not to the build, and a new
+// build must not throw away the copy an offline phone starts from.
+const DEPLOY_CACHE = `${PREFIX}deploy`;
+
+// Which Firebase project this is (Hosting's init.json) and which cafe (the
+// deployer's site.json). src/lib/boot.ts reads both on every page load. A
+// counter phone that loaded once must still start with the wifi down, so a
+// copy is kept; and a redeploy must be picked up at once, so the network goes
+// first.
+const DEPLOY_FILES = ["/__/firebase/init.json", "/site.json"];
 
 const PRECACHE = ["/offline", "/icon.svg", "/icon-192.png", "/icon-512.png"];
 
@@ -62,7 +74,8 @@ self.addEventListener("activate", (event) => {
               (key) =>
                 key.startsWith(PREFIX) &&
                 key !== SHELL_CACHE &&
-                key !== ASSET_CACHE,
+                key !== ASSET_CACHE &&
+                key !== DEPLOY_CACHE,
             )
             .map((key) => caches.delete(key)),
         ),
@@ -102,6 +115,28 @@ self.addEventListener("fetch", (event) => {
 
   // Never serve live data from cache.
   if (isLiveOnly(url)) return;
+
+  // The deploy's own files: network-first, the kept copy only when offline.
+  // A 404 is an answer too (the file is gone, e.g. a demo deploy), so the
+  // copy goes with it rather than resurrect the file on the next offline start.
+  // With no copy and no network the request fails, which is what the boot
+  // needs to tell "offline" from "not there".
+  if (url.origin === self.location.origin && DEPLOY_FILES.includes(url.pathname)) {
+    event.respondWith(
+      caches.open(DEPLOY_CACHE).then((cache) =>
+        fetch(request)
+          .then((response) => {
+            if (response.ok) cache.put(url.pathname, response.clone());
+            else if (response.status === 404) cache.delete(url.pathname);
+            return response;
+          })
+          .catch(
+            async () => (await cache.match(url.pathname)) || Response.error(),
+          ),
+      ),
+    );
+    return;
+  }
 
   // Immutable build output: cache-first.
   //

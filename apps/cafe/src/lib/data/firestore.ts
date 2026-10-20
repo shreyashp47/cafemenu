@@ -6,6 +6,8 @@
  *                      createdAt, completedAt?, paymentMethod
  *   /menu/{itemId}     name, description?, price, category, available
  *   /config/special   the "today's special" board
+ *   /config/site      the cafe's settings (@cafemenu/shared CafeSettings);
+ *                     public read, written only by the platform
  *   /config/tables    { tables: number[] }, the owner's table list
  *   /tableKeys/{n}    { key }, table n's QR code; owner-only (table-keys.ts)
  *   /tableSessions/{n} { openUntil }, table n is open until then; public
@@ -21,7 +23,7 @@
  *
  * `onSnapshot` powers the live staff board and the customer's status screen
  * (§5.3) with no separate realtime service. The module is only ever imported
- * when the Firebase env block is present (see ./index.ts).
+ * once the page has booted into a Firebase project (see ./index.ts).
  */
 
 import { getDemoStaffPin } from "../config";
@@ -68,6 +70,7 @@ const MENU = "menu";
 const ORDERS = "orders";
 const CONFIG = "config";
 const SPECIAL_DOC = "special";
+const SITE_DOC = "site";
 const TABLES_DOC = "tables";
 const STAFF = "staff";
 const THROTTLE = "orderThrottle";
@@ -84,14 +87,20 @@ let bundle: Promise<{
 }> | null = null;
 
 function getBundle() {
-  bundle ??= (async () => {
+  if (bundle) return bundle;
+  const created = (async () => {
     const [mod, fs] = await Promise.all([
       import("./firebase").then((m) => m.default()),
       import("firebase/firestore"),
     ]);
     return { ...mod, fs };
   })();
-  return bundle;
+  bundle = created;
+  // As in ./firebase.ts: a failed download is retried on the next call.
+  created.catch(() => {
+    if (bundle === created) bundle = null;
+  });
+  return created;
 }
 
 async function dbAndFs(): Promise<{ db: Firestore; fs: FsModule }> {
@@ -536,6 +545,24 @@ export const firestoreConfigRepo: ConfigRepository = {
       { enabled: offer.enabled, text: offer.text.trim().slice(0, 140) },
       { merge: true },
     );
+  },
+  subscribeSite(listener) {
+    return deferred(async () => {
+      const { db, fs } = await dbAndFs();
+      return fs.onSnapshot(
+        fs.doc(db, CONFIG, SITE_DOC),
+        (snap) => {
+          // Offline before the first answer, the SDK reports a missing
+          // document from its empty cache. That is not "this cafe has no
+          // settings", so wait for the server rather than fall back to them.
+          if (!snap.exists() && snap.metadata.fromCache) return;
+          listener(snap.exists() ? snap.data() : null);
+        },
+        // Public read, so a failure is the network; site.json and the
+        // device's copy keep standing in.
+        () => {},
+      );
+    });
   },
   subscribeTables(listener) {
     return deferred(async () => {

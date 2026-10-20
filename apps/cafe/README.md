@@ -208,8 +208,8 @@ Everything below is a real screenshot of the demo build.
 
 ## Going live with Firebase
 
-The app is designed so this step cannot break the build: no code changes, six
-environment variables.
+The app is designed so this step cannot break the build: no code changes and no
+build-time configuration. One `npm run build` serves any cafe.
 
 > **For the `toi-cafe` deployment in this repo, sections 1–4 are already done**
 > — the project, the database, both sign-in providers, the web app, both Hosting
@@ -234,11 +234,68 @@ environment variables.
 
 ### 2. Point the app at it
 
+**Nothing to set at build time.** When a page loads it asks Firebase Hosting for
+the project's own web config, at the reserved address `/__/firebase/init.json`
+([`src/lib/boot.ts`](./src/lib/boot.ts)), so the same files talk to whichever
+project they are deployed to. With no `init.json` and no `site.json`, as with
+`npm run dev` or any plain static host, the app runs in demo mode.
+
+**The cafe itself is its settings**: name, tagline, default tables, the address
+printed on QR cards, theme, currency, locale and time zone. The type and its
+validator are `CafeSettings` in
+[`packages/shared`](../../packages/shared/src/settings.ts). They are read in this
+order, the later winning field by field, and the result is kept on the device
+for the next visit:
+
+1. the defaults, which are the demo cafe ("Mochi & Beans", ₹, Asia/Kolkata);
+2. `site.json`, next to the app, written at deploy time, so the first paint is
+   already the cafe's own;
+3. Firestore `config/site`, live. Every page may read it; **no client may write
+   it**, the owner included. The CafeMenu console writes it with the platform's
+   service account, together with `site.json`.
+
+The CafeMenu deployer writes `site.json`, `manifest.webmanifest` and
+`config/site` on every deploy. Deploying by hand, write the cafe's settings to
+`out/site.json` after `npm run build`. Any field left out keeps its default:
+
+```json
+{
+  "schemaVersion": 1,
+  "name": "TOE Cafe",
+  "tagline": "Good Coffee, Better Days",
+  "tables": [1, 2, 3, 4, 5, 6, 7, 8],
+  "baseUrl": "https://yourcafe.web.app"
+}
+```
+
+`manifest.webmanifest` is fixed at build time, so the build's own is the demo
+cafe's; the home-screen name of an installed app stays "Mochi & Beans" until the
+deployer writes the cafe's own with `webManifest()` from `@cafemenu/shared`.
+The tab title is set at runtime from the settings.
+
+> **Never put a `site.json` in `public/`.** Its presence is how the app knows it
+> is a real cafe. A real cafe that cannot load its Firebase config (a counter
+> phone offline with nothing kept, or a deploy without a web app) shows _"Can't
+> reach the cafe · Try again"_, never the demo store: a customer would order from
+> the sample menu and the order would go nowhere. Demo mode needs both files to
+> be definitely absent. `public/sw.js` keeps a copy of both, so a phone that has
+> loaded the app once still starts offline. A `site.json` with `"demo": true` is
+> a preview deploy: demo store, the file's settings.
+
+`tables` is only the starting point. The owner sets the real table list on
+`/admin/qr` (_Your tables_: a number of tables, or typed-out numbers such as
+`1-8, 12`), which saves it to Firestore at `config/tables`. From then on the
+check on a scanned table number and the printed QR cards all follow the saved
+list, live, with no rebuild. Until the owner saves one, the app uses the
+settings' `tables` (tables 1–6 by default). Table numbers run from 1 to 50, the
+range the order rules accept.
+
+**For local development against a real project**, `.env.local` still takes the
+six Firebase values, and when all six are set they win over `init.json`:
+
 ```bash
 cp .env.example .env.local
 ```
-
-Fill in the Firebase block:
 
 ```ini
 NEXT_PUBLIC_FIREBASE_API_KEY=…
@@ -249,26 +306,15 @@ NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=…
 NEXT_PUBLIC_FIREBASE_APP_ID=…
 ```
 
-Optionally brand it and set the default tables:
-
-```ini
-NEXT_PUBLIC_CAFE_NAME="TOE Cafe"
-NEXT_PUBLIC_TABLES=1,2,3,4,5,6,7,8
-NEXT_PUBLIC_BASE_URL=https://yourcafe.web.app
-```
-
-`NEXT_PUBLIC_TABLES` is only the starting point. The owner sets the real table
-list on `/admin/qr` (_Your tables_: a number of tables, or typed-out numbers such
-as `1-8, 12`), which saves it to Firestore at `config/tables`. From then on the
-check on a scanned table number and the printed QR cards all follow the saved list, live, with no rebuild. Until the owner saves one,
-the app uses `NEXT_PUBLIC_TABLES` (or tables 1–6 if it is unset). Table numbers
-run from 1 to 50, the range the order rules accept.
-
-Restart `npm run dev`. The demo banner disappears and the app talks to Firestore.
+Restart `npm run dev`. The demo banner disappears and the app talks to
+Firestore. Never build a release with these set: it would talk to that one
+project wherever it was deployed. `NEXT_PUBLIC_CAFE_NAME`, `NEXT_PUBLIC_TABLES`
+and `NEXT_PUBLIC_BASE_URL` are gone; they are the settings' `name`, `tables`
+and `baseUrl`.
 
 > **Why this is safe:** the Firebase SDK is behind a dynamic `import()`, so it is
-> never downloaded unless these variables are present. A demo-mode visitor gets a
-> ~103 kB first load with no cloud code in it at all.
+> never downloaded unless the page boots into a Firebase project. A demo-mode
+> visitor gets a ~103 kB first load with no cloud code in it at all.
 
 ### 3. Create staff and owner accounts
 
@@ -334,11 +380,12 @@ be served by Firebase Hosting with no Node runtime. That is safe here: there are
 no route handlers, no server actions and no dynamic rendering, so every route
 prerenders to plain HTML and every piece of data is fetched in the browser.
 
-**For `toi-cafe`**, from a checkout with the real `.env.local`:
+**For `toi-cafe`**:
 
 ```bash
 firebase login
 npm run build                                        # emits ./out and stamps out/sw.js
+# write out/site.json with the cafe's settings (section 2)
 firebase deploy --only firestore:rules,hosting       # rules and both Hosting sites
 ```
 
@@ -372,7 +419,7 @@ own order — nothing else. See the comments in
 
 To attach a custom domain later, add it under **Hosting → Add custom domain**. The
 QR codes do not need regenerating as long as `/order?table=N` keeps working, which
-is why `NEXT_PUBLIC_BASE_URL` exists if you want to print cards against a staging
+is why the settings have a `baseUrl` if you want to print cards against a staging
 address first.
 
 #### Automatic deploys from `main` (not switched on yet)
@@ -404,8 +451,9 @@ and `toi-cafe` is still deployed by hand as above. To switch it on, set up once:
    the old key in the console.
 
 2. **The `NEXT_PUBLIC_*` values**, as repository variables, from the same
-   `.env.local` the local build uses. They are public, which is why they are
-   variables and not secrets:
+   `.env.local` the local build uses. (TOE's own repository only: CafeMenu's
+   builds take no configuration, see section 2.) They are public, which is why
+   they are variables and not secrets:
 
    ```bash
    gh variable set -f .env.local
@@ -441,7 +489,7 @@ To confirm the database side:
 
 ```bash
 npm run emulators    # terminal 1
-npm run test:rules   # terminal 2 — 130 checks, 0 failures
+npm run test:rules   # terminal 2 — 255 checks, 0 failures
 ```
 
 To check the routing and header rules from `firebase.json` before a deploy, with
@@ -482,7 +530,8 @@ the barista chooses when.
 
 Push the repo, import it at [vercel.com/new](https://vercel.com/new), and add the
 same six `NEXT_PUBLIC_FIREBASE_*` values under **Settings → Environment Variables**
-for all three environments. Vercel runs the Next.js runtime, so it honours
+for all three environments: Vercel has no `/__/firebase/init.json`, so this is
+the one place a build still needs them, and it then serves that one project. Vercel runs the Next.js runtime, so it honours
 `headers()` directly and `output: "export"` is simply ignored. Note that
 `NEXT_PUBLIC_*` values are baked in at build time, so editing one later needs a
 redeploy, not just a restart.
@@ -547,7 +596,7 @@ produced the font.
 Worth reading before you rely on the money figures.
 
 `firestore.rules` is a real boundary, not a formality: `scripts/rules-test.mjs`
-runs 130 checks against the emulators covering the anonymous customer, a
+runs 255 checks against the emulators covering the anonymous customer, a
 signed-out caller, a signed-in barista and a signed-in owner. A barista cannot
 edit the menu, cannot read another barista's role record, cannot skip a status
 and cannot change a price after the order is placed.

@@ -73,6 +73,16 @@
         ]
       },
       {
+        "//": "Written per cafe at deploy time (src/lib/boot.ts). The app asks for it with no-cache anyway; this keeps any other reader from holding an old cafe's settings for Firebase's default hour.",
+        "source": "/site.json",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
+      },
+      {
         "source": "/manifest.webmanifest",
         "headers": [
           {

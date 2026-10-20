@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Caveat, Fredoka, Nunito } from "next/font/google";
+import { CafeTitle, DEFAULT_TITLE } from "@/components/CafeIdentity";
 import { PwaRegister } from "@/components/Pwa";
-import { getCafeName } from "@/lib/config";
 import "./globals.css";
 
 /**
@@ -30,17 +30,15 @@ const body = Nunito({
   display: "swap",
 });
 
-const cafeName = getCafeName();
-
+/**
+ * Fixed at build time, and one build serves every cafe, so nothing here names
+ * one. <CafeTitle> adds the cafe's name from its settings once they are known.
+ */
 export const metadata: Metadata = {
-  title: {
-    default: `${cafeName} · Order from your table`,
-    template: `%s · ${cafeName}`,
-  },
+  title: { default: DEFAULT_TITLE, template: "%s" },
   description:
     "Scan, order, and pay at the counter. Fresh brews and warm bites served straight to your table.",
-  applicationName: cafeName,
-  appleWebApp: { capable: true, title: cafeName, statusBarStyle: "default" },
+  appleWebApp: { capable: true, statusBarStyle: "default" },
   formatDetection: { telephone: false },
 };
 
@@ -60,6 +58,7 @@ export default function RootLayout({
         className={`${display.variable} ${round.variable} ${body.variable} antialiased`}
       >
         <PwaRegister />
+        <CafeTitle />
         {children}
       </body>
     </html>

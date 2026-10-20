@@ -75,8 +75,9 @@ storage backend.
 
 Because the Firestore module is behind a dynamic import and the demo path is the
 default, **a demo-mode visitor never downloads the Firebase SDK at all** — the
-production first-load bundle is ~103 kB. Switching to Firestore is six env vars
-and no code change.
+production first-load bundle is ~103 kB. Switching to Firestore is deploying to
+Firebase Hosting (or, in development, six env vars) and no code change; see
+"The Firebase project and the cafe are read at runtime" in section 4.
 
 The demo backend is not a stub. It is genuinely live across tabs, so a customer
 phone and a staff phone opened side by side on one laptop behave exactly like the
@@ -415,6 +416,9 @@ The wait timer turns amber at 4 minutes and berry red at 8, which is the only
 
 ### The table list lives in Firestore, with the env var as the default
 
+_Since CafeMenu the default is the `tables` in the cafe's settings, not an env
+var: see "The Firebase project and the cafe are read at runtime" below._
+
 The table count started as `NEXT_PUBLIC_TABLES`, read at build time. Adding a
 table meant a rebuild and a deploy, which is not something §2's "simple enough
 for a small cafe owner" allows, and the old _/admin/qr_ box only changed the
@@ -637,3 +641,43 @@ seated group wait for an Accept.
 - **Limits:** while a table is open (a group is sitting there), a leaked link
   for it also goes straight to the kitchen; staff Close the table when the
   group leaves to shorten that window.
+
+## 4. Decisions made for CafeMenu
+
+### The Firebase project and the cafe are read at runtime
+
+TOE baked its Firebase project and its name into the bundle (`NEXT_PUBLIC_*`),
+so a build served one cafe. CafeMenu deploys one build per release to every
+cafe, so nothing cafe-specific can be in it.
+
+**Decision: the page decides when it loads** ([`src/lib/boot.ts`](../src/lib/boot.ts)).
+Firebase Hosting serves each project's own web config at
+`/__/firebase/init.json`; the deployer writes a `site.json` with the cafe's
+settings next to the bundle; Firestore `config/site` holds the live copy. The
+`.env.local` block still wins, for local development.
+
+- **A real cafe never falls back to demo mode.** This was the risk: a customer
+  on a counter phone with no signal could have ordered from the sample menu,
+  and the order would have gone nowhere. Demo mode needs `init.json` _and_
+  `site.json` to answer 404. A dropped request, with no config kept on the
+  device, is a retry screen. `site.json` is the signal because the deployer
+  always writes it and the build never contains it.
+- **Offline still starts.** The last good config is kept in `localStorage`, and
+  `public/sw.js` keeps both files network-first in a cache that outlives a new
+  build. A 404 drops the cached copy, so a site that stopped being a cafe does
+  not come back as one offline.
+- **Settings merge field by field**: defaults, then `site.json`, then
+  `config/site`. A document written by an older release that lacks a newer
+  field still works, and an invalid field falls back instead of breaking the
+  page. The strict check (`validateCafeSettings`) is for whatever writes them.
+- **No client writes `config/site`, the owner included.** These are the things
+  baked into deployed files (name, logo, theme, currency, time zone), so they
+  are edited in the console, which writes `config/site` and redeploys
+  `site.json` together. The rules also lean on the time zone's offsets
+  (#13), which a stolen owner password should not be able to move.
+- **Costs:** one more round trip before the first Firestore read (both files
+  are fetched in parallel, and a device that kept a config starts downloading
+  the SDK at the same time), about 3 kB more JavaScript per page for the boot
+  and the settings, and a static export can no longer put the cafe's name in
+  `<title>` or the manifest: the title is set once the settings are known, and
+  the deployer writes `manifest.webmanifest` per cafe.

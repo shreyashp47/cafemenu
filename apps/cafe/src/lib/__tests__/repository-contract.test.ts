@@ -16,6 +16,7 @@ import {
   demoOrderRepo,
 } from "@/lib/data/demo";
 import {
+  demoSetSite,
   makeId,
   resetDemoStore,
   selectActiveOrders,
@@ -398,6 +399,39 @@ describe("repository contract: config", () => {
     delete state.tables;
     localStorage.setItem(DEMO_STORAGE_KEY, JSON.stringify(state));
     expect(loadDemoState().tables).toBeNull();
+  });
+
+  // config/site: no document until the platform writes one, then its raw
+  // data, live. The app parses it (src/lib/settings.ts), not the repository.
+  it("reports no cafe settings until the platform writes them", () => {
+    const { values, stop } = collect(demoConfigRepo.subscribeSite);
+    expect(values).toEqual([null]);
+    stop();
+  });
+
+  it("hands over config/site as written, and follows it live", () => {
+    const { values, stop } = collect(demoConfigRepo.subscribeSite);
+    demoSetSite({ name: "TOE Cafe", someFutureField: 1 });
+    expect(values.at(-1)).toEqual({ name: "TOE Cafe", someFutureField: 1 });
+    demoSetSite(null);
+    expect(values.at(-1)).toBeNull();
+    stop();
+  });
+
+  it("has no way for a screen to write config/site, as the rules allow none", () => {
+    expect(Object.keys(demoConfigRepo)).not.toContain("saveSite");
+  });
+
+  it("reads a saved state from before cafe settings as no document", () => {
+    const state: Record<string, unknown> = { ...loadDemoState() };
+    delete state.site;
+    localStorage.setItem(DEMO_STORAGE_KEY, JSON.stringify(state));
+    expect(loadDemoState().site).toBeNull();
+    localStorage.setItem(
+      DEMO_STORAGE_KEY,
+      JSON.stringify({ ...state, site: ["not", "a", "document"] }),
+    );
+    expect(loadDemoState().site).toBeNull();
   });
 });
 
