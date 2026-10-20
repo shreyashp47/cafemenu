@@ -153,6 +153,19 @@ for the life of the project. So it isn't in the first version.
 
 ## Work plan
 
+Each phase is a milestone on GitHub, and each bullet below is roughly one issue.
+Every issue says why it's needed, what to do, when it's done and what it depends
+on.
+
+| Phase | Milestone | Issues |
+| --- | --- | --- |
+| 0 · Spike | [Phase 0](https://github.com/shreyashp47/cafemenu/milestone/1) | [#1](https://github.com/shreyashp47/cafemenu/issues/1)–[#7](https://github.com/shreyashp47/cafemenu/issues/7) |
+| 1 · Config-free cafe app | [Phase 1](https://github.com/shreyashp47/cafemenu/milestone/2) | [#8](https://github.com/shreyashp47/cafemenu/issues/8)–[#18](https://github.com/shreyashp47/cafemenu/issues/18) |
+| 2 · Release pipeline | [Phase 2](https://github.com/shreyashp47/cafemenu/milestone/3) | [#19](https://github.com/shreyashp47/cafemenu/issues/19)–[#23](https://github.com/shreyashp47/cafemenu/issues/23) |
+| 3 · Console | [Phase 3](https://github.com/shreyashp47/cafemenu/milestone/4) | [#24](https://github.com/shreyashp47/cafemenu/issues/24)–[#31](https://github.com/shreyashp47/cafemenu/issues/31) |
+| 4 · Automatic rollouts | [Phase 4](https://github.com/shreyashp47/cafemenu/milestone/5) | [#32](https://github.com/shreyashp47/cafemenu/issues/32)–[#35](https://github.com/shreyashp47/cafemenu/issues/35) |
+| Later | [Later](https://github.com/shreyashp47/cafemenu/milestone/6) | [#36](https://github.com/shreyashp47/cafemenu/issues/36)–[#40](https://github.com/shreyashp47/cafemenu/issues/40) |
+
 ### Phase 0: Spike (prove the risky part first)
 
 Set up the monorepo and bring in TOE's code (v0.3.0) as `apps/cafe`. Then,
