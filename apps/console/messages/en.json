@@ -1,0 +1,309 @@
+{
+  "meta": {
+    "name": "CafeMenu",
+    "title": "CafeMenu · QR table ordering for small cafes",
+    "description": "Customers scan the code on their table and order from their phone. Staff see orders arrive live. Your menu, orders and data stay in your own free Firebase project.",
+    "signupTitle": "Sign up",
+    "notFoundTitle": "Page not found"
+  },
+  "nav": {
+    "label": "Main",
+    "skip": "Skip to content",
+    "home": "CafeMenu home",
+    "how": "How it works",
+    "features": "What you get",
+    "cost": "Cost",
+    "try": "Try it",
+    "faq": "FAQ",
+    "signUp": "Sign up"
+  },
+  "status": {
+    "label": "Status",
+    "text": "**Early development.** Sign-up isn't open yet. This page describes CafeMenu 1.0; follow the work [on GitHub](https://github.com/shreyashp47/cafemenu/milestones)."
+  },
+  "hero": {
+    "eyebrow": "Open source · for small cafes",
+    "title": "QR table ordering for your cafe, on your own Firebase.",
+    "lead": "Customers scan the code on their table and order from their phone. Your staff see each order arrive live. You run the menu and read the numbers, and the menu, orders and data stay in **your** Google account.",
+    "primary": "Sign up",
+    "secondary": "Try the demo",
+    "note": "Built from TOE, which already takes real orders at a working cafe.",
+    "shotCustomer": "A customer's phone: the menu, with categories, prices, an item in the cart and one sold out",
+    "shotStaff": "The staff phone: the live order board with a table's order being prepared"
+  },
+  "points": [
+    {
+      "title": "No app to install",
+      "text": "Customers scan and order in the browser. No login, no download."
+    },
+    {
+      "title": "Your data, your account",
+      "text": "Everything lives in a Firebase project you own, not ours."
+    },
+    {
+      "title": "Free for a small cafe",
+      "text": "Runs on Firebase's no-cost Spark plan. No card needed."
+    }
+  ],
+  "how": {
+    "title": "How it works",
+    "lead": "Set up in a few minutes, guided at every step. You need a Google account, and nothing else to buy or install.",
+    "steps": [
+      {
+        "title": "Fill in a short form",
+        "text": "Cafe name, web address, country, number of tables, theme, logo and a starting menu."
+      },
+      {
+        "title": "Create a free Firebase project",
+        "text": "In your own Google account, following step-by-step screenshots. The free Spark plan is enough."
+      },
+      {
+        "title": "Give CafeMenu access",
+        "text": "Add CafeMenu as a member of that project, so it can set it up and send you updates. You can remove it at any time."
+      },
+      {
+        "title": "Wait about a minute",
+        "text": "CafeMenu sets up the database, sign-in, your menu and your site, and shows each step as it goes. Then you choose your password from the email you receive."
+      },
+      {
+        "title": "Print your table QR cards",
+        "text": "One card per table, straight from your dashboard. Put them out and take orders."
+      }
+    ],
+    "ownership": "Your menu, orders and staff accounts live in **your** Firebase project, not ours. You choose when to take new releases, and you can leave at any time: your site keeps running on its last release."
+  },
+  "features": {
+    "title": "What each cafe gets",
+    "lead": "Everything TOE does at its cafe today, made to work for any cafe.",
+    "groups": [
+      {
+        "id": "customers",
+        "title": "For customers",
+        "text": "A menu from the QR code on the table: no app to install and no login. A cart, and the order's status updating live on their phone until it reaches the table.",
+        "shots": [
+          {
+            "src": "/screens/01-order.png",
+            "width": 222,
+            "height": 480,
+            "alt": "Customer menu with a category rail, item cards, a quantity stepper and a sold-out item",
+            "caption": "The menu"
+          },
+          {
+            "src": "/screens/02-cart.png",
+            "width": 222,
+            "height": 480,
+            "alt": "The cart as a bottom sheet, with quantity steppers and the total",
+            "caption": "The cart"
+          },
+          {
+            "src": "/screens/03-status.png",
+            "width": 222,
+            "height": 480,
+            "alt": "Order confirmation with a live status timeline: received, preparing, ready, served",
+            "caption": "Live order status"
+          }
+        ]
+      },
+      {
+        "id": "staff",
+        "title": "For staff",
+        "text": "New orders appear on the counter phone on their own, with a chime and a vibration, numbered fresh each day. Optionally, staff check a new table before its first order goes to the kitchen.",
+        "shots": [
+          {
+            "src": "/screens/04-staff-board.png",
+            "width": 222,
+            "height": 480,
+            "alt": "Staff order board with one table's order, its items, total and a Mark ready button",
+            "caption": "The order board"
+          }
+        ]
+      },
+      {
+        "id": "owner",
+        "title": "For the owner",
+        "text": "Edit the menu and mark items sold out in one tap. Set today's special, your tables and printable QR cards. Monthly reports with CSV export, order history, and staff accounts by invite link.",
+        "shots": [
+          {
+            "src": "/screens/07-owner-menu.png",
+            "width": 222,
+            "height": 480,
+            "alt": "Owner menu screen: each item with an Available or Sold out switch",
+            "caption": "Menu and sold-out"
+          },
+          {
+            "src": "/screens/05-reports.png",
+            "width": 360,
+            "height": 480,
+            "alt": "Monthly report: revenue, order count, average order, a revenue-by-day chart and best sellers",
+            "caption": "Monthly reports"
+          },
+          {
+            "src": "/screens/06-qr-cards.png",
+            "width": 360,
+            "height": 480,
+            "alt": "Table settings and the printable QR cards, one per table",
+            "caption": "Table QR cards"
+          }
+        ]
+      }
+    ],
+    "extras": [
+      {
+        "title": "Your look and your locale",
+        "text": "A choice of themes, your own logo and accent colour, and your currency, time zone and date formats, in any country."
+      },
+      {
+        "title": "Updates you choose",
+        "text": "New releases arrive automatically, or stay on the version you have and upgrade when you're ready. Security fixes reach everyone."
+      }
+    ],
+    "shotsNote": "Screenshots from TOE in demo mode."
+  },
+  "cost": {
+    "title": "What it costs",
+    "lead": "CafeMenu itself is free while it is in early development. Running your cafe is free too, for a typical small cafe.",
+    "plans": [
+      {
+        "name": "CafeMenu",
+        "price": "Free",
+        "detail": "while in early development",
+        "items": [
+          "Setup, your site, every feature above",
+          "New releases and security fixes",
+          "Open source (MIT): read every line"
+        ]
+      },
+      {
+        "name": "Your Firebase project",
+        "price": "Free",
+        "detail": "on the Spark plan",
+        "items": [
+          "Enough for a 6 to 10 table cafe's day of orders, as at TOE",
+          "Its own quota, not shared with other cafes",
+          "No card needed to start"
+        ]
+      }
+    ],
+    "need": "**You need:** a Google account. **Optional:** your own domain name, bought from any domain registrar, if you'd rather not use `your-cafe.web.app`.",
+    "later": "If paid plans ever come, they'll be announced well ahead, and your site keeps running in your own project whatever you decide."
+  },
+  "try": {
+    "title": "Try it",
+    "lead": "Sign-up isn't open yet, but the cafe app already runs on your own computer in demo mode, with a sample menu and no Firebase account. Customer and staff side by side, live.",
+    "needs": "You need [Node.js](https://nodejs.org) 20.9 or newer and git.",
+    "terminalLabel": "Commands to run the demo",
+    "commands": "git clone https://github.com/shreyashp47/cafemenu.git\ncd cafemenu\nnpm ci\nnpm run dev",
+    "copy": "Copy",
+    "copied": "Copied",
+    "then": "Then open these two pages side by side and place an order:",
+    "pages": [
+      {
+        "label": "Customer",
+        "url": "http://localhost:3000/order?table=3",
+        "text": "the menu for table 3"
+      },
+      {
+        "label": "Staff",
+        "url": "http://localhost:3000/staff",
+        "text": "the order board, PIN `1122`"
+      }
+    ],
+    "local": "Demo orders stay in your browser. Nothing is sent anywhere.",
+    "hosted": "A hosted demo you can open from this page is on the way.",
+    "careful": "**Please don't test on a real cafe's site.** Its order board is a real counter, and a test order there is a real order."
+  },
+  "faq": {
+    "title": "Questions",
+    "items": [
+      {
+        "q": "Who owns the data?",
+        "a": "You do. Your menu, orders and staff accounts are stored in a Firebase project in your own Google account. CafeMenu keeps only what it needs to run your site: your email, your project's ID and web address, your cafe's settings, which release it runs, and a history of its deployments."
+      },
+      {
+        "q": "What access does CafeMenu get?",
+        "a": "You add CafeMenu's service account as a member of your Firebase project. With that it sets the project up, deploys your site and its security rules, and moves your data forward when a release needs it. That access includes your order data, which is why it is spelt out here, in the privacy policy, and on the setup page, with a link to see or remove it."
+      },
+      {
+        "q": "How do updates work?",
+        "a": "CafeMenu ships numbered releases. By default your cafe follows **stable** and updates on its own; **beta** gets new versions first; or you can **stay on a version** and press Upgrade when you're ready. Security fixes still reach every cafe. If a release doesn't suit you, **Roll back** returns to the one before."
+      },
+      {
+        "q": "How do I leave?",
+        "a": "Remove CafeMenu's member from your project. Your site keeps running on its last release, and your data was always yours: nothing to export, nothing to ask for."
+      },
+      {
+        "q": "Do customers need an app or an account?",
+        "a": "No. They scan the code on their table, order in the browser, and pay at the counter. No download, no login."
+      },
+      {
+        "q": "Which countries does it work in?",
+        "a": "Any. Each cafe sets its own currency, time zone and date formats. The app is in English first, with every word in a translation file so more languages can follow."
+      },
+      {
+        "q": "Can I see the code?",
+        "a": "Yes. CafeMenu is open source under the MIT licence, on [GitHub](https://github.com/shreyashp47/cafemenu), with the whole plan in the open."
+      }
+    ]
+  },
+  "closing": {
+    "title": "Be one of the first cafes on CafeMenu.",
+    "text": "Sign-up opens when the setup steps are ready. Until then, follow along or run the demo.",
+    "primary": "Sign up",
+    "secondary": "Follow on GitHub"
+  },
+  "footer": {
+    "tagline": "QR table ordering for small cafes. Built from TOE.",
+    "licence": "Open source under the MIT licence.",
+    "linksLabel": "Project",
+    "links": [
+      { "label": "GitHub", "href": "https://github.com/shreyashp47/cafemenu" },
+      {
+        "label": "Plan and roadmap",
+        "href": "https://github.com/shreyashp47/cafemenu/blob/main/PLAN.md"
+      },
+      {
+        "label": "Security",
+        "href": "https://github.com/shreyashp47/cafemenu/blob/main/SECURITY.md"
+      },
+      {
+        "label": "Contributing",
+        "href": "https://github.com/shreyashp47/cafemenu/blob/main/CONTRIBUTING.md"
+      }
+    ],
+    "legal": "The privacy policy and terms are published before sign-up opens."
+  },
+  "signup": {
+    "eyebrow": "Sign up",
+    "title": "Sign-up is coming soon.",
+    "text": "CafeMenu is in early development. The form, the email check and the guided setup are being built now, and sign-up opens as soon as they are ready and tested.",
+    "meanwhile": "In the meantime",
+    "tryIt": "Run the demo on your computer",
+    "follow": "Follow the work on GitHub",
+    "back": "Back to the home page"
+  },
+  "notFound": {
+    "title": "That page isn't here.",
+    "text": "The address may be mistyped, or the page may have moved.",
+    "back": "Back to the home page"
+  },
+  "problems": {
+    "site-format": "Use lowercase letters, numbers and hyphens, up to 30 characters, not starting or ending with a hyphen.",
+    "project-id-format": "That doesn't look like a Firebase project ID. Copy it from Project settings in the Firebase console.",
+    "settings-invalid": "Some settings aren't valid. Check the fields marked.",
+    "plan-locked": "A new cafe starts on the free plan.",
+    "channel-unknown": "Choose stable or beta.",
+    "pinned-format": "Choose a version line such as 1.4."
+  },
+  "errors": {
+    "auth/invalid-email": "That email address doesn't look right.",
+    "auth/email-already-in-use": "There is already an account with that email. Sign in instead.",
+    "auth/weak-password": "Use a password of at least 6 characters.",
+    "auth/invalid-credential": "That email and password don't match.",
+    "auth/too-many-requests": "Too many tries. Wait a minute and try again.",
+    "auth/network-request-failed": "No connection. Check the internet and try again.",
+    "permission-denied": "You can't do that here. If you just verified your email, reload the page.",
+    "unauthenticated": "Sign in first.",
+    "not-found": "That cafe no longer exists.",
+    "unknown": "Something went wrong. Try again."
+  }
+}

@@ -1,0 +1,130 @@
+@import "tailwindcss";
+
+/* ==========================================================================
+   Design tokens for the CafeMenu console.
+
+   Its own palette, separate from any cafe's theme: warm paper, espresso ink
+   and a basil green. Every text colour below meets WCAG AA (4.5:1) on every
+   surface it is used on; the pairs are listed in the README. Never put a hex
+   in a component: add a token here.
+   ========================================================================== */
+
+:root {
+  color-scheme: light;
+
+  /* -- surfaces ------------------------------------------------------------- */
+  --paper: #fbf8f3; /* page */
+  --surface: #ffffff; /* cards */
+  --sunk: #f3ede4; /* alternate sections */
+  --espresso: #2a211b; /* dark band: the terminal, the footer */
+
+  /* -- text ----------------------------------------------------------------- */
+  --ink: #1d1813; /* headings, 16.6:1 on paper */
+  --text: #3b332c; /* body, 11.7:1 on paper */
+  --muted: #675d54; /* secondary, 5.5:1 on sunk, 6.1:1 on paper */
+  --on-dark: #f6f0e7; /* on espresso, 13.9:1 */
+  --on-dark-muted: #c9bdb0; /* on espresso, 8.6:1 */
+
+  /* -- brand: basil ----------------------------------------------------------- */
+  --brand: #1d6a51; /* buttons; white on it is 6.5:1 */
+  --brand-hover: #175843;
+  --brand-soft: #e1efe7; /* tints behind brand-ink */
+  --brand-ink: #155540; /* links and brand text, 8.2:1 on paper */
+
+  /* -- accent: caramel, for highlights ---------------------------------------- */
+  --accent: #e3962f; /* decorative, and text on espresso only (6.5:1) */
+  --accent-soft: #fcebd3;
+  --accent-ink: #8a4a0e; /* text on accent-soft, 5.9:1 */
+
+  /* -- lines and depth ---------------------------------------------------------- */
+  --line: #e4dace;
+  --line-strong: #bfb2a2; /* decorative borders only, not for text */
+  --ring: #1d6a51;
+  --shadow-card:
+    0 1px 2px rgb(29 24 19 / 0.05), 0 4px 16px rgb(29 24 19 / 0.06);
+  --shadow-phone:
+    0 2px 6px rgb(29 24 19 / 0.08), 0 18px 40px rgb(29 24 19 / 0.16);
+
+  /* -- geometry ------------------------------------------------------------------ */
+  --r-sm: 0.5rem;
+  --r-md: 0.875rem;
+  --r-lg: 1.25rem;
+  --r-xl: 1.75rem;
+  --r-pill: 999px;
+  --tap: 2.75rem; /* 44px minimum touch target */
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-sunk: var(--sunk);
+  --color-espresso: var(--espresso);
+  --color-ink: var(--ink);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-on-dark: var(--on-dark);
+  --color-on-dark-muted: var(--on-dark-muted);
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-ink: var(--brand-ink);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-ink: var(--accent-ink);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ring: var(--ring);
+
+  --font-display: var(--font-fraunces), ui-serif, Georgia, serif;
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+
+  --radius-sm: var(--r-sm);
+  --radius-md: var(--r-md);
+  --radius-lg: var(--r-lg);
+  --radius-xl: var(--r-xl);
+  --radius-pill: var(--r-pill);
+
+  --shadow-card: var(--shadow-card);
+  --shadow-phone: var(--shadow-phone);
+
+  --spacing-tap: var(--tap);
+}
+
+html {
+  scroll-behavior: smooth;
+  /* In-page links land below the sticky header, not under it. */
+  scroll-padding-top: 4.5rem;
+  -webkit-text-size-adjust: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+body {
+  background: var(--paper);
+  color: var(--text);
+  font-family: var(--font-sans);
+  line-height: 1.6;
+  text-rendering: optimizeLegibility;
+}
+
+:focus-visible {
+  outline: 3px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* The FAQ uses <details>; the marker is drawn by the component instead. */
+summary {
+  list-style: none;
+}
+summary::-webkit-details-marker {
+  display: none;
+}
