@@ -1,0 +1,205 @@
+rules_version = '2';
+
+// ---------------------------------------------------------------------------
+// CafeMenu platform — Firestore security rules
+//
+// The platform project's own database: cafes, releases and deployments (the
+// model is in src/lib/platform/model.ts). A cafe's menu and orders are not
+// here; they live in the owner's own Firebase project, under the cafe app's
+// rules.
+//
+// Who can do what:
+//
+//   an owner      reads their own cafes and those cafes' deployments, edits
+//                 their cafe's settings and release choice, and creates new
+//                 cafes, all only with a verified email
+//   the admin     (custom claim admin: true) reads everything
+//   the backend   writes everything else: release records, deployments, a
+//                 cafe's status, plan and the version it runs. It uses the platform
+//                 service account, which Firestore does not hold to these
+//                 rules at all.
+//   anyone else   nothing
+//
+// Default closed: a path with no match below is refused.
+//
+// Every rule has a case in scripts/rules-test.mjs. Change both together, and
+// src/lib/platform/validate.ts, which mirrors the shape checks.
+//
+// Deploy with:  firebase deploy --only firestore:rules,firestore:indexes
+// ---------------------------------------------------------------------------
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // -- who is calling --------------------------------------------------------
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // A verified email. Every write needs one, so an account made with
+    // someone else's address cannot claim a cafe in their name. Read from the
+    // ID token, which the console refreshes after the link is clicked.
+    function verified() {
+      return signedIn()
+        && request.auth.token.get("email_verified", false) == true
+        && request.auth.token.get("email", "") is string
+        && request.auth.token.get("email", "") != "";
+    }
+
+    // The maintainer: a custom claim only the Admin SDK can set, so no client
+    // can grant it to itself. Needs a verified email too, as a second lock.
+    function isAdmin() {
+      return verified() && request.auth.token.get("admin", false) == true;
+    }
+
+    function owns(data) {
+      return signedIn() && data.ownerUid == request.auth.uid;
+    }
+
+    // -- shapes (mirrored in src/lib/platform/validate.ts) ---------------------
+
+    // A Hosting site name: a hostname label of at most 30 characters.
+    function isSiteName(value) {
+      return value is string
+        && value.matches('[a-z0-9]([a-z0-9-]{0,28}[a-z0-9])?');
+    }
+
+    function isProjectIdOrNull(value) {
+      return value == null
+        || (value is string && value.matches('[a-z][a-z0-9-]{4,28}[a-z0-9]'));
+    }
+
+    // CafeSettings from @cafemenu/shared (packages/shared/src/settings.ts):
+    // exactly its fields, each of the right type and size. The console runs
+    // the full validateCafeSettings before writing, and the deployer again
+    // before copying them to the cafe's own project; this is the floor for a
+    // client that skips both. Lists of choices (themes, plans) are left to
+    // those checks, so a new theme needs no rules change: an unknown one reads
+    // as the default in the cafe app. Add a field there, add it here.
+    function isSettings(s) {
+      return s is map
+        && s.keys().hasOnly(['schemaVersion', 'name', 'tagline', 'theme',
+          'accent', 'logo', 'currency', 'locale', 'timeZone', 'utcOffsets',
+          'tables', 'baseUrl', 'plan'])
+        && s.keys().hasAll(['schemaVersion', 'name', 'tagline', 'theme',
+          'accent', 'logo', 'currency', 'locale', 'timeZone', 'utcOffsets',
+          'tables', 'baseUrl', 'plan'])
+        && s.schemaVersion is int && s.schemaVersion >= 1
+        && s.name is string && s.name.size() >= 1 && s.name.size() <= 60
+        && s.tagline is string && s.tagline.size() <= 80
+        && s.theme is string && s.theme.matches('[a-z][a-z0-9-]{0,31}')
+        && (s.accent == null
+          || (s.accent is string && s.accent.matches('#[0-9A-Fa-f]{6}')))
+        && (s.logo == null || (s.logo is string && s.logo.size() <= 500))
+        && s.currency is string && s.currency.matches('[A-Z]{3}')
+        && s.locale is string && s.locale.size() >= 2 && s.locale.size() <= 35
+        && s.timeZone is string && s.timeZone.size() >= 1 && s.timeZone.size() <= 64
+        && s.utcOffsets is map
+        && s.utcOffsets.keys().hasOnly(['standard', 'daylight'])
+        && s.utcOffsets.standard is int && s.utcOffsets.daylight is int
+        && s.tables is list && s.tables.size() >= 1 && s.tables.size() <= 50
+        && s.tables.hasOnly([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14,
+          15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
+          32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48,
+          49, 50])
+        && (s.baseUrl == null
+          || (s.baseUrl is string && s.baseUrl.matches('https?://[^/?#@ ]+')))
+        && s.plan is string;
+    }
+
+    // The owner's half of `release`: which channel, and an optional minor
+    // line to stay on ("1.4").
+    function isReleaseChoice(release) {
+      return release.channel in ['stable', 'beta']
+        && (release.pinned == null
+          || (release.pinned is string && release.pinned.matches('[0-9]+[.][0-9]+')));
+    }
+
+    // -- cafes -------------------------------------------------------------------
+
+    match /cafes/{cafeId} {
+      // An owner's list query must filter on ownerUid == their uid, or
+      // Firestore cannot prove it returns only their cafes and refuses it.
+      allow get, list: if isAdmin() || owns(resource.data);
+
+      // Sign-up: a draft cafe on no release yet, for the caller only. Every
+      // field is pinned, so nothing the backend owns can be set at birth.
+      allow create: if verified()
+        && request.resource.data.keys().hasOnly([
+          'ownerUid', 'ownerEmail', 'projectId', 'site', 'settings', 'release',
+          'status', 'createdAt', 'updatedAt'])
+        && request.resource.data.keys().hasAll([
+          'ownerUid', 'ownerEmail', 'projectId', 'site', 'settings', 'release',
+          'status', 'createdAt', 'updatedAt'])
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.ownerEmail == request.auth.token.email
+        && request.resource.data.status == 'draft'
+        && isProjectIdOrNull(request.resource.data.projectId)
+        && isSiteName(request.resource.data.site)
+        && isSettings(request.resource.data.settings)
+        // Every cafe starts free. Plans are the backend's to change (#17).
+        && request.resource.data.settings.plan == 'free'
+        && request.resource.data.release is map
+        && request.resource.data.release.keys().hasOnly(['channel', 'pinned', 'current', 'previous'])
+        && request.resource.data.release.keys().hasAll(['channel', 'pinned', 'current', 'previous'])
+        && isReleaseChoice(request.resource.data.release)
+        && request.resource.data.release.current == null
+        && request.resource.data.release.previous == null
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+
+      // The owner edits settings and the release choice. The site and the
+      // project can still change while the cafe is a draft; once setup has
+      // started they are fixed, because the backend deploys to them.
+      //
+      // Never the owner's: ownerUid, ownerEmail, status, createdAt, the plan
+      // in settings, and release.current and release.previous, which say what
+      // is actually deployed. The diff on `release` names the two keys an owner may touch,
+      // so adding or removing a key there is refused too.
+      allow update: if verified()
+        && owns(resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['settings', 'release', 'projectId', 'site', 'updatedAt'])
+        && request.resource.data.updatedAt == request.time
+        && isSettings(request.resource.data.settings)
+        && request.resource.data.settings.plan == resource.data.settings.plan
+        && request.resource.data.release is map
+        && request.resource.data.release.diff(resource.data.release).affectedKeys()
+          .hasOnly(['channel', 'pinned'])
+        && isReleaseChoice(request.resource.data.release)
+        && isProjectIdOrNull(request.resource.data.projectId)
+        && isSiteName(request.resource.data.site)
+        && (resource.data.status == 'draft'
+          || (request.resource.data.projectId == resource.data.projectId
+            && request.resource.data.site == resource.data.site));
+
+      // Leaving CafeMenu is removing its access in the owner's own project;
+      // the record stays so the admin can see the cafe disconnected. Deleting
+      // an account's data is a backend job.
+      allow delete: if false;
+    }
+
+    // -- releases ------------------------------------------------------------------
+
+    // Published by the release pipeline, through the backend. Any verified
+    // account may read them: owners choose from them, with their notes.
+    match /releases/{version} {
+      allow get, list: if verified();
+      allow create, update, delete: if false;
+    }
+
+    // -- deployments ---------------------------------------------------------------
+
+    // Written only by the deployer, so the history is what really happened: no
+    // client can start one, mark one done, or edit one. Upgrade and Roll back
+    // will be requests to the backend (#29), which writes the record.
+    //
+    // ownerUid is copied onto each record so an owner's query can filter on
+    // it, as on /cafes, instead of a lookup per document.
+    match /deployments/{deploymentId} {
+      allow get, list: if isAdmin() || owns(resource.data);
+      allow create, update, delete: if false;
+    }
+  }
+}
