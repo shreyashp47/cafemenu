@@ -10,6 +10,8 @@
  * two-tab sync can't interleave a half-written state.
  */
 
+import { dayKeyIn } from "@cafemenu/shared";
+
 import {
   DEFAULT_STATUS,
   MAX_REJECT_REASON,
@@ -19,7 +21,7 @@ import {
 import { orderTotal } from "../money";
 import { orderCapProblems } from "../order-caps";
 import { isTableKey, type TableKeys } from "../table-keys";
-import { displayNumberFromId, istDayKey } from "../order-number";
+import { displayNumberFromId } from "../order-number";
 import { assignInTransaction, type Assigned } from "../day-number";
 import {
   MAX_OPEN_HOURS,
@@ -534,6 +536,7 @@ let numberingQueue: Promise<unknown> = Promise.resolve();
  */
 export async function demoAssignDayNumber(
   id: string,
+  timeZone: string,
 ): Promise<Assigned | null> {
   const attempt = async (): Promise<Assigned | null> => {
     for (let tries = 0; tries < 5; tries += 1) {
@@ -559,6 +562,7 @@ export async function demoAssignDayNumber(
           },
         },
         id,
+        timeZone,
       );
       const w = write as { dayKey: string; dayNumber: number } | null;
       if (!w) return result;
@@ -659,17 +663,18 @@ export function demoReplaceMenu(items: MenuItem[]): void {
  */
 export function demoSeedOrders(
   orders: Array<Omit<Order, "id" | "orderNumber">>,
+  timeZone: string,
 ): number {
   mutate((state) => {
-    // Numbered the way the board would have numbered them: per IST day, in
-    // the order they arrived. The counters are replaced with the sample's,
-    // since the orders they counted are replaced too.
+    // Numbered the way the board would have numbered them: per day in the
+    // cafe's zone, in the order they arrived. The counters are replaced with
+    // the sample's, since the orders they counted are replaced too.
     const dayCounters: Record<string, number> = {};
     const withIds = [...orders]
       .sort((a, b) => a.createdAt - b.createdAt)
       .map((order) => {
         const id = makeId("o");
-        const dayKey = istDayKey(order.createdAt);
+        const dayKey = dayKeyIn(timeZone, order.createdAt);
         const dayNumber = dayCounters[dayKey] ?? 1;
         dayCounters[dayKey] = dayNumber + 1;
         return {

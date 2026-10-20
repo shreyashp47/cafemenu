@@ -26,17 +26,12 @@ import { Card } from "@/components/ui/Card";
 import { Field, Input, Select } from "@/components/ui/Input";
 import { EmptyState, Loading } from "@/components/ui/Loading";
 import { StatusBadge, statusLabel } from "@/components/ui/StatusBadge";
+import { useCafeSettings } from "@/hooks/useCafeSettings";
 import { cn } from "@/lib/cn";
 import { demoSeedOrders } from "@/lib/data/demo-store";
 import { buildSampleOrders } from "@/lib/data/sample-orders";
 import { friendlyLoadError } from "@/lib/friendly-errors";
-import {
-  formatDate,
-  formatINR,
-  formatTime,
-  lineSubtotal,
-  orderTotal,
-} from "@/lib/money";
+import { formatINR, lineSubtotal, orderTotal } from "@/lib/money";
 import { checkOrderIntegrity } from "@/lib/order-integrity";
 import { orderLabel } from "@/lib/order-number";
 import {
@@ -61,14 +56,31 @@ import type { MenuItem, Order } from "@/lib/types";
 /** Rows rendered at a time; the rest are one tap away. */
 const PAGE_SIZE = 50;
 
-const fullDateTime = new Intl.DateTimeFormat("en-IN", {
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
-  hour12: true,
-});
+/**
+ * Dates and times as the cafe's clock showed them (settings.timeZone), not the
+ * device's: the history is filtered by the cafe's days, so a row has to say
+ * the cafe's date too, even for an owner looking from abroad.
+ */
+function cafeClock(timeZone: string) {
+  const format = (options: Intl.DateTimeFormatOptions) =>
+    new Intl.DateTimeFormat("en-IN", { ...options, timeZone });
+  const date = format({ day: "numeric", month: "short" });
+  const time = format({ hour: "numeric", minute: "2-digit", hour12: true });
+  const full = format({
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+  return {
+    short: (ms: number) => `${date.format(ms)}, ${time.format(ms)}`,
+    full: (ms: number) => full.format(ms),
+  };
+}
+
+type CafeClock = ReturnType<typeof cafeClock>;
 
 function plural(n: number, one: string, many = `${one}s`): string {
   return `${n} ${n === 1 ? one : many}`;
@@ -78,10 +90,12 @@ export default function OrderHistoryPage() {
   const repo = useOrderRepo();
   const isDemo = useIsDemo();
   const { items: menu } = useMenu();
+  const { timeZone } = useCafeSettings().settings;
+  const clock = useMemo(() => cafeClock(timeZone), [timeZone]);
 
   const [from, setFrom] = useState(() => {
-    const r = presetRange("today");
-    return toInputDate(r.from);
+    const r = presetRange("today", timeZone);
+    return toInputDate(r.from, timeZone);
   });
   const [to, setTo] = useState(() => from);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -93,9 +107,12 @@ export default function OrderHistoryPage() {
   const [open, setOpen] = useState<string | null>(null);
   const [seeding, setSeeding] = useState(false);
 
-  const check = useMemo(() => inputRange(from, to), [from, to]);
+  const check = useMemo(
+    () => inputRange(from, to, timeZone),
+    [from, to, timeZone],
+  );
   const range = check.ok ? check.range : null;
-  const preset = matchingPreset(from, to);
+  const preset = matchingPreset(from, to, timeZone);
 
   // Only the newest request may write to the page, so a slow "This month"
   // cannot land on top of a quick "Today" tapped after it.
@@ -128,15 +145,15 @@ export default function OrderHistoryPage() {
   }, [load]);
 
   function pickPreset(id: PresetId) {
-    const r = presetRange(id);
-    setFrom(toInputDate(r.from));
-    setTo(toInputDate(r.to - 1));
+    const r = presetRange(id, timeZone);
+    setFrom(toInputDate(r.from, timeZone));
+    setTo(toInputDate(r.to - 1, timeZone));
   }
 
   async function seedSampleMonth() {
     setSeeding(true);
     try {
-      demoSeedOrders(buildSampleOrders(240));
+      demoSeedOrders(buildSampleOrders(240, Date.now(), timeZone), timeZone);
       await load();
     } finally {
       setSeeding(false);
@@ -144,16 +161,16 @@ export default function OrderHistoryPage() {
   }
 
   const report = useMemo(
-    () => (range ? buildReport(orders, range) : null),
-    [orders, range],
+    () => (range ? buildReport(orders, range, timeZone) : null),
+    [orders, range, timeZone],
   );
   const filtered = useMemo(
     () => filterOrders(orders, filters),
     [orders, filters],
   );
   const filteredReport = useMemo(
-    () => (range ? buildReport(filtered, range) : null),
-    [filtered, range],
+    () => (range ? buildReport(filtered, range, timeZone) : null),
+    [filtered, range, timeZone],
   );
   const tables = useMemo(() => tablesIn(orders), [orders]);
   const filtering =
@@ -168,12 +185,12 @@ export default function OrderHistoryPage() {
 
   function downloadCsv() {
     if (!range) return;
-    const csv = ordersToCsv(filtered);
+    const csv = ordersToCsv(filtered, timeZone);
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `cafe-history-${toInputDate(range.from)}-to-${toInputDate(range.to - 1)}.csv`;
+    a.download = `cafe-history-${toInputDate(range.from, timeZone)}-to-${toInputDate(range.to - 1, timeZone)}.csv`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -374,6 +391,7 @@ export default function OrderHistoryPage() {
                     key={order.id}
                     order={order}
                     menu={menu}
+                    clock={clock}
                     open={open === order.id}
                     onToggle={() =>
                       setOpen((cur) => (cur === order.id ? null : order.id))
@@ -470,11 +488,13 @@ function Filters({
 function HistoryRow({
   order,
   menu,
+  clock,
   open,
   onToggle,
 }: {
   order: Order;
   menu: MenuItem[];
+  clock: CafeClock;
   open: boolean;
   onToggle: () => void;
 }) {
@@ -505,8 +525,7 @@ function HistoryRow({
             </span>
           </span>
           <span className="tnum text-muted block text-sm">
-            {formatDate(order.createdAt)}, {formatTime(order.createdAt)} ·{" "}
-            {plural(count, "item")}
+            {clock.short(order.createdAt)} · {plural(count, "item")}
           </span>
         </span>
         <span className="flex shrink-0 flex-col items-end gap-1">
@@ -536,7 +555,9 @@ function HistoryRow({
         />
       </button>
 
-      {open ? <OrderDetails id={panelId} order={order} check={check} /> : null}
+      {open ? (
+        <OrderDetails id={panelId} order={order} check={check} clock={clock} />
+      ) : null}
     </li>
   );
 }
@@ -545,10 +566,12 @@ function OrderDetails({
   id,
   order,
   check,
+  clock,
 }: {
   id: string;
   order: Order;
   check: ReturnType<typeof checkOrderIntegrity>;
+  clock: CafeClock;
 }) {
   const [copied, setCopied] = useState(false);
   const reason = rejectReasonOf(order);
@@ -627,15 +650,11 @@ function OrderDetails({
           ) : null}
         </dd>
         <dt className="text-muted">Placed</dt>
-        <dd className="tnum text-ink">
-          {fullDateTime.format(new Date(order.createdAt))}
-        </dd>
+        <dd className="tnum text-ink">{clock.full(order.createdAt)}</dd>
         {order.completedAt ? (
           <>
             <dt className="text-muted">Completed</dt>
-            <dd className="tnum text-ink">
-              {fullDateTime.format(new Date(order.completedAt))}
-            </dd>
+            <dd className="tnum text-ink">{clock.full(order.completedAt)}</dd>
           </>
         ) : null}
         <dt className="text-muted">Status</dt>

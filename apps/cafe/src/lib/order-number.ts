@@ -2,10 +2,10 @@
  * The number a barista reads out ("table four, number seven").
  *
  * Today: a per-day sequence, #0001, #0002, …, that starts again at midnight in
- * the cafe's time zone (India, UTC+5:30). The owner asked for it. It is written
- * onto the order as `dayNumber` (1–9999) with the `dayKey` of the day it
- * belongs to ("2026-09-28"), and it is assigned by the STAFF BOARD, not by the
- * customer's phone:
+ * the cafe's time zone (`settings.timeZone`; TOE's was India, UTC+5:30). The
+ * owner asked for it. It is written onto the order as `dayNumber` (1–9999) with
+ * the `dayKey` of the day it belongs to ("2026-09-28"), and it is assigned by
+ * the STAFF BOARD, not by the customer's phone:
  *
  *   - The board sees an order with no number and, in one transaction, reads
  *     dayCounters/{dayKey} = { next }, re-reads the order, writes the number on
@@ -14,9 +14,11 @@
  *     and only as `counter.next` before and `next + 1` after in the same commit,
  *     so two boards racing cannot hand out the same number: one transaction
  *     wins, the other sees the number already set and stops.
- *   - The day comes from the order's createdAt in IST, never from the time it
- *     was numbered or the device's clock, so an order placed at 23:59:59 is in
- *     that day's sequence even if it is numbered after midnight.
+ *   - The day comes from the order's createdAt in the cafe's zone
+ *     (`dayKeyIn` in @cafemenu/shared), never from the time it was numbered or
+ *     the device's clock or zone, so an order placed at 23:59:59 is in that
+ *     day's sequence even if it is numbered after midnight. firestore.rules
+ *     checks it against the zone's offsets in config/site.
  *
  * Why this is safe where the old /meta/counters was not (issue #30): that
  * counter was bumped by customers, so it had to be writable by the whole
@@ -66,19 +68,6 @@ export function resolveOrderNumber(id: string, stored: unknown): number {
 // --- daily numbers ------------------------------------------------------------
 
 export const DAY_NUMBER_MAX = 9999;
-
-/** India has no daylight saving, so this offset is fixed all year. */
-export const IST_OFFSET_MS = (5 * 60 + 30) * 60_000;
-
-/**
- * The cafe day an instant belongs to, as "YYYY-MM-DD" in IST. Computed from the
- * UTC time plus 5h30m explicitly, so a phone or laptop set to any other time
- * zone still files the order under the cafe's day. firestore.rules does the
- * same sum (dayKeyOf) and refuses a key that disagrees.
- */
-export function istDayKey(ms: number): string {
-  return new Date(ms + IST_OFFSET_MS).toISOString().slice(0, 10);
-}
 
 export function isDayNumber(value: unknown): value is number {
   return (

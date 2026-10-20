@@ -20,8 +20,10 @@ import { buildReport, currentMonth, monthRange } from "@/lib/reports";
 import { demoOrderRepo } from "@/lib/data/demo";
 import type { Order } from "@/lib/types";
 
+// The demo cafe's zone, which buildSampleOrders defaults to.
+const KOLKATA = "Asia/Kolkata";
 // A fixed "now" so the generated month is deterministic in shape.
-const NOW = new Date(2026, 5, 18, 15, 0).getTime(); // 18 Jun 2026, 15:00
+const NOW = Date.parse("2026-06-18T09:30:00Z"); // 18 Jun 2026, 15:00 in India
 
 describe("buildSampleOrders", () => {
   const orders = buildSampleOrders(120, NOW);
@@ -31,7 +33,7 @@ describe("buildSampleOrders", () => {
   });
 
   it("stays inside the month containing now", () => {
-    const range = monthRange(2026, 5);
+    const range = monthRange(2026, 5, KOLKATA);
     for (const order of orders) {
       expect(order.createdAt).toBeGreaterThanOrEqual(range.from);
       expect(order.createdAt).toBeLessThanOrEqual(NOW);
@@ -117,12 +119,16 @@ describe("buildSampleOrders", () => {
 describe("a seeded demo month reports sensibly", () => {
   it("produces revenue, orders and a best-seller list", () => {
     resetDemoStore();
-    const seeded = demoSeedOrders(buildSampleOrders(200, NOW));
+    const seeded = demoSeedOrders(buildSampleOrders(200, NOW), KOLKATA);
     expect(seeded).toBe(200);
 
     const stored = loadDemoState().orders;
-    const range = monthRange(currentMonth(NOW).year, currentMonth(NOW).month0);
-    const report = buildReport(stored, range);
+    const range = monthRange(
+      currentMonth(KOLKATA, NOW).year,
+      currentMonth(KOLKATA, NOW).month0,
+      KOLKATA,
+    );
+    const report = buildReport(stored, range, KOLKATA);
 
     expect(report.orderCount).toBe(200);
     expect(report.revenue).toBe(
@@ -139,7 +145,7 @@ describe("a seeded demo month reports sensibly", () => {
 
   it("is visible on the staff board as active orders", async () => {
     resetDemoStore();
-    demoSeedOrders(buildSampleOrders(200, NOW));
+    demoSeedOrders(buildSampleOrders(200, NOW), KOLKATA);
     const active = await demoOrderRepo.listRange(0, Date.now() + 1000);
     const open = active.filter((o: Order) => o.status !== "completed");
     expect(open.length).toBeGreaterThan(0);
@@ -148,7 +154,7 @@ describe("a seeded demo month reports sensibly", () => {
 
   it("gives every order a unique id and the number derived from it", () => {
     resetDemoStore();
-    demoSeedOrders(buildSampleOrders(60, NOW));
+    demoSeedOrders(buildSampleOrders(60, NOW), KOLKATA);
     const { orders } = loadDemoState();
     expect(new Set(orders.map((o) => o.id)).size).toBe(orders.length);
     for (const o of orders) {

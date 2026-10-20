@@ -6,47 +6,10 @@ import {
   DayNumbersExhausted,
   type DayNumberTx,
 } from "../day-number";
-import {
-  displayNumberFromId,
-  istDayKey,
-  orderLabel,
-  padDayNumber,
-} from "../order-number";
+import { displayNumberFromId, orderLabel, padDayNumber } from "../order-number";
 import { parseOrder } from "../types";
 
-describe("istDayKey", () => {
-  it("turns over at 18:30 UTC, which is midnight in India", () => {
-    expect(istDayKey(Date.parse("2026-09-27T18:29:59.999Z"))).toBe(
-      "2026-09-27",
-    );
-    expect(istDayKey(Date.parse("2026-09-27T18:30:00.000Z"))).toBe(
-      "2026-09-28",
-    );
-  });
-
-  it("files an early-morning UTC time under the same IST day", () => {
-    expect(istDayKey(Date.parse("2026-09-28T00:00:00Z"))).toBe("2026-09-28");
-    expect(istDayKey(Date.parse("2026-09-28T18:29:00Z"))).toBe("2026-09-28");
-  });
-
-  it("crosses months and years", () => {
-    expect(istDayKey(Date.parse("2026-12-31T18:30:00Z"))).toBe("2027-01-01");
-    expect(istDayKey(Date.parse("2026-02-28T19:00:00Z"))).toBe("2026-03-01");
-  });
-
-  it("does not depend on the device's time zone", () => {
-    // The sum is done on UTC milliseconds, so the answer is the same whatever
-    // zone the process runs in. Spot-check against Intl in Asia/Kolkata.
-    const ms = Date.parse("2026-09-27T20:15:00Z");
-    const viaIntl = new Intl.DateTimeFormat("en-CA", {
-      timeZone: "Asia/Kolkata",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).format(ms);
-    expect(istDayKey(ms)).toBe(viaIntl);
-  });
-});
+const KOLKATA = "Asia/Kolkata";
 
 describe("display", () => {
   it("pads to four digits", () => {
@@ -171,7 +134,8 @@ function fakeDb(
   }
 
   return {
-    assign: (id: string) => run((tx) => assignInTransaction(tx, id)),
+    assign: (id: string, timeZone = KOLKATA) =>
+      run((tx) => assignInTransaction(tx, id, timeZone)),
     order: (id: string) => docs.get(`orders/${id}`)?.data,
     setStatus: (id: string, status: string) => {
       const d = docs.get(`orders/${id}`)!;
@@ -251,13 +215,66 @@ describe("assignInTransaction", () => {
     }
   });
 
+  it("cuts the day at the cafe's midnight, not the device's or UTC's", async () => {
+    // 18:29:59 / 18:30 UTC is midnight in India (TOE's cut, unchanged), and
+    // 23:29:59 in London in summer: the same day there either side.
+    const before = Date.parse("2026-09-27T18:29:59.999Z");
+    const after = Date.parse("2026-09-27T18:30:00Z");
+    const keys = async (timeZone: string) => {
+      const db = fakeDb({ a: { createdAt: before }, b: { createdAt: after } });
+      return [
+        (await db.assign("a", timeZone))?.dayKey,
+        (await db.assign("b", timeZone))?.dayKey,
+      ];
+    };
+    expect(await keys(KOLKATA)).toEqual(["2026-09-27", "2026-09-28"]);
+    expect(await keys("Europe/London")).toEqual(["2026-09-27", "2026-09-27"]);
+    expect(await keys("Asia/Kathmandu")).toEqual(["2026-09-28", "2026-09-28"]);
+  });
+
+  // The midnights that start and end each of 2026's daylight-saving change
+  // days, in UTC: an hour apart from the day before's, either way.
+  it.each([
+    ["Europe/London", "2026-03-29T00:00:00Z", "2026-03-29"],
+    ["Europe/London", "2026-03-29T23:00:00Z", "2026-03-30"],
+    ["Europe/London", "2026-10-24T23:00:00Z", "2026-10-25"],
+    ["Europe/London", "2026-10-26T00:00:00Z", "2026-10-26"],
+    ["America/New_York", "2026-03-08T05:00:00Z", "2026-03-08"],
+    ["America/New_York", "2026-03-09T04:00:00Z", "2026-03-09"],
+    ["America/New_York", "2026-11-01T04:00:00Z", "2026-11-01"],
+    ["America/New_York", "2026-11-02T05:00:00Z", "2026-11-02"],
+    ["Pacific/Auckland", "2026-04-04T11:00:00Z", "2026-04-05"],
+    ["Pacific/Auckland", "2026-04-05T12:00:00Z", "2026-04-06"],
+    ["Pacific/Auckland", "2026-09-26T12:00:00Z", "2026-09-27"],
+    ["Pacific/Auckland", "2026-09-27T11:00:00Z", "2026-09-28"],
+  ])(
+    "%s: midnight at %s starts %s, and a second before is the day before",
+    async (zone, midnightIso, day) => {
+      const midnight = Date.parse(midnightIso);
+      const db = fakeDb({
+        late: { createdAt: midnight - 1000 },
+        early: { createdAt: midnight },
+      });
+      expect(await db.assign("late", zone)).toEqual({
+        dayNumber: 1,
+        dayKey: new Date(Date.parse(day) - 86_400_000)
+          .toISOString()
+          .slice(0, 10),
+      });
+      expect(await db.assign("early", zone)).toEqual({
+        dayNumber: 1,
+        dayKey: day,
+      });
+    },
+  );
+
   it("refuses to go past 9999", async () => {
     const tx: DayNumberTx = {
       readOrder: async () => ({ createdAt: T }),
       readCounter: async () => 10000,
       write: vi.fn(),
     };
-    await expect(assignInTransaction(tx, "a")).rejects.toBeInstanceOf(
+    await expect(assignInTransaction(tx, "a", KOLKATA)).rejects.toBeInstanceOf(
       DayNumbersExhausted,
     );
     expect(tx.write).not.toHaveBeenCalled();

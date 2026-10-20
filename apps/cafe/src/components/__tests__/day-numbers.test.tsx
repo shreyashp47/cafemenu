@@ -4,6 +4,7 @@
  * staff can number an order.
  */
 
+import { dayKeyIn } from "@cafemenu/shared";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -17,7 +18,7 @@ import {
   loadDemoState,
   resetDemoStore,
 } from "@/lib/data/demo-store";
-import { istDayKey, NUMBER_WAIT_MS } from "@/lib/order-number";
+import { NUMBER_WAIT_MS } from "@/lib/order-number";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn(), push: vi.fn(), prefetch: vi.fn() }),
@@ -54,25 +55,29 @@ const placeWaiting = (tableNumber = 2) =>
   });
 
 describe("demo store: numbering", () => {
-  it("numbers from 1 in the order asked, under the order's IST day", async () => {
+  it("numbers from 1 in the order asked, under the order's day in the cafe's zone", async () => {
     const a = await place();
     const b = await place();
-    expect(await demoAssignDayNumber(a.id)).toEqual({
+    expect(await demoAssignDayNumber(a.id, "Asia/Kolkata")).toEqual({
       dayNumber: 1,
-      dayKey: istDayKey(a.createdAt),
+      dayKey: dayKeyIn("Asia/Kolkata", a.createdAt),
     });
-    expect(await demoAssignDayNumber(b.id)).toMatchObject({ dayNumber: 2 });
-    expect(await demoAssignDayNumber(a.id)).toBeNull();
+    expect(await demoAssignDayNumber(b.id, "Asia/Kolkata")).toMatchObject({
+      dayNumber: 2,
+    });
+    expect(await demoAssignDayNumber(a.id, "Asia/Kolkata")).toBeNull();
     const state = loadDemoState();
     expect(state.orders.map((o) => o.dayNumber)).toEqual([1, 2]);
-    expect(state.dayCounters[istDayKey(a.createdAt)]).toBe(3);
+    expect(state.dayCounters[dayKeyIn("Asia/Kolkata", a.createdAt)]).toBe(3);
   });
 
   it("hands out unique numbers when asked all at once", async () => {
     const orders = [];
     for (let i = 0; i < 6; i += 1) orders.push(await place());
     await Promise.all(
-      [...orders, ...orders].map((o) => demoAssignDayNumber(o.id)),
+      [...orders, ...orders].map((o) =>
+        demoAssignDayNumber(o.id, "Asia/Kolkata"),
+      ),
     );
     const numbers = loadDemoState().orders.map((o) => o.dayNumber);
     expect(new Set(numbers).size).toBe(6);
@@ -82,21 +87,29 @@ describe("demo store: numbering", () => {
   it("does not number an order waiting for the counter until it is accepted", async () => {
     const guest = await placeWaiting(5);
     expect(guest.status).toBe("pending");
-    expect(await demoAssignDayNumber(guest.id)).toBeNull();
+    expect(await demoAssignDayNumber(guest.id, "Asia/Kolkata")).toBeNull();
     expect(loadDemoState().dayCounters).toEqual({});
     const other = await place(2);
-    expect(await demoAssignDayNumber(other.id)).toMatchObject({ dayNumber: 1 });
+    expect(await demoAssignDayNumber(other.id, "Asia/Kolkata")).toMatchObject({
+      dayNumber: 1,
+    });
     demoAcceptOrder(guest.id, Date.now() + HOUR);
-    expect(await demoAssignDayNumber(guest.id)).toMatchObject({ dayNumber: 2 });
+    expect(await demoAssignDayNumber(guest.id, "Asia/Kolkata")).toMatchObject({
+      dayNumber: 2,
+    });
   });
 
   it("only staff and the owner may number an order", async () => {
     const a = await place();
-    await expect(demoOrderRepo.assignDayNumber(a.id)).rejects.toMatchObject({
+    await expect(
+      demoOrderRepo.assignDayNumber(a.id, "Asia/Kolkata"),
+    ).rejects.toMatchObject({
       code: "permission-denied",
     });
     await demoAuthRepo.signInWithPin("1122");
-    await expect(demoOrderRepo.assignDayNumber(a.id)).resolves.toMatchObject({
+    await expect(
+      demoOrderRepo.assignDayNumber(a.id, "Asia/Kolkata"),
+    ).resolves.toMatchObject({
       dayNumber: 1,
     });
   });
@@ -143,7 +156,7 @@ describe("customer's screen", () => {
     expect(screen.getAllByText(/Order received/).length).toBeGreaterThan(0);
 
     await act(async () => {
-      await demoAssignDayNumber(order.id);
+      await demoAssignDayNumber(order.id, "Asia/Kolkata");
     });
     expect(await screen.findAllByText(/#0001/)).not.toHaveLength(0);
     expect(screen.queryByText("Your number is coming…")).toBeNull();

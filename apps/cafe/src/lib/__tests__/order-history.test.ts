@@ -15,7 +15,9 @@ import {
 import { ACTIVE_STATUSES, ORDER_STATUSES } from "@/lib/order-status";
 import type { Order } from "@/lib/types";
 
-const NOW = new Date(2026, 8, 28, 15, 0).getTime();
+const KOLKATA = "Asia/Kolkata";
+const NOW = Date.parse("2026-09-28T09:30:00Z"); // 15:00 on the 28th in India
+const at = (iso: string) => Date.parse(iso);
 
 function order(over: Partial<Order> = {}): Order {
   return {
@@ -32,58 +34,93 @@ function order(over: Partial<Order> = {}): Order {
 }
 
 describe("presetRange", () => {
-  it("covers whole local days, `to` exclusive", () => {
-    const today = presetRange("today", NOW);
-    expect(today.from).toBe(new Date(2026, 8, 28).getTime());
-    expect(today.to).toBe(new Date(2026, 8, 29).getTime());
-    expect(presetRange("yesterday", NOW)).toEqual({
-      from: new Date(2026, 8, 27).getTime(),
+  it("covers whole days at the cafe, `to` exclusive", () => {
+    // Midnight in India is 18:30 UTC the day before.
+    const today = presetRange("today", KOLKATA, NOW);
+    expect(today).toEqual({
+      from: at("2026-09-27T18:30:00Z"),
+      to: at("2026-09-28T18:30:00Z"),
+    });
+    expect(presetRange("yesterday", KOLKATA, NOW)).toEqual({
+      from: at("2026-09-26T18:30:00Z"),
       to: today.from,
     });
-    expect(presetRange("last7", NOW).from).toBe(
-      new Date(2026, 8, 22).getTime(),
+    expect(presetRange("last7", KOLKATA, NOW).from).toBe(
+      at("2026-09-21T18:30:00Z"),
     );
-    expect(presetRange("month", NOW)).toEqual({
-      from: new Date(2026, 8, 1).getTime(),
+    expect(presetRange("month", KOLKATA, NOW)).toEqual({
+      from: at("2026-08-31T18:30:00Z"),
       to: today.to,
     });
   });
 
+  it("is the cafe's today, whatever zone the device is in", () => {
+    // 02:00 UTC on the 28th is still the 27th in New York (22:00 EDT).
+    const now = at("2026-09-28T02:00:00Z");
+    expect(presetRange("today", "America/New_York", now)).toEqual({
+      from: at("2026-09-27T04:00:00Z"),
+      to: at("2026-09-28T04:00:00Z"),
+    });
+    expect(toInputDate(now, "America/New_York")).toBe("2026-09-27");
+    expect(toInputDate(now, KOLKATA)).toBe("2026-09-28");
+  });
+
   it("recognises which chip two dates match", () => {
-    expect(matchingPreset("2026-09-28", "2026-09-28", NOW)).toBe("today");
-    expect(matchingPreset("2026-09-22", "2026-09-28", NOW)).toBe("last7");
-    expect(matchingPreset("2026-09-01", "2026-09-28", NOW)).toBe("month");
-    expect(matchingPreset("2026-09-02", "2026-09-28", NOW)).toBeNull();
+    expect(matchingPreset("2026-09-28", "2026-09-28", KOLKATA, NOW)).toBe(
+      "today",
+    );
+    expect(matchingPreset("2026-09-22", "2026-09-28", KOLKATA, NOW)).toBe(
+      "last7",
+    );
+    expect(matchingPreset("2026-09-01", "2026-09-28", KOLKATA, NOW)).toBe(
+      "month",
+    );
+    expect(matchingPreset("2026-09-02", "2026-09-28", KOLKATA, NOW)).toBeNull();
     // on the 1st, "today" and "this month" are the same dates; the first wins
-    const first = new Date(2026, 9, 1, 9).getTime();
-    const d = toInputDate(first);
-    expect(matchingPreset(d, d, first)).toBe("today");
+    const first = at("2026-10-01T03:30:00Z"); // 09:00 IST
+    const d = toInputDate(first, KOLKATA);
+    expect(matchingPreset(d, d, KOLKATA, first)).toBe("today");
   });
 });
 
 describe("inputRange", () => {
   it("makes the end date inclusive", () => {
-    const r = inputRange("2026-09-01", "2026-09-01");
+    const r = inputRange("2026-09-01", "2026-09-01", KOLKATA);
     expect(r).toEqual({
       ok: true,
       days: 1,
       range: {
-        from: new Date(2026, 8, 1).getTime(),
-        to: new Date(2026, 8, 2).getTime(),
+        from: at("2026-08-31T18:30:00Z"),
+        to: at("2026-09-01T18:30:00Z"),
       },
     });
   });
 
+  it("runs midnight to midnight across a daylight-saving change", () => {
+    // London's clocks go back on 25 October: that day is 25 hours long.
+    expect(inputRange("2026-10-25", "2026-10-25", "Europe/London")).toEqual({
+      ok: true,
+      days: 1,
+      range: {
+        from: at("2026-10-24T23:00:00Z"),
+        to: at("2026-10-26T00:00:00Z"),
+      },
+    });
+    expect(inputRange("2026-10-01", "2026-10-31", "Europe/London")).toEqual(
+      expect.objectContaining({ ok: true, days: 31 }),
+    );
+  });
+
   it(`allows ${MAX_RANGE_DAYS} days and refuses more, with a reason`, () => {
-    expect(inputRange("2026-08-01", "2026-08-31").ok).toBe(true);
-    const long = inputRange("2026-08-01", "2026-09-01");
+    expect(inputRange("2026-08-01", "2026-08-31", KOLKATA).ok).toBe(true);
+    const long = inputRange("2026-08-01", "2026-09-01", KOLKATA);
     expect(long.ok).toBe(false);
     if (!long.ok) expect(long.reason).toMatch(/32 days/);
   });
 
   it("refuses a backwards or half-empty range", () => {
-    expect(inputRange("2026-09-02", "2026-09-01").ok).toBe(false);
-    expect(inputRange("", "2026-09-01").ok).toBe(false);
+    expect(inputRange("2026-09-02", "2026-09-01", KOLKATA).ok).toBe(false);
+    expect(inputRange("", "2026-09-01", KOLKATA).ok).toBe(false);
   });
 });
 

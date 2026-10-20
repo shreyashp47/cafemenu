@@ -438,7 +438,7 @@ export const firestoreOrderRepo: OrderRepository = {
     });
   },
 
-  async assignDayNumber(id) {
+  async assignDayNumber(id, timeZone) {
     const { db, fs } = await dbAndFs();
     const orderRef = fs.doc(db, ORDERS, id);
     // runTransaction retries on contention. When two boards race for the same
@@ -478,6 +478,7 @@ export const firestoreOrderRepo: OrderRepository = {
             },
           },
           id,
+          timeZone,
         ),
       );
     try {
