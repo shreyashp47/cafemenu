@@ -1,0 +1,948 @@
+/**
+ * Behavioural test for firestore.rules (the platform database), run against
+ * the Firestore + Auth emulators, in the style of apps/cafe/scripts/rules-test.mjs.
+ *
+ * The rules are the only thing between one cafe owner and another's records,
+ * and between owners and the fields only the deployer may write. They are not
+ * TypeScript, so nothing else checks them. Every rule has a case here, and a
+ * denial must be the rules saying no (permission-denied), never some other
+ * failure.
+ *
+ * It drives the real client SDK, signed in as real emulator accounts, because
+ * `createdAt == request.time` can only be met with serverTimestamp(), and the
+ * difference between a verified owner, an unverified one and the admin is in
+ * their ID tokens.
+ *
+ *   npm run emulators            # terminal 1
+ *   npm run test:rules           # terminal 2
+ *
+ * or in one command, which starts and stops the emulators itself:
+ *
+ *   firebase emulators:exec --only auth,firestore --project demo-cafemenu "npm run test:rules"
+ *
+ * The emulators need Java 21+. Each run starts by wiping the emulators' data
+ * and accounts, so it never depends on what a previous run left. It refuses a
+ * project ID that does not start with "demo-": those never reach a real
+ * Firebase project.
+ */
+import { initializeApp, deleteApp } from "firebase/app";
+import {
+  connectAuthEmulator,
+  getAuth,
+  signInAnonymously,
+  signInWithEmailAndPassword,
+} from "firebase/auth";
+import {
+  addDoc,
+  collection,
+  connectFirestoreEmulator,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  getFirestore,
+  query,
+  serverTimestamp,
+  setDoc,
+  setLogLevel,
+  Timestamp,
+  updateDoc,
+  where,
+} from "firebase/firestore";
+
+const PROJECT = process.env.FIRESTORE_EMULATOR_PROJECT ?? "demo-cafemenu";
+if (!PROJECT.startsWith("demo-")) {
+  console.error(`refusing to run against "${PROJECT}": not a demo- project`);
+  process.exit(2);
+}
+// `firebase emulators:exec` exports these as "host:port".
+const [fsEnvHost, fsEnvPort] = (
+  process.env.FIRESTORE_EMULATOR_HOST ?? ""
+).split(":");
+const [, authEnvPort] = (process.env.FIREBASE_AUTH_EMULATOR_HOST ?? "").split(
+  ":",
+);
+const HOST = fsEnvHost || "127.0.0.1";
+const FS_PORT = Number(fsEnvPort || 8180);
+const AUTH_PORT = Number(authEnvPort || 9199);
+const CFG = { projectId: PROJECT, apiKey: "demo", authDomain: "demo.local" };
+// Every denial below would otherwise also be logged by the SDK as a warning.
+// The test checks each one's code itself.
+setLogLevel("silent");
+
+const FS_ADMIN = `http://${HOST}:${FS_PORT}`;
+const AUTH_ADMIN = `http://${HOST}:${AUTH_PORT}`;
+// The emulators accept this as the project's admin, which bypasses the rules:
+// how the backend's own writes are stood in for.
+const ADMIN_HEADERS = {
+  Authorization: "Bearer owner",
+  "Content-Type": "application/json",
+};
+
+let pass = 0;
+const failures = [];
+async function t(label, fn) {
+  try {
+    await fn();
+    pass += 1;
+    console.log(`  ok    ${label}`);
+  } catch (e) {
+    const msg = String(e?.message ?? e)
+      .split("\n")[0]
+      .trim()
+      .slice(0, 64);
+    failures.push(label);
+    console.log(`  FAIL  ${label}  -> ${msg}`);
+  }
+}
+// A denial has to be the rules saying no. Accepting any error would let a
+// broken setup step pass as "denied" while testing nothing.
+const denied = (fn) => async () => {
+  try {
+    await fn();
+  } catch (e) {
+    if (e?.code === "permission-denied") return;
+    throw new Error(
+      `failed, but not with permission-denied: ${e?.code ?? ""} ${String(
+        e?.message ?? e,
+      )
+        .split("\n")[0]
+        .slice(0, 40)}`,
+    );
+  }
+  throw new Error("was ALLOWED but should have been denied");
+};
+const allowed = (fn) => async () => {
+  try {
+    await fn();
+  } catch (e) {
+    throw new Error(
+      `was DENIED: ${String(e?.message ?? e)
+        .split("\n")[0]
+        .slice(0, 50)}`,
+    );
+  }
+};
+const expect = (ok, message) => {
+  if (!ok) throw new Error(message);
+};
+
+// -- a clean slate ----------------------------------------------------------
+
+const wipe = async (url) => {
+  const res = await fetch(url, { method: "DELETE", headers: ADMIN_HEADERS });
+  if (!res.ok) throw new Error(`could not wipe ${url}: ${res.status}`);
+};
+await wipe(
+  `${FS_ADMIN}/emulator/v1/projects/${PROJECT}/databases/(default)/documents`,
+);
+await wipe(`${AUTH_ADMIN}/emulator/v1/projects/${PROJECT}/accounts`);
+
+// -- accounts -----------------------------------------------------------------
+
+const PASSWORD = "correct-horse";
+async function account(email, { verified = false, admin = false } = {}) {
+  const res = await fetch(
+    `${AUTH_ADMIN}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=demo`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password: PASSWORD }),
+    },
+  ).then((r) => r.json());
+  if (!res.localId) {
+    throw new Error(`could not create ${email}: ${JSON.stringify(res)}`);
+  }
+  // What clicking the verification link and the backend's setCustomUserClaims
+  // do, done as the emulator's admin.
+  const update = await fetch(
+    `${AUTH_ADMIN}/identitytoolkit.googleapis.com/v1/projects/${PROJECT}/accounts:update`,
+    {
+      method: "POST",
+      headers: ADMIN_HEADERS,
+      body: JSON.stringify({
+        localId: res.localId,
+        emailVerified: verified,
+        ...(admin ? { customAttributes: JSON.stringify({ admin: true }) } : {}),
+      }),
+    },
+  );
+  if (!update.ok) {
+    throw new Error(`could not set up ${email}: ${await update.text()}`);
+  }
+  return { uid: res.localId, email };
+}
+
+const client = (name) => {
+  const a = initializeApp(CFG, name);
+  const auth = getAuth(a);
+  connectAuthEmulator(auth, `http://${HOST}:${AUTH_PORT}`, {
+    disableWarnings: true,
+  });
+  const db = getFirestore(a);
+  connectFirestoreEmulator(db, HOST, FS_PORT);
+  return { a, auth, db };
+};
+const signedInAs = async (name, acct) => {
+  const c = client(name);
+  await signInWithEmailAndPassword(c.auth, acct.email, PASSWORD);
+  return { ...c, ...acct };
+};
+
+const ALICE = await account("alice@owner.test", { verified: true });
+const BOB = await account("bob@owner.test", { verified: true });
+const CAROL = await account("carol@owner.test", { verified: true });
+const DAVE = await account("dave@owner.test"); // never clicked the link
+const LAPSED = await account("lapsed@owner.test"); // owns a cafe, unverified
+const ERIN = await account("erin@platform.test", {
+  verified: true,
+  admin: true,
+});
+const FRANK = await account("frank@platform.test", { admin: true }); // unverified
+
+const alice = await signedInAs("alice", ALICE);
+const bob = await signedInAs("bob", BOB);
+const carol = await signedInAs("carol", CAROL);
+const dave = await signedInAs("dave", DAVE);
+const lapsed = await signedInAs("lapsed", LAPSED);
+const erin = await signedInAs("erin", ERIN);
+const frank = await signedInAs("frank", FRANK);
+const nobody = client("nobody");
+const anon = client("anonymous");
+await signInAnonymously(anon.auth);
+const everyone = [alice, bob, carol, dave, lapsed, erin, frank, nobody, anon];
+
+// -- what the backend has written -------------------------------------------
+
+const toValue = (v) => {
+  if (v === null) return { nullValue: null };
+  if (typeof v === "string") return { stringValue: v };
+  if (typeof v === "boolean") return { booleanValue: v };
+  if (typeof v === "number") {
+    return Number.isInteger(v)
+      ? { integerValue: String(v) }
+      : { doubleValue: v };
+  }
+  if (v instanceof Date) return { timestampValue: v.toISOString() };
+  if (Array.isArray(v)) return { arrayValue: { values: v.map(toValue) } };
+  return {
+    mapValue: {
+      fields: Object.fromEntries(
+        Object.entries(v).map(([k, x]) => [k, toValue(x)]),
+      ),
+    },
+  };
+};
+// PATCH with the admin token: the emulator's REST layer refuses POST to a path
+// with an explicit id, and a seed that silently fails would make every test
+// below meaningless.
+const seed = async (path, data) => {
+  const res = await fetch(
+    `${FS_ADMIN}/v1/projects/${PROJECT}/databases/(default)/documents/${path}`,
+    {
+      method: "PATCH",
+      headers: ADMIN_HEADERS,
+      body: JSON.stringify({ fields: toValue(data).mapValue.fields }),
+    },
+  );
+  if (!res.ok) throw new Error(`could not seed ${path}: ${await res.text()}`);
+};
+
+const WHEN = new Date("2026-10-01T09:00:00Z");
+// DEFAULT_SETTINGS from @cafemenu/shared (packages/shared/src/settings.ts),
+// written out because this script is plain Node and cannot import TypeScript.
+const settings = (o = {}) => ({
+  schemaVersion: 1,
+  name: "Mochi & Beans",
+  tagline: "Good Coffee, Better Days",
+  theme: "cozy",
+  accent: null,
+  logo: null,
+  currency: "INR",
+  locale: "en-IN",
+  timeZone: "Asia/Kolkata",
+  utcOffsets: { standard: 330, daylight: 330 },
+  tables: [1, 2, 3, 4, 5, 6],
+  baseUrl: null,
+  plan: "free",
+  ...o,
+});
+const cafeRecord = (owner, o = {}) => ({
+  ownerUid: owner.uid,
+  ownerEmail: owner.email,
+  projectId: `${owner.email.split("@")[0]}-cafe`,
+  site: `${owner.email.split("@")[0]}-cafe`,
+  settings: settings({ name: "A Cafe" }),
+  release: {
+    channel: "stable",
+    pinned: null,
+    current: "1.1.0",
+    previous: "1.0.0",
+  },
+  status: "live",
+  createdAt: WHEN,
+  updatedAt: WHEN,
+  ...o,
+});
+await seed("cafes/cafe-a", cafeRecord(ALICE));
+await seed(
+  "cafes/cafe-a-draft",
+  cafeRecord(ALICE, {
+    projectId: null,
+    site: "alice-second",
+    status: "draft",
+    release: { channel: "stable", pinned: null, current: null, previous: null },
+  }),
+);
+await seed("cafes/cafe-b", cafeRecord(BOB));
+await seed("cafes/cafe-l", cafeRecord(LAPSED));
+await seed("releases/1.1.0", {
+  channel: "stable",
+  notes: "Fixes.",
+  publishedAt: WHEN,
+  schemaVersion: 2,
+  withdrawn: false,
+});
+await seed("releases/1.0.0", {
+  channel: "stable",
+  notes: "First.",
+  publishedAt: WHEN,
+  schemaVersion: 1,
+  withdrawn: false,
+});
+const deployment = (owner, cafeId, o = {}) => ({
+  cafeId,
+  ownerUid: owner.uid,
+  kind: "deploy",
+  version: "1.1.0",
+  fromVersion: "1.0.0",
+  status: "running",
+  trigger: "rollout",
+  steps: [{ id: "rules", label: "Deploy the rules", status: "running" }],
+  error: null,
+  createdAt: WHEN,
+  finishedAt: null,
+  ...o,
+});
+await seed("deployments/dep-a", deployment(ALICE, "cafe-a"));
+await seed("deployments/dep-b", deployment(BOB, "cafe-b"));
+
+// -- helpers ------------------------------------------------------------------
+
+/** A copy of `o` with no `key`, for "missing field" cases. */
+const without = (o, key) =>
+  Object.fromEntries(Object.entries(o).filter(([k]) => k !== key));
+
+const cafe = (c, id) => doc(c.db, "cafes", id);
+const mine = (c, uid = c.uid) =>
+  getDocs(query(collection(c.db, "cafes"), where("ownerUid", "==", uid)));
+const allCafes = (c) => getDocs(collection(c.db, "cafes"));
+// Mirrors newCafeRecord() in src/lib/platform/records.ts: what the console's
+// sign-up writes.
+const newCafe = (c, o = {}) => ({
+  ownerUid: c.uid,
+  ownerEmail: c.email,
+  projectId: null,
+  site: "carols-cafe",
+  settings: settings({ name: "Carol's" }),
+  release: { channel: "stable", pinned: null, current: null, previous: null },
+  status: "draft",
+  createdAt: serverTimestamp(),
+  updatedAt: serverTimestamp(),
+  ...o,
+});
+const create = (c, o) => addDoc(collection(c.db, "cafes"), newCafe(c, o));
+// An owner's edit, as the console makes it: field paths plus updatedAt.
+const edit = (c, id, patch) =>
+  updateDoc(cafe(c, id), { ...patch, updatedAt: serverTimestamp() });
+const release = (c, version) => doc(c.db, "releases", version);
+const deploy = (c, id) => doc(c.db, "deployments", id);
+const myDeployments = (c, cafeId) =>
+  getDocs(
+    query(
+      collection(c.db, "deployments"),
+      where("ownerUid", "==", c.uid),
+      where("cafeId", "==", cafeId),
+    ),
+  );
+
+console.log(`\nfirestore.rules vs the emulators (${PROJECT})\n`);
+
+// -- strangers ------------------------------------------------------------------
+
+console.log(" signed-out visitor and anonymous caller");
+for (const [who, c] of [
+  ["signed out", nobody],
+  ["anonymous", anon],
+]) {
+  await t(
+    `${who}: cannot read a cafe`,
+    denied(() => getDoc(cafe(c, "cafe-a"))),
+  );
+  await t(
+    `${who}: cannot list cafes`,
+    denied(() => allCafes(c)),
+  );
+  await t(
+    `${who}: cannot read releases`,
+    denied(() => getDocs(collection(c.db, "releases"))),
+  );
+  await t(
+    `${who}: cannot read a deployment`,
+    denied(() => getDoc(deploy(c, "dep-a"))),
+  );
+}
+await t(
+  "anonymous: cannot create a cafe, even one shaped right",
+  denied(() => create({ ...anon, uid: anon.auth.currentUser.uid, email: "" })),
+);
+
+// -- reading cafes ---------------------------------------------------------------
+
+console.log("\n owners reading cafes");
+await t(
+  "owner A reads their own cafe",
+  allowed(() => getDoc(cafe(alice, "cafe-a"))),
+);
+await t(
+  "owner A cannot read owner B's cafe",
+  denied(() => getDoc(cafe(alice, "cafe-b"))),
+);
+await t(
+  "owner B cannot read owner A's cafe",
+  denied(() => getDoc(cafe(bob, "cafe-a"))),
+);
+await t(
+  "owner A lists their own cafes, and gets only theirs",
+  allowed(async () => {
+    const snap = await mine(alice);
+    expect(snap.size === 2, `expected 2 cafes, got ${snap.size}`);
+    expect(
+      snap.docs.every((d) => d.data().ownerUid === ALICE.uid),
+      "a cafe of someone else came back",
+    );
+  }),
+);
+await t(
+  "owner A cannot list every cafe",
+  denied(() => allCafes(alice)),
+);
+await t(
+  "owner A cannot list owner B's cafes by asking for them",
+  denied(() => mine(alice, BOB.uid)),
+);
+await t(
+  "an unverified owner still reads their own cafe",
+  allowed(() => getDoc(cafe(lapsed, "cafe-l"))),
+);
+await t(
+  "an unverified account cannot read anyone else's",
+  denied(() => getDoc(cafe(dave, "cafe-a"))),
+);
+
+// -- creating cafes ----------------------------------------------------------------
+
+console.log("\n signing a cafe up");
+await t(
+  "a verified owner creates a draft cafe",
+  allowed(() => create(carol)),
+);
+await t(
+  "…with a project, on beta, staying on 1.1",
+  allowed(() =>
+    create(carol, {
+      projectId: "carols-cafe-1a2b3",
+      site: "carols-other-cafe",
+      release: {
+        channel: "beta",
+        pinned: "1.1",
+        current: null,
+        previous: null,
+      },
+    }),
+  ),
+);
+await t(
+  "an unverified account cannot create a cafe",
+  denied(() => create(dave)),
+);
+await t(
+  "cannot create a cafe for someone else",
+  denied(() => create(carol, { ownerUid: BOB.uid })),
+);
+await t(
+  "cannot create a cafe under someone else's email",
+  denied(() => create(carol, { ownerEmail: BOB.email })),
+);
+await t(
+  "cannot create a cafe that is already live",
+  denied(() => create(carol, { status: "live" })),
+);
+await t(
+  "cannot create a cafe already on a release (current)",
+  denied(() =>
+    create(carol, {
+      release: {
+        channel: "stable",
+        pinned: null,
+        current: "1.1.0",
+        previous: null,
+      },
+    }),
+  ),
+);
+await t(
+  "cannot create a cafe with a rollback target (previous)",
+  denied(() =>
+    create(carol, {
+      release: {
+        channel: "stable",
+        pinned: null,
+        current: null,
+        previous: "1.0.0",
+      },
+    }),
+  ),
+);
+await t(
+  "cannot slip an extra key into release",
+  denied(() =>
+    create(carol, {
+      release: {
+        channel: "stable",
+        pinned: null,
+        current: null,
+        previous: null,
+        target: "9.9.9",
+      },
+    }),
+  ),
+);
+await t(
+  "cannot create a cafe with an extra field (plan)",
+  denied(() => create(carol, { plan: "pro" })),
+);
+await t(
+  "cannot create a cafe missing a field (projectId)",
+  denied(() =>
+    addDoc(collection(carol.db, "cafes"), without(newCafe(carol), "projectId")),
+  ),
+);
+await t(
+  "cannot create on an unknown channel",
+  denied(() =>
+    create(carol, {
+      release: {
+        channel: "nightly",
+        pinned: null,
+        current: null,
+        previous: null,
+      },
+    }),
+  ),
+);
+await t(
+  "cannot pin to something that is not a minor line",
+  denied(() =>
+    create(carol, {
+      release: {
+        channel: "stable",
+        pinned: "latest",
+        current: null,
+        previous: null,
+      },
+    }),
+  ),
+);
+for (const site of [
+  "Carols-Cafe",
+  "carols_cafe",
+  "-carols",
+  "carols-",
+  "a".repeat(31),
+]) {
+  await t(
+    `cannot create with site name "${site.length > 12 ? `${site.slice(0, 6)}… (${site.length})` : site}"`,
+    denied(() => create(carol, { site })),
+  );
+}
+await t(
+  "cannot create with a malformed project ID",
+  denied(() => create(carol, { projectId: "Carols_Project" })),
+);
+await t(
+  "cannot create with settings that are not a map",
+  denied(() => create(carol, { settings: "Carol's" })),
+);
+await t(
+  "cannot create with a setting missing (currency)",
+  denied(() => create(carol, { settings: without(settings(), "currency") })),
+);
+await t(
+  "cannot create with a setting that does not exist",
+  denied(() => create(carol, { settings: settings({ admin: true }) })),
+);
+for (const [what, bad] of [
+  ["an empty name", { name: "" }],
+  ["a 61-character name", { name: "x".repeat(61) }],
+  ["a lower-case currency", { currency: "inr" }],
+  ["a colour that is not #RRGGBB", { accent: "red" }],
+  ["table 51", { tables: [1, 51] }],
+  ["no tables", { tables: [] }],
+  ["a base URL with a path", { baseUrl: "https://their-cafe.web.app/order" }],
+  ["offsets as text", { utcOffsets: { standard: "330", daylight: 330 } }],
+  ["schema version 0", { schemaVersion: 0 }],
+]) {
+  await t(
+    `cannot create with ${what} in the settings`,
+    denied(() => create(carol, { settings: settings(bad) })),
+  );
+}
+await t(
+  "cannot create a cafe on a paid plan",
+  denied(() => create(carol, { settings: settings({ plan: "pro" }) })),
+);
+await t(
+  "settings may name a theme a newer release has",
+  allowed(() =>
+    create(carol, {
+      site: "carols-themed",
+      settings: settings({ theme: "minimal", accent: "#1D6A51" }),
+    }),
+  ),
+);
+await t(
+  "cannot backdate a cafe (createdAt from the client)",
+  denied(() => create(carol, { createdAt: Timestamp.now() })),
+);
+await t(
+  "cannot take over an existing cafe by writing its id",
+  denied(() => setDoc(cafe(carol, "cafe-b"), newCafe(carol))),
+);
+
+// -- owners editing their cafe ------------------------------------------------------
+
+console.log("\n owners editing their cafe");
+await t(
+  "owner A changes their cafe's settings",
+  allowed(() =>
+    edit(alice, "cafe-a", {
+      settings: settings({ name: "Alice's", currency: "EUR", locale: "en-IE" }),
+    }),
+  ),
+);
+await t(
+  "owner A cannot put their cafe on a paid plan",
+  denied(() => edit(alice, "cafe-a", { settings: settings({ plan: "pro" }) })),
+);
+await seed(
+  "cafes/cafe-pro",
+  cafeRecord(ALICE, { site: "alice-pro", settings: settings({ plan: "pro" }) }),
+);
+await t(
+  "owner A cannot move a cafe off the plan the backend gave it",
+  denied(() => edit(alice, "cafe-pro", { settings: settings() })),
+);
+await t(
+  "…but edits its other settings, plan unchanged",
+  allowed(() =>
+    edit(alice, "cafe-pro", {
+      settings: settings({ name: "Pro", plan: "pro" }),
+    }),
+  ),
+);
+await t(
+  "owner A cannot change one setting to something invalid",
+  denied(() => edit(alice, "cafe-a", { "settings.tables": [0] })),
+);
+await t(
+  "owner A cannot remove a setting",
+  denied(() =>
+    edit(alice, "cafe-a", { settings: without(settings(), "tagline") }),
+  ),
+);
+await t(
+  "owner A switches to beta",
+  allowed(() => edit(alice, "cafe-a", { "release.channel": "beta" })),
+);
+await t(
+  "owner A stays on 1.1",
+  allowed(() => edit(alice, "cafe-a", { "release.pinned": "1.1" })),
+);
+await t(
+  "owner A follows new versions again (no pin), on stable",
+  allowed(() =>
+    edit(alice, "cafe-a", {
+      "release.pinned": null,
+      "release.channel": "stable",
+    }),
+  ),
+);
+await t(
+  "owner A cannot change release.current",
+  denied(() => edit(alice, "cafe-a", { "release.current": "9.9.9" })),
+);
+await t(
+  "owner A cannot clear release.current",
+  denied(() => edit(alice, "cafe-a", { "release.current": null })),
+);
+await t(
+  "owner A cannot change release.previous",
+  denied(() => edit(alice, "cafe-a", { "release.previous": "0.9.0" })),
+);
+await t(
+  "owner A cannot add a key to release",
+  denied(() => edit(alice, "cafe-a", { "release.target": "9.9.9" })),
+);
+await t(
+  "owner A cannot replace release wholesale with a new current",
+  denied(() =>
+    edit(alice, "cafe-a", {
+      release: {
+        channel: "stable",
+        pinned: null,
+        current: "9.9.9",
+        previous: "1.1.0",
+      },
+    }),
+  ),
+);
+await t(
+  "owner A cannot pin to a non-minor-line",
+  denied(() => edit(alice, "cafe-a", { "release.pinned": "1.x" })),
+);
+await t(
+  "owner A cannot pick an unknown channel",
+  denied(() => edit(alice, "cafe-a", { "release.channel": "nightly" })),
+);
+await t(
+  "owner A cannot change the status",
+  denied(() => edit(alice, "cafe-a", { status: "suspended" })),
+);
+await t(
+  "owner A cannot mark a draft live",
+  denied(() => edit(alice, "cafe-a-draft", { status: "live" })),
+);
+await t(
+  "owner A cannot hand the cafe to someone else",
+  denied(() => edit(alice, "cafe-a", { ownerUid: BOB.uid })),
+);
+await t(
+  "owner A cannot change the owner email",
+  denied(() => edit(alice, "cafe-a", { ownerEmail: "someone@else.test" })),
+);
+await t(
+  "owner A cannot rewrite createdAt",
+  denied(() => edit(alice, "cafe-a", { createdAt: serverTimestamp() })),
+);
+await t(
+  "owner A cannot add a field (plan)",
+  denied(() => edit(alice, "cafe-a", { plan: "pro" })),
+);
+await t(
+  "an edit must stamp updatedAt with the server time",
+  denied(() =>
+    updateDoc(cafe(alice, "cafe-a"), {
+      settings: settings({ name: "x" }),
+      updatedAt: Timestamp.now(),
+    }),
+  ),
+);
+await t(
+  "owner A cannot change the project of a live cafe",
+  denied(() => edit(alice, "cafe-a", { projectId: "other-project" })),
+);
+await t(
+  "owner A cannot change the site of a live cafe",
+  denied(() => edit(alice, "cafe-a", { site: "other-site" })),
+);
+await t(
+  "owner A connects a project to their draft cafe",
+  allowed(() =>
+    edit(alice, "cafe-a-draft", { projectId: "alice-second-1a2b" }),
+  ),
+);
+await t(
+  "owner A renames the site of their draft cafe",
+  allowed(() => edit(alice, "cafe-a-draft", { site: "alice-two" })),
+);
+await t(
+  "…but not to a malformed project ID",
+  denied(() => edit(alice, "cafe-a-draft", { projectId: "Not A Project" })),
+);
+await t(
+  "owner B cannot edit owner A's cafe",
+  denied(() =>
+    edit(bob, "cafe-a", { settings: settings({ name: "Bob's now" }) }),
+  ),
+);
+await t(
+  "owner B cannot change owner A's release choice",
+  denied(() => edit(bob, "cafe-a", { "release.channel": "beta" })),
+);
+await t(
+  "an unverified owner cannot edit their own cafe",
+  denied(() => edit(lapsed, "cafe-l", { settings: settings({ name: "x" }) })),
+);
+await t(
+  "owner A cannot delete their cafe",
+  denied(() => deleteDoc(cafe(alice, "cafe-a"))),
+);
+
+// -- releases ---------------------------------------------------------------------
+
+console.log("\n releases");
+await t(
+  "a verified owner reads the releases",
+  allowed(async () => {
+    const snap = await getDocs(collection(alice.db, "releases"));
+    expect(snap.size === 2, `expected 2 releases, got ${snap.size}`);
+  }),
+);
+await t(
+  "an unverified account cannot read the releases",
+  denied(() => getDocs(collection(dave.db, "releases"))),
+);
+await t(
+  "an owner cannot publish a release",
+  denied(() =>
+    setDoc(release(alice, "9.9.9"), {
+      channel: "stable",
+      notes: "",
+      publishedAt: serverTimestamp(),
+      schemaVersion: 1,
+      withdrawn: false,
+    }),
+  ),
+);
+await t(
+  "an owner cannot edit release notes",
+  denied(() => updateDoc(release(alice, "1.1.0"), { notes: "Edited." })),
+);
+await t(
+  "an owner cannot withdraw a release",
+  denied(() => updateDoc(release(alice, "1.1.0"), { withdrawn: true })),
+);
+await t(
+  "an owner cannot delete a release",
+  denied(() => deleteDoc(release(alice, "1.0.0"))),
+);
+
+// -- deployments ------------------------------------------------------------------
+
+console.log("\n deployments");
+await t(
+  "owner A reads a deployment of their cafe",
+  allowed(() => getDoc(deploy(alice, "dep-a"))),
+);
+await t(
+  "owner A cannot read owner B's deployment",
+  denied(() => getDoc(deploy(alice, "dep-b"))),
+);
+await t(
+  "owner A lists their cafe's deployments",
+  allowed(async () => {
+    const snap = await myDeployments(alice, "cafe-a");
+    expect(snap.size === 1, `expected 1 deployment, got ${snap.size}`);
+  }),
+);
+await t(
+  "owner A cannot list every deployment",
+  denied(() => getDocs(collection(alice.db, "deployments"))),
+);
+await t(
+  "owner A cannot list owner B's cafe's deployments",
+  denied(() =>
+    getDocs(
+      query(
+        collection(alice.db, "deployments"),
+        where("cafeId", "==", "cafe-b"),
+      ),
+    ),
+  ),
+);
+await t(
+  "owner A cannot mark a deploy done",
+  denied(() =>
+    updateDoc(deploy(alice, "dep-a"), {
+      status: "succeeded",
+      finishedAt: serverTimestamp(),
+    }),
+  ),
+);
+await t(
+  "owner A cannot record a deployment of their own",
+  denied(() =>
+    setDoc(
+      deploy(alice, "dep-forged"),
+      deployment(alice, "cafe-a", {
+        status: "succeeded",
+        createdAt: serverTimestamp(),
+      }),
+    ),
+  ),
+);
+await t(
+  "owner A cannot delete a deployment",
+  denied(() => deleteDoc(deploy(alice, "dep-a"))),
+);
+await t(
+  "owner B cannot read owner A's deployment",
+  denied(() => getDoc(deploy(bob, "dep-a"))),
+);
+
+// -- the admin --------------------------------------------------------------------
+
+console.log("\n the platform admin (custom claim)");
+await t(
+  "the admin reads any cafe",
+  allowed(() => getDoc(cafe(erin, "cafe-b"))),
+);
+await t(
+  "the admin lists every cafe",
+  allowed(async () => {
+    const snap = await allCafes(erin);
+    expect(snap.size >= 4, `expected every cafe, got ${snap.size}`);
+  }),
+);
+await t(
+  "the admin lists every deployment",
+  allowed(() => getDocs(collection(erin.db, "deployments"))),
+);
+await t(
+  "the admin reads the releases",
+  allowed(() => getDocs(collection(erin.db, "releases"))),
+);
+await t(
+  "the admin cannot change release.current from a browser",
+  denied(() => edit(erin, "cafe-a", { "release.current": "1.0.0" })),
+);
+await t(
+  "the admin cannot change a cafe's status from a browser",
+  denied(() => edit(erin, "cafe-b", { status: "suspended" })),
+);
+await t(
+  "the admin cannot mark a deploy done from a browser",
+  denied(() => updateDoc(deploy(erin, "dep-b"), { status: "succeeded" })),
+);
+await t(
+  "the admin cannot publish a release from a browser",
+  denied(() =>
+    setDoc(release(erin, "9.9.9"), {
+      channel: "stable",
+      notes: "",
+      publishedAt: serverTimestamp(),
+      schemaVersion: 1,
+      withdrawn: false,
+    }),
+  ),
+);
+await t(
+  "an admin claim on an unverified account is not enough",
+  denied(() => allCafes(frank)),
+);
+
+console.log(`\n${pass} passed, ${failures.length} failed`);
+for (const f of failures) console.log(`  - ${f}`);
+await Promise.all(everyone.map((c) => deleteApp(c.a)));
+process.exit(failures.length ? 1 : 0);
