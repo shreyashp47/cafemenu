@@ -18,6 +18,7 @@ import {
   subscribeSettings,
 } from "@/lib/settings";
 import type { SiteFile } from "@cafemenu/shared";
+import { primeSuiteBoot } from "@/test/cafe";
 
 const CONFIG = {
   apiKey: "k",
@@ -50,7 +51,7 @@ function keptOnDevice(settings: Partial<CafeSettings>) {
 
 afterEach(() => {
   vi.unstubAllGlobals();
-  primeBoot({ backend: { kind: "demo" }, site: { status: "missing" } });
+  primeSuiteBoot();
 });
 
 describe("before anything has answered", () => {

@@ -1073,21 +1073,32 @@ await t(
 // the owner's included. Seeded over REST with the emulator's admin token,
 // which stands in for the platform.
 console.log("\n config/site (the cafe's settings)");
-const SITE_SETTINGS = {
-  schemaVersion: 1,
-  name: "Rules Test Cafe",
-  tagline: "Checked on every pull request",
-  theme: "cozy",
-  accent: null,
-  logo: null,
-  currency: "INR",
-  locale: "en-IN",
-  timeZone: "Asia/Kolkata",
-  utcOffsets: { standard: 330, daylight: 330 },
-  tables: [1, 2, 3, 4, 5, 6],
-  baseUrl: null,
-  plan: "free",
+// With CAFE_FIXTURE=toe (CI does this), the settings seeded are that fixture
+// cafe's own, from fixtures/ (issue #18).
+const FIXTURE = process.env.CAFE_FIXTURE?.trim();
+const readFixture = async (name) => {
+  const { readFile } = await import("node:fs/promises");
+  const file = new URL(`../fixtures/${name}.json`, import.meta.url);
+  return JSON.parse(await readFile(file, "utf8"));
 };
+const SITE_SETTINGS = FIXTURE
+  ? await readFixture(FIXTURE)
+  : {
+      schemaVersion: 1,
+      name: "Rules Test Cafe",
+      tagline: "Checked on every pull request",
+      theme: "cozy",
+      accent: null,
+      logo: null,
+      currency: "INR",
+      locale: "en-IN",
+      timeZone: "Asia/Kolkata",
+      utcOffsets: { standard: 330, daylight: 330 },
+      tables: [1, 2, 3, 4, 5, 6],
+      baseUrl: null,
+      plan: "free",
+    };
+if (FIXTURE) console.log(`  (seeded as fixtures/${FIXTURE}.json)`);
 // Plain JSON to the REST API's typed values.
 const restValue = (v) => {
   if (v === null) return { nullValue: null };

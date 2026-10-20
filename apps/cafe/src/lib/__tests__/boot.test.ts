@@ -14,13 +14,13 @@ import {
   boot,
   parseFirebaseConfig,
   peekBoot,
-  primeBoot,
   readDeviceConfig,
   resolveBoot,
   retryBoot,
   type BootDeps,
 } from "@/lib/boot";
 import type { FirebaseWebConfig } from "@/lib/config";
+import { primeSuiteBoot } from "@/test/cafe";
 
 const INIT = {
   apiKey: "AIza-test-key",
@@ -321,8 +321,8 @@ describe("parseFirebaseConfig", () => {
 describe("boot(): once per page", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
-    // Back to the demo mode the rest of the suite runs in (src/test/setup.ts).
-    primeBoot({ backend: { kind: "demo" }, site: { status: "missing" } });
+    // Back to the cafe the rest of the suite runs as (src/test/cafe.ts).
+    primeSuiteBoot();
   });
 
   it("is shared by every caller, and peekable once it has settled", async () => {

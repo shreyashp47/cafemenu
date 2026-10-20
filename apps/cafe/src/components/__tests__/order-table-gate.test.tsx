@@ -4,7 +4,6 @@
  * Firebase config), with the list saved the way /admin/qr saves it.
  */
 
-import { DEFAULT_SETTINGS } from "@cafemenu/shared";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -15,6 +14,7 @@ import { loadDemoState, resetDemoStore } from "@/lib/data/demo-store";
 import { DEMO_CREDENTIALS } from "@/lib/data/seed";
 import { forgetLastOrder } from "@/lib/order-throttle";
 import { forgetTableKeys, readTableKey } from "@/lib/table-keys";
+import { SUITE_SETTINGS } from "@/test/cafe";
 
 // No router in a unit test: stand in the query string it would read, as the
 // useTableQuery tests do.
@@ -44,7 +44,7 @@ describe("/order table check", () => {
     openAt("?table=9");
     // The menu's header carries the cafe name; the picker does not.
     expect(
-      await screen.findByRole("heading", { name: DEFAULT_SETTINGS.name }),
+      await screen.findByRole("heading", { name: SUITE_SETTINGS.name }),
     ).toBeInTheDocument();
     expect(screen.queryByText("That table number looks odd")).toBeNull();
   });
@@ -78,13 +78,13 @@ describe("/order table check", () => {
 describe("/order and the table's QR code", () => {
   it("remembers the code from a scanned link for later", async () => {
     openAt("?table=3&k=ScannedCode1");
-    await screen.findByRole("heading", { name: DEFAULT_SETTINGS.name });
+    await screen.findByRole("heading", { name: SUITE_SETTINGS.name });
     expect(readTableKey(3)).toBe("ScannedCode1");
   });
 
   it("ignores a code of the wrong shape", async () => {
     openAt("?table=3&k=bad");
-    await screen.findByRole("heading", { name: DEFAULT_SETTINGS.name });
+    await screen.findByRole("heading", { name: SUITE_SETTINGS.name });
     expect(readTableKey(3)).toBeNull();
   });
 
@@ -134,7 +134,7 @@ async function signInOwner() {
 }
 
 async function placeFirstItem(user: ReturnType<typeof userEvent.setup>) {
-  await screen.findByRole("heading", { name: DEFAULT_SETTINGS.name });
+  await screen.findByRole("heading", { name: SUITE_SETTINGS.name });
   const add = (await screen.findAllByRole("button", { name: /^Add$/ }))[0];
   await user.click(add);
   await user.click(screen.getByRole("button", { name: /View order/ }));
