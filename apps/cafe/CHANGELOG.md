@@ -21,6 +21,17 @@ Work that is built but not yet merged is tracked in
   `NEXT_PUBLIC_TABLES` and `NEXT_PUBLIC_BASE_URL` are gone (#9).
 - The build's page titles and manifest no longer name a cafe: the title is set
   at runtime, and the deployer writes `manifest.webmanifest` per cafe.
+- **The cafe's own time zone** (#13). Daily order numbers start again at
+  midnight in `settings.timeZone`, daylight saving included, instead of at IST
+  midnight. Reports, order history ("Today", "This month", the dates on each
+  row) and the CSV count the cafe's days, not those of the device the owner is
+  looking from. The CSV's local-time column names the zone ("Placed
+  (Europe/London)"); India's keeps "Placed (IST)". For Asia/Kolkata every day
+  and number is what it was.
+- `firestore.rules`: the day an order is numbered under is checked against the
+  zone's two offsets in `config/site` (one more document read per numbered
+  order). Without `config/site` it is India's, as before. See
+  docs/decisions.md, "Any time zone".
 
 ### Added
 
