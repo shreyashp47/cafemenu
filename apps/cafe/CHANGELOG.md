@@ -99,6 +99,12 @@ Work that is built but not yet merged is tracked in
   `init.json` and `site.json`, nor on WebKit reporting an abandoned Next.js
   prefetch. The audit also plants its demo session before the page loads
   instead of loading the app first, which is what caused that prefetch.
+- In demo mode, a tab could miss another tab's write until the next one: the
+  customer's screen sometimes stayed on "Your number is coming…" after staff
+  accepted the order, with the number already on the board (#63). Tabs now
+  re-read the demo store on the browser's `storage` event instead of a
+  BroadcastChannel message, which could arrive before the data it announced.
+  Firestore was never affected.
 
 ### Upgrading
 

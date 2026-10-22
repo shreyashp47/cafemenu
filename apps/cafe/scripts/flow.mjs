@@ -10,7 +10,7 @@
  * "Approve new tables" switch off again, orders skip the wait.
  *
  * Runs against `next dev` (or BASE_URL) in demo mode, where "live" is
- * localStorage + BroadcastChannel. Also fails on any console error.
+ * localStorage and its `storage` events. Also fails on any console error.
  *
  *   npm run flow                 # same as: node scripts/flow.mjs
  *
