@@ -63,6 +63,16 @@ async function walk(dir) {
   return files;
 }
 
+/** One file as Hosting takes it: {path: "/index.html", hash, gzipped}. */
+export function hostingFile(path, bytes) {
+  const gzipped = gzipSync(bytes, { level: 9 });
+  return {
+    path,
+    hash: createHash("sha256").update(gzipped).digest("hex"),
+    gzipped,
+  };
+}
+
 /**
  * Every file under `dir` that isn't ignored, sorted by path:
  * [{path: "/index.html", hash, gzipped}]. Gzip output is deterministic for
@@ -81,12 +91,7 @@ export async function collectFiles(dir, { ignore = DEFAULT_IGNORE } = {}) {
   for (const full of paths) {
     const rel = relative(dir, full).split(sep).join("/");
     if (isIgnored(rel, ignore)) continue;
-    const gzipped = gzipSync(await readFile(full), { level: 9 });
-    files.push({
-      path: `/${rel}`,
-      hash: createHash("sha256").update(gzipped).digest("hex"),
-      gzipped,
-    });
+    files.push(hostingFile(`/${rel}`, await readFile(full)));
   }
   if (files.length === 0) {
     throw new UsageError(`The build folder ${dir} has no files to deploy.`);

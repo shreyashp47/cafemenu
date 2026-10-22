@@ -49,10 +49,27 @@ export const PERMISSIONS = {
       "firebasehosting.sites.update",
       "create, upload, finalize and release a version",
     ],
+    ["datastore.entities.get", "read config/meta and config/site"],
+    ["datastore.entities.create", "write config/site the first time"],
+    ["datastore.entities.update", "write config/site"],
   ],
   rollback: [
     ["firebasehosting.sites.get", "list the site's past releases"],
     ["firebasehosting.sites.update", "release an earlier version again"],
+    ["datastore.entities.get", "read config/meta's schema version"],
+    ["firebaserules.releases.get", "read which rules are live"],
+    ["firebaserules.rulesets.get", "check the earlier rules still exist"],
+    ["firebaserules.releases.update", "make the earlier rules live again"],
+  ],
+  "sync-branding": [
+    ["datastore.entities.get", "read config/site"],
+    ["datastore.entities.create", "write config/site the first time"],
+    ["datastore.entities.update", "write config/site"],
+    ["firebasehosting.sites.get", "read the live Hosting version's files"],
+    [
+      "firebasehosting.sites.update",
+      "create and release a version with the new branding",
+    ],
   ],
   owner: [
     ["firebaseauth.users.get", "find the owner's account"],

@@ -51,10 +51,14 @@ async function readText(path, read = fsReadFile) {
 // --- Rules -----------------------------------------------------------------
 
 export async function deployRules(ctx, rulesPath) {
+  const content = await readText(rulesPath, ctx.readFile);
+  return deployRulesSource(ctx, basename(rulesPath), content);
+}
+
+/** Makes `content` the live Firestore rules, unless it already is. */
+export async function deployRulesSource(ctx, fileName, content) {
   const { api, log, project } = ctx;
   log.step("Firestore rules");
-  const content = await readText(rulesPath, ctx.readFile);
-  const fileName = basename(rulesPath);
 
   const release = await getRelease(api, project, FIRESTORE_RELEASE);
   if (release) {
@@ -153,12 +157,18 @@ export function parseIndexesFile(text, path = "indexes file") {
 }
 
 export async function deployIndexes(ctx, indexesPath) {
-  const { api, log, project } = ctx;
-  log.step("Firestore indexes");
-  const spec = parseIndexesFile(
+  return deployIndexesText(
+    ctx,
     await readText(indexesPath, ctx.readFile),
     indexesPath,
   );
+}
+
+/** Builds every index in firestore.indexes.json's `text` that doesn't exist yet. */
+export async function deployIndexesText(ctx, text, label) {
+  const { api, log, project } = ctx;
+  log.step("Firestore indexes");
+  const spec = parseIndexesFile(text, label);
   if (spec.fieldOverrides.length) {
     log.warn(
       `${spec.fieldOverrides.length} fieldOverrides skipped: this draft doesn't deploy them yet`,
@@ -223,7 +233,7 @@ export async function deployIndexes(ctx, indexesPath) {
 
 // --- Hosting ---------------------------------------------------------------
 
-const canonical = (value) =>
+export const canonical = (value) =>
   JSON.stringify(value, (_, v) =>
     v && typeof v === "object" && !Array.isArray(v)
       ? Object.fromEntries(
@@ -263,15 +273,25 @@ export async function deployHosting(
   ctx,
   { site, dir, configPath, target, message },
 ) {
-  const { api, log, dryRun } = ctx;
-  log.step(`Hosting ${site}.web.app`);
+  ctx.log.step(`Hosting ${site}.web.app`);
   const { config, ignore } = configPath
     ? await readHostingConfig(configPath, target, { read: ctx.readFile })
     : { config: {}, ignore: DEFAULT_IGNORE };
   const files = await collectFiles(dir, { ignore });
   const bytes = files.reduce((sum, f) => sum + f.gzipped.length, 0);
-  log.info(`${files.length} files in ${dir}, ${kilobytes(bytes)} gzipped`);
+  ctx.log.info(`${files.length} files in ${dir}, ${kilobytes(bytes)} gzipped`);
+  return deployHostingFiles(ctx, { site, files, config, message });
+}
 
+/**
+ * Makes a version of exactly `files` ([{path, hash, gzipped}], sorted by
+ * path) with `config` live, unless the live version already is that. A file
+ * may leave out `gzipped` when its content is already on Hosting (it comes
+ * from a version Hosting has); if Hosting asks for it anyway, this fails
+ * before anything goes live.
+ */
+export async function deployHostingFiles(ctx, { site, files, config, message }) {
+  const { api, log, dryRun } = ctx;
   const live = await getLiveRelease(api, site);
   if (await liveMatches(api, live, files, config)) {
     log.same(
@@ -303,7 +323,9 @@ export async function deployHosting(
     }
 
     // Several paths can share one hash; each content is uploaded once.
-    const byHash = new Map(files.map((f) => [f.hash, f]));
+    const byHash = new Map(
+      files.filter((f) => f.gzipped).map((f) => [f.hash, f]),
+    );
     const unknown = [...required].filter((hash) => !byHash.has(hash));
     if (unknown.length)
       throw new Error(
@@ -315,7 +337,7 @@ export async function deployHosting(
       uploadFile(api, uploadUrl, hash, byHash.get(hash).gzipped),
     );
     log.info(
-      `uploaded ${required.size} file(s); Hosting already had the other ${byHash.size - required.size}`,
+      `uploaded ${required.size} file(s); Hosting already had the other ${new Set(files.map((f) => f.hash)).size - required.size}`,
     );
 
     await finalizeVersion(api, version.name);

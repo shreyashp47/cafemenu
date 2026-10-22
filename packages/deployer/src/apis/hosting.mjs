@@ -143,6 +143,14 @@ export async function getLiveRelease(api, site) {
   return channel?.release ?? null;
 }
 
+/** A version: {name, status, config, …}. */
+export async function getVersion(api, versionName) {
+  // https://firebase.google.com/docs/reference/hosting/rest/v1beta1/sites.versions/get
+  // GET v1beta1/{version} → Version
+  // UNVERIFIED: run in spike #5
+  return api.get(`${HOSTING}/${versionName}`);
+}
+
 /** [{path, hash, status}] for every file in a version. */
 export async function listVersionFiles(api, versionName) {
   // https://firebase.google.com/docs/reference/hosting/rest/v1beta1/sites.versions.files/list

@@ -97,27 +97,45 @@ export async function patchDocument(api, project, path, fields, fieldPaths) {
 
 // --- Firestore value encoding (only the types the deployer writes) ---------
 
+/** One JSON-like value as a Firestore Value. */
+export function encodeValue(value, key = "value") {
+  if (value === null) return { nullValue: null };
+  if (typeof value === "string") return { stringValue: value };
+  if (typeof value === "boolean") return { booleanValue: value };
+  if (Number.isInteger(value)) return { integerValue: String(value) };
+  if (typeof value === "number" && Number.isFinite(value))
+    return { doubleValue: value };
+  if (Array.isArray(value)) {
+    return {
+      arrayValue: value.length
+        ? { values: value.map((item) => encodeValue(item, key)) }
+        : {},
+    };
+  }
+  if (typeof value === "object") return { mapValue: { fields: encodeFields(value) } };
+  throw new Error(`Can't encode ${key}: ${typeof value}`);
+}
+
 export function encodeFields(object) {
   return Object.fromEntries(
-    Object.entries(object).map(([key, value]) => {
-      if (typeof value === "string") return [key, { stringValue: value }];
-      if (typeof value === "boolean") return [key, { booleanValue: value }];
-      if (Number.isInteger(value))
-        return [key, { integerValue: String(value) }];
-      throw new Error(`Can't encode ${key}: ${typeof value}`);
-    }),
+    Object.entries(object).map(([key, value]) => [key, encodeValue(value, key)]),
   );
+}
+
+/** A Firestore Value as JSON-like data; types the deployer never writes are undefined. */
+export function decodeValue(value) {
+  if ("stringValue" in value) return value.stringValue;
+  if ("booleanValue" in value) return value.booleanValue;
+  if ("integerValue" in value) return Number(value.integerValue);
+  if ("doubleValue" in value) return value.doubleValue;
+  if ("nullValue" in value) return null;
+  if ("arrayValue" in value) return (value.arrayValue.values ?? []).map(decodeValue);
+  if ("mapValue" in value) return decodeFields(value.mapValue.fields);
+  return undefined;
 }
 
 export function decodeFields(fields = {}) {
   return Object.fromEntries(
-    Object.entries(fields).map(([key, value]) => {
-      if ("stringValue" in value) return [key, value.stringValue];
-      if ("booleanValue" in value) return [key, value.booleanValue];
-      if ("integerValue" in value) return [key, Number(value.integerValue)];
-      if ("doubleValue" in value) return [key, value.doubleValue];
-      if ("nullValue" in value) return [key, null];
-      return [key, undefined];
-    }),
+    Object.entries(fields).map(([key, value]) => [key, decodeValue(value)]),
   );
 }
