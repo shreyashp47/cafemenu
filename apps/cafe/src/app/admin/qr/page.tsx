@@ -39,6 +39,7 @@ import { useCafeSettings } from "@/hooks/useCafeSettings";
 import { qrToSvg } from "@/lib/qr";
 import { generateTableKey, tablesWithoutKey } from "@/lib/table-keys";
 import { orderHref } from "@/lib/tables";
+import { t } from "@/lib/i18n";
 
 export default function QrPage() {
   const { settings } = useCafeSettings();
@@ -58,7 +59,7 @@ export default function QrPage() {
 
   const createKeys = useCallback(
     async (forTables: number[]) => {
-      if (!repo) throw new Error("Storage is not ready yet.");
+      if (!repo) throw new Error(t("common.storageNotReady"));
       if (forTables.length === 0) return;
       const fresh: Record<number, string> = {};
       for (const n of forTables) fresh[n] = generateTableKey();
@@ -69,7 +70,7 @@ export default function QrPage() {
 
   const saveTables = useCallback(
     async (next: number[]) => {
-      if (!repo) throw new Error("Storage is not ready yet.");
+      if (!repo) throw new Error(t("common.storageNotReady"));
       await repo.saveTables(next);
       // A table added to a cafe that already uses codes gets one straight away,
       // so it is never the one open door. Not before the owner has opted in:
@@ -93,11 +94,8 @@ export default function QrPage() {
   return (
     <div className="flex flex-col gap-4 pb-8">
       <Card className="p-4 print:hidden">
-        <h2 className="text-lg">Your tables</h2>
-        <p className="text-muted mt-0.5 mb-3 text-sm">
-          A QR code for any other number is turned away. Changes reach
-          customers&apos; phones straight away.
-        </p>
+        <h2 className="text-lg">{t("qr.tables")}</h2>
+        <p className="text-muted mt-0.5 mb-3 text-sm">{t("qr.qrCodeAny")}</p>
         <TableListEditor
           tables={tables}
           saved={saved}
@@ -115,24 +113,20 @@ export default function QrPage() {
       />
 
       <Card className="p-4 print:hidden">
-        <h2 className="text-lg">Table QR codes</h2>
-        <p className="text-muted mt-0.5 text-sm">
-          Print this page, cut along the lines, and put one card on each table.
-          A card keeps working until you make a new code for its table, or
-          change the address below.
-        </p>
+        <h2 className="text-lg">{t("qr.tableQrCodes")}</h2>
+        <p className="text-muted mt-0.5 text-sm">{t("qr.printPageCut")}</p>
 
         <div className="mt-3 grid gap-3">
           <Field
-            label="Address to print"
+            label={t("qr.addressPrint")}
             htmlFor="base-url"
-            hint="Your live site address, e.g. https://yourcafe.web.app"
+            hint={t("qr.liveSiteAddress")}
           >
             <Input
               id="base-url"
               value={origin}
               onChange={(e) => setTyped(e.target.value)}
-              placeholder="https://yourcafe.web.app"
+              placeholder={t("qr.httpsYourcafeWeb")}
               inputMode="url"
             />
           </Field>
@@ -140,15 +134,15 @@ export default function QrPage() {
 
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <Button onClick={() => window.print()} disabled={!valid}>
-            Print {tables.length} card{tables.length === 1 ? "" : "s"}
+            {t("qr.printCards", { count: tables.length })}
           </Button>
           {loading ? null : !valid ? (
             <p role="alert" className="text-berry-deep text-sm font-semibold">
-              Enter a full address starting with http:// or https://
+              {t("qr.enterFullAddress")}
             </p>
           ) : (
             <p className="text-muted text-sm">
-              {tables.length} table{tables.length === 1 ? "" : "s"} ready.
+              {t("qr.tablesReady", { count: tables.length })}
             </p>
           )}
         </div>
@@ -230,42 +224,39 @@ function TableCard({
               dangerouslySetInnerHTML={{ __html: svg }}
             />
           ) : (
-            <p className="text-berry-deep text-sm">
-              Could not build this code.
-            </p>
+            <p className="text-berry-deep text-sm">{t("qr.couldNotBuild")}</p>
           )}
         </div>
 
         <div>
-          <p className="font-round text-ink text-2xl">Table {table}</p>
-          <p className="text-muted mt-1 text-sm">
-            Scan to open the menu and order
+          <p className="font-round text-ink text-2xl">
+            {t("qr.tableNumber", { table })}
           </p>
+          <p className="text-muted mt-1 text-sm">{t("qr.scanOpenMenu")}</p>
         </div>
 
         <p className="tnum text-2xs text-muted break-all">{url}</p>
 
         <p className="rounded-pill bg-highlight-soft font-hand text-primary-dark px-3 py-1 text-xl">
-          No app needed. Pay at the counter.
+          {t("qr.noAppNeeded")}
         </p>
 
         <div className="border-line-soft flex w-full flex-col items-center gap-2 border-t-2 pt-3 print:hidden">
           {!hasCode ? (
             <p className="rounded-pill border-secondary text-secondary-deep border-2 px-3 py-0.5 text-sm font-semibold">
-              No code yet
+              {t("qr.noCodeYet")}
             </p>
           ) : confirming ? (
             <div
               role="group"
-              aria-label={`New code for table ${table}`}
+              aria-label={t("qr.newCodeFor", { table })}
               className="border-berry-deep bg-berry/5 w-full rounded-md border-2 p-3 text-left"
             >
               <p className="text-berry-deep text-sm font-semibold">
-                Make a new code for table {table}?
+                {t("qr.makeNewCodeQuestion", { table })}
               </p>
               <p className="text-muted mt-0.5 text-sm">
-                The card on the table stops working straight away. Print this
-                card again and put it out.
+                {t("qr.cardTableStops")}
               </p>
               <div className="mt-2 flex flex-wrap justify-end gap-2">
                 <Button
@@ -274,7 +265,7 @@ function TableCard({
                   disabled={state === "busy"}
                   onClick={() => setConfirming(false)}
                 >
-                  Cancel
+                  {t("qr.cancel")}
                 </Button>
                 <Button
                   size="sm"
@@ -282,7 +273,7 @@ function TableCard({
                   disabled={state === "busy"}
                   onClick={() => void renew()}
                 >
-                  {state === "busy" ? "Making…" : "Make new code"}
+                  {state === "busy" ? t("qr.making") : t("qr.makeNewCode")}
                 </Button>
               </div>
             </div>
@@ -295,16 +286,16 @@ function TableCard({
                 setConfirming(true);
               }}
             >
-              New code
+              {t("qr.newCode")}
             </Button>
           )}
           {state === "done" ? (
             <p role="status" className="text-sm font-semibold">
-              New code made. Print this card and replace the old one.
+              {t("qr.newCodeMade")}
             </p>
           ) : state === "error" ? (
             <p role="alert" className="text-berry-deep text-sm font-semibold">
-              That didn&apos;t save. Try again.
+              {t("qr.didntSaveTry")}
             </p>
           ) : null}
         </div>

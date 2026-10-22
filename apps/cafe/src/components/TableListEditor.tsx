@@ -25,6 +25,7 @@ import {
   parseTableText,
   tablesUpTo,
 } from "@/lib/tables";
+import { t } from "@/lib/i18n";
 
 // Both fields are kept whichever mode is showing, so flipping between the two
 // never throws away what the owner typed in the other.
@@ -47,19 +48,20 @@ function readDraft(draft: Draft): { tables: number[] } | { error: string } {
   if (draft.mode === "count") {
     const n = Number(draft.count.trim());
     if (!/^\d+$/.test(draft.count.trim()) || n < 1 || n > MAX_TABLE_NUMBER) {
-      return {
-        error: `Choose a number of tables from 1 to ${MAX_TABLE_NUMBER}.`,
-      };
+      return { error: t("tableList.chooseCount", { max: MAX_TABLE_NUMBER }) };
     }
     return { tables: tablesUpTo(n) };
   }
   const { tables, rejected } = parseTableText(draft.text);
   if (rejected.length > 0) {
     return {
-      error: `Can't use ${rejected.map((r) => `"${r}"`).join(", ")}. Table numbers go from 1 to ${MAX_TABLE_NUMBER}.`,
+      error: t("tableList.cantUse", {
+        list: rejected.map((r) => `"${r}"`).join(", "),
+        max: MAX_TABLE_NUMBER,
+      }),
     };
   }
-  if (tables.length === 0) return { error: "Add at least one table." };
+  if (tables.length === 0) return { error: t("tableList.addOne") };
   return { tables };
 }
 
@@ -88,7 +90,7 @@ export function TableListEditor({
   );
 
   if (loading) {
-    return <p className="text-muted text-sm">Loading your tables…</p>;
+    return <p className="text-muted text-sm">{t("tableList.loadingTables")}</p>;
   }
 
   const current = draft ?? draftFrom(tables);
@@ -127,17 +129,17 @@ export function TableListEditor({
     <div className="flex flex-col gap-3">
       {current.mode === "count" ? (
         <Field
-          label="Number of tables"
+          label={t("tableList.numberTables")}
           htmlFor="table-count"
           hint={
             next
-              ? `Tables are numbered 1 to ${next.length}.`
-              : `From 1 to ${MAX_TABLE_NUMBER}.`
+              ? t("tableList.numberedTo", { count: next.length })
+              : t("tableList.fromTo", { max: MAX_TABLE_NUMBER })
           }
         >
           <div className="flex max-w-xs items-center gap-2">
             <StepButton
-              label="One table fewer"
+              label={t("tableList.oneTableFewer")}
               icon="minus"
               onClick={() => step(-1)}
               disabled={count <= 1}
@@ -153,7 +155,7 @@ export function TableListEditor({
               className="tnum text-center text-lg"
             />
             <StepButton
-              label="One table more"
+              label={t("tableList.oneTableMore")}
               icon="plus"
               onClick={() => step(1)}
               disabled={count >= MAX_TABLE_NUMBER}
@@ -162,9 +164,9 @@ export function TableListEditor({
         </Field>
       ) : (
         <Field
-          label="Table numbers"
+          label={t("tableList.tableNumbers")}
           htmlFor="table-list"
-          hint="Separate with commas. A dash covers a run, e.g. 1-8, 12, 14"
+          hint={t("tableList.separateCommasDash")}
         >
           <Input
             id="table-list"
@@ -193,8 +195,8 @@ export function TableListEditor({
         }
       >
         {current.mode === "count"
-          ? "Skip a number or start higher? Type the table numbers instead"
-          : "Just number my tables 1, 2, 3…"}
+          ? t("tableList.typeNumbers")
+          : t("tableList.justNumber")}
       </button>
 
       {"error" in result ? (
@@ -208,23 +210,23 @@ export function TableListEditor({
           onClick={() => void save()}
           disabled={!dirty || state === "saving"}
         >
-          {state === "saving" ? "Saving…" : "Save tables"}
+          {state === "saving"
+            ? t("tableList.saving")
+            : t("tableList.saveTables")}
         </Button>
         {state === "saved" ? (
           <p role="status" className="text-sm font-semibold">
-            Saved ✓ Customers now see these tables.
+            {t("tableList.savedCustomersNow")}
           </p>
         ) : state === "error" ? (
           <p role="alert" className="text-berry-deep text-sm font-semibold">
-            That didn&apos;t save. Check your connection and try again.
+            {t("tableList.didntSaveCheck")}
           </p>
         ) : dirty && saved !== null ? (
-          <p className="text-muted text-sm">
-            Not saved yet. The cards below still show the saved tables.
-          </p>
+          <p className="text-muted text-sm">{t("tableList.notSavedYet")}</p>
         ) : saved === null ? (
           <p className="text-muted text-sm">
-            Using the default ({formatTableList(tables)}) until you save.
+            {t("tableList.usingDefault", { list: formatTableList(tables) })}
           </p>
         ) : null}
       </div>

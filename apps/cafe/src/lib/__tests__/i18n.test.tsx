@@ -36,6 +36,11 @@ describe("t", () => {
     expect(t("order.viewOrder")).toBe("View order");
     setLocale("xx-YY");
     expect(t("order.viewOrder")).toBe("View order");
+    // The words are English, so their plurals follow English even in a cafe
+    // whose own language has none (Japanese).
+    setLocale("ja-JP");
+    expect(t("count.items", { count: 1 })).toBe("1 item");
+    expect(t("count.items", { count: 5 })).toBe("5 items");
     expect(t("order.itemsGoing", { count: 2 })).toBe(
       "2 items going on order #soon.",
     );

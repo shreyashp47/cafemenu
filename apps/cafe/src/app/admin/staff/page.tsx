@@ -34,12 +34,13 @@ import {
   type InviteRole,
   type StaffMember,
 } from "@/lib/invites";
+import { t, type MessageKey } from "@/lib/i18n";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-const ROLE_LABEL: Record<InviteRole, string> = {
-  staff: "Staff",
-  owner: "Owner",
+const ROLE_LABEL: Record<InviteRole, MessageKey> = {
+  staff: "team.roleStaff",
+  owner: "team.roleOwner",
 };
 
 export default function StaffAdminPage() {
@@ -85,7 +86,7 @@ export default function StaffAdminPage() {
       <NewInvite
         disabled={!repo || !origin}
         create={async (role) => {
-          if (!repo) throw new Error("Storage is not ready yet.");
+          if (!repo) throw new Error(t("common.storageNotReady"));
           return linkFor((await repo.createInvite(role)).id);
         }}
       />
@@ -93,20 +94,18 @@ export default function StaffAdminPage() {
       {error ? (
         <Card className="p-4">
           <p role="alert" className="text-berry-deep text-sm font-semibold">
-            Couldn&apos;t load the team. Check the connection and reload.
+            {t("team.couldntLoadTeam")}
           </p>
         </Card>
       ) : null}
 
       <Card className="p-4">
-        <h2 className="text-lg">Open invites</h2>
-        <p className="text-muted mt-0.5 text-sm">
-          Links nobody has used yet. Cancel one you sent to the wrong person.
-        </p>
+        <h2 className="text-lg">{t("team.openInvites")}</h2>
+        <p className="text-muted mt-0.5 text-sm">{t("team.linksNobodyHas")}</p>
         {loading ? (
-          <p className="text-muted mt-3 text-sm">Loading…</p>
+          <p className="text-muted mt-3 text-sm">{t("team.loading")}</p>
         ) : pending.length === 0 ? (
-          <p className="text-muted mt-3 text-sm">None right now.</p>
+          <p className="text-muted mt-3 text-sm">{t("team.noneRightNow")}</p>
         ) : (
           <ul className="mt-3 flex flex-col gap-2">
             {pending.map((invite) => (
@@ -123,12 +122,10 @@ export default function StaffAdminPage() {
       </Card>
 
       <Card className="p-4">
-        <h2 className="text-lg">Team</h2>
-        <p className="text-muted mt-0.5 text-sm">
-          Staff run the order board. Owners also get this dashboard.
-        </p>
+        <h2 className="text-lg">{t("team.team")}</h2>
+        <p className="text-muted mt-0.5 text-sm">{t("team.staffRunOrder")}</p>
         {loading ? (
-          <p className="text-muted mt-3 text-sm">Loading…</p>
+          <p className="text-muted mt-3 text-sm">{t("team.loading")}</p>
         ) : (
           <ul className="mt-3 flex flex-col gap-2">
             {team.map((member) => (
@@ -174,14 +171,13 @@ function NewInvite({
 
   return (
     <Card className="p-4">
-      <h2 className="text-lg">Add someone</h2>
+      <h2 className="text-lg">{t("team.addSomeone")}</h2>
       <p className="text-muted mt-0.5 mb-3 text-sm">
-        Make an invite link and send it to them. It works once, for{" "}
-        {INVITE_DAYS} days. They sign up with their own email and password.
+        {t("team.inviteIntro", { days: INVITE_DAYS })}
       </p>
       <div className="flex flex-wrap items-end gap-2">
         <div className="min-w-40 flex-1">
-          <Field label="They join as" htmlFor="invite-role">
+          <Field label={t("team.theyJoin")} htmlFor="invite-role">
             <Select
               id="invite-role"
               value={role}
@@ -190,13 +186,13 @@ function NewInvite({
                 setLink(null);
               }}
             >
-              <option value="staff">Staff: the order board</option>
-              <option value="owner">Owner: also this dashboard</option>
+              <option value="staff">{t("team.staffOrderBoard")}</option>
+              <option value="owner">{t("team.ownerAlsoDashboard")}</option>
             </Select>
           </Field>
         </div>
         <Button onClick={() => void submit()} disabled={disabled || busy}>
-          {busy ? "Making…" : "Make invite link"}
+          {busy ? t("team.making") : t("team.makeInviteLink")}
         </Button>
       </div>
       {error ? (
@@ -207,9 +203,9 @@ function NewInvite({
       {link ? (
         <div className="mt-3">
           <Field
-            label={`${ROLE_LABEL[role]} invite link`}
+            label={t("team.inviteLinkFor", { role: t(ROLE_LABEL[role]) })}
             htmlFor="invite-link"
-            hint="Anyone with this link can join, so send it only to them."
+            hint={t("team.anyoneLinkCan")}
           >
             <Input
               id="invite-link"
@@ -250,7 +246,7 @@ function CopyButton({ text, size }: { text: string; size?: "sm" }) {
       onClick={() => void copy()}
       aria-live="polite"
     >
-      {copied ? "Copied" : "Copy link"}
+      {copied ? t("team.copied") : t("team.copyLink")}
     </Button>
   );
 }
@@ -275,15 +271,15 @@ function InviteRow({
     <li className="border-line-soft flex flex-wrap items-center gap-2 rounded-sm border-2 p-2.5">
       <div className="min-w-40 flex-1">
         <p className="text-ink font-semibold">
-          {ROLE_LABEL[invite.role]} invite
+          {t("team.inviteFor", { role: t(ROLE_LABEL[invite.role]) })}
         </p>
         {now > 0 ? (
           <p className="text-muted text-sm">
             {expired
-              ? "Expired"
+              ? t("team.expired")
               : days < 1
-                ? "Expires in under a day"
-                : `Expires in ${days} ${days === 1 ? "day" : "days"}`}
+                ? t("team.expiresUnderDay")
+                : t("team.expiresInDays", { count: days })}
           </p>
         ) : null}
         {error ? (
@@ -306,7 +302,7 @@ function InviteRow({
             }
           }}
         >
-          {expired ? "Clear" : "Cancel invite"}
+          {expired ? t("team.clear") : t("team.cancelInvite")}
         </Button>
       </div>
     </li>
@@ -351,7 +347,7 @@ function MemberRow({
           <p className="text-ink truncate font-semibold">
             {member.name}
             {isMe ? (
-              <span className="text-muted font-normal"> (you)</span>
+              <span className="text-muted font-normal"> {t("team.you")}</span>
             ) : null}
           </p>
           {member.email ? (
@@ -360,7 +356,7 @@ function MemberRow({
         </div>
         <div className="flex items-center gap-2">
           <label className="sr-only" htmlFor={`role-${member.uid}`}>
-            Role for {member.name}
+            {t("team.roleFor", { name: member.name })}
           </label>
           <div className="w-32">
             <Select
@@ -371,8 +367,8 @@ function MemberRow({
                 void run(() => onSetRole(e.target.value as InviteRole))
               }
             >
-              <option value="staff">Staff</option>
-              <option value="owner">Owner</option>
+              <option value="staff">{t("team.staff")}</option>
+              <option value="owner">{t("team.owner")}</option>
             </Select>
           </div>
           <Button
@@ -381,21 +377,22 @@ function MemberRow({
             disabled={locked || busy}
             onClick={() => setConfirming(true)}
           >
-            Remove
+            {t("team.remove")}
           </Button>
         </div>
       </div>
       {locked ? (
-        <p className="text-muted mt-1.5 text-sm">
-          You&apos;re the only owner. Make someone else an owner before you step
-          down.
-        </p>
+        <p className="text-muted mt-1.5 text-sm">{t("team.youreOnlyOwner")}</p>
       ) : null}
       {confirming ? (
         <div className="bg-cream-soft mt-2 rounded-sm p-2.5 text-sm">
           <p className="text-ink">
-            Remove {member.name}? They keep their login but can&apos;t open the
-            order board{member.role === "owner" ? " or this dashboard" : ""}.
+            {t(
+              member.role === "owner"
+                ? "team.removeOwnerQuestion"
+                : "team.removeStaffQuestion",
+              { name: member.name },
+            )}
           </p>
           <div className="mt-2 flex gap-2">
             <Button
@@ -404,14 +401,14 @@ function MemberRow({
               disabled={busy}
               onClick={() => void run(onRemove)}
             >
-              Remove
+              {t("team.remove")}
             </Button>
             <Button
               variant="ghost"
               size="sm"
               onClick={() => setConfirming(false)}
             >
-              Keep
+              {t("team.keep")}
             </Button>
           </div>
         </div>

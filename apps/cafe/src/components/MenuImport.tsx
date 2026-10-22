@@ -37,6 +37,8 @@ import { useCafeSettings } from "@/hooks/useCafeSettings";
 import { cn } from "@/lib/cn";
 import { formatMoney } from "@/lib/money";
 import type { MenuItem } from "@/lib/types";
+import { t } from "@/lib/i18n";
+import { rich } from "@/lib/i18n-rich";
 
 /** Far more than any menu's CSV; a bigger file is not one. */
 const MAX_FILE_BYTES = 1_000_000;
@@ -49,10 +51,6 @@ function fileText(file: File): Promise<string> {
     reader.onerror = () => reject(reader.error);
     reader.readAsText(file);
   });
-}
-
-function plural(n: number, word: string): string {
-  return `${n} ${word}${n === 1 ? "" : "s"}`;
 }
 
 export function MenuImportCard({
@@ -109,14 +107,14 @@ export function MenuImportCard({
     if (!file) return;
     setDone(null);
     if (file.size > MAX_FILE_BYTES) {
-      setError(`${file.name} is too big to be a menu. Choose its CSV file.`);
+      setError(t("menuImport.tooBig", { name: file.name }));
       return;
     }
     try {
       setText(await fileText(file));
       setError(null);
     } catch {
-      setError(`Couldn't read ${file.name}. Try saving it as CSV again.`);
+      setError(t("menuImport.cantRead", { name: file.name }));
     }
   }
 
@@ -125,7 +123,10 @@ export function MenuImportCard({
     if (
       replace &&
       !window.confirm(
-        `Replace all ${plural(menu.length, "item")} on the menu with these ${count}? Past orders keep theirs.`,
+        t("menuImport.confirmReplace", {
+          items: t("count.items", { count: menu.length }),
+          count,
+        }),
       )
     ) {
       return;
@@ -143,14 +144,16 @@ export function MenuImportCard({
       );
       setReplace(false);
       setDone(
-        `${replace ? "Replaced the menu with" : "Added"} ${plural(count, "item")}.` +
-          (toFix.length ? ` ${plural(toFix.length, "row")} left to fix.` : ""),
+        t(replace ? "menuImport.replacedMenu" : "menuImport.added", {
+          items: t("count.items", { count }),
+        }) +
+          (toFix.length
+            ? ` ${t("menuImport.rowsLeft", { rows: t("count.rows", { count: toFix.length }) })}`
+            : ""),
       );
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : "The import didn't save. Try again.",
+        err instanceof Error ? err.message : t("menuImport.importFailed"),
       );
     } finally {
       setBusy(false);
@@ -159,16 +162,15 @@ export function MenuImportCard({
 
   return (
     <Card id="import-items" className="border-highlight! p-4">
-      <h3 className="text-lg">Import items</h3>
+      <h3 className="text-lg">{t("menuImport.importItems")}</h3>
       <p className="text-muted mt-1 text-sm">
-        Paste rows from a spreadsheet, or choose a CSV file. The columns are{" "}
-        <span className="text-ink font-semibold">
-          {MENU_COLUMNS.join(", ")}
-        </span>
-        , in that order or under a header row. Name, category and price are
-        needed; prices in {symbol}
-        {digits > 0 ? `, up to ${digits} decimals` : ", whole numbers"};
-        available is yes or no.
+        {rich(
+          digits > 0 ? "menuImport.introDecimals" : "menuImport.introWhole",
+          {
+            b: (c) => <span className="text-ink font-semibold">{c}</span>,
+          },
+          { columns: MENU_COLUMNS.join(", "), symbol, digits },
+        )}
       </p>
 
       <p
@@ -196,7 +198,7 @@ export function MenuImportCard({
           htmlFor="import-text"
           className="text-ink text-sm font-semibold tracking-wide"
         >
-          Rows to import
+          {t("menuImport.rowsImport")}
         </label>
         <Textarea
           ref={box}
@@ -208,7 +210,9 @@ export function MenuImportCard({
             setText(e.target.value);
             setDone(null);
           }}
-          placeholder={`name,category,price\nCardamom Bun,Bakes,${digits > 0 ? `4.${"5".padEnd(digits, "0")}` : "450"}`}
+          placeholder={`name,category,price\n${t("menuImport.sampleRow", {
+            price: digits > 0 ? `4.${"5".padEnd(digits, "0")}` : "450",
+          })}`}
           className="font-mono text-sm"
         />
         <label className="rounded-pill border-line bg-paper/70 font-round text-ink hover:border-primary focus-within:outline-ring inline-flex min-h-11 w-fit cursor-pointer items-center gap-1.5 border-2 px-3.5 text-sm font-semibold focus-within:outline-3">
@@ -219,22 +223,29 @@ export function MenuImportCard({
             onChange={(e) => void readFile(e.currentTarget)}
           />
           <Icon name="plus" size={18} />
-          Choose a CSV file
+          {t("menuImport.chooseCsvFile")}
         </label>
       </div>
 
       {result.rows.length > 0 ? (
         <section aria-labelledby="import-check" className="mt-4">
           <h4 id="import-check" className="text-base">
-            Check before importing
+            {t("menuImport.checkBeforeImporting")}
           </h4>
           <p className="tnum text-muted text-sm">
-            {plural(ready.length, "row")} ready
-            {toFix.length ? ` · ${toFix.length} to fix` : ""}
+            {t("menuImport.rowsReadyCount", {
+              rows: t("count.rows", { count: ready.length }),
+            })}
+            {toFix.length
+              ? ` · ${t("menuImport.toFix", { count: toFix.length })}`
+              : ""}
           </p>
 
           {toFix.length ? (
-            <ul aria-label="Rows to fix" className="mt-2 flex flex-col gap-2">
+            <ul
+              aria-label={t("menuImport.rowsFix")}
+              className="mt-2 flex flex-col gap-2"
+            >
               {toFix.map((row) => (
                 <li
                   key={row.row}
@@ -242,7 +253,7 @@ export function MenuImportCard({
                 >
                   <div className="min-w-0 flex-1">
                     <p className="text-ink text-sm font-semibold">
-                      Row {row.row}
+                      {t("menuImport.rowNumber", { row: row.row })}
                       {row.name ? ` · ${row.name}` : ""}
                     </p>
                     <ul className="text-berry-deep text-sm">
@@ -255,10 +266,10 @@ export function MenuImportCard({
                     size="sm"
                     variant="ghost"
                     onClick={() => fix(row)}
-                    aria-label={`Fix row ${row.row}`}
+                    aria-label={t("menuImport.fixRow", { row: row.row })}
                   >
                     <Icon name="edit" size={16} />
-                    Fix
+                    {t("menuImport.fix")}
                   </Button>
                 </li>
               ))}
@@ -267,7 +278,7 @@ export function MenuImportCard({
 
           {ready.length ? (
             <ul
-              aria-label="Rows ready"
+              aria-label={t("menuImport.rowsReady")}
               className="border-line-soft divide-line-soft mt-2 max-h-72 divide-y overflow-y-auto rounded-md border-2"
             >
               {ready.map(({ row, item }) => (
@@ -279,7 +290,10 @@ export function MenuImportCard({
                     <span className="text-ink font-semibold">{item!.name}</span>
                     <span className="text-muted"> · {item!.category}</span>
                     {item!.available ? null : (
-                      <span className="text-muted"> · sold out</span>
+                      <span className="text-muted">
+                        {" "}
+                        · {t("menuImport.soldOut")}
+                      </span>
                     )}
                   </span>
                   <span className="tnum text-primary shrink-0 font-semibold">
@@ -295,7 +309,9 @@ export function MenuImportCard({
       {menu.length > 0 && count > 0 ? (
         <fieldset className="mt-4 flex flex-col gap-1.5">
           <legend className="text-ink mb-1 text-sm font-semibold">
-            The {plural(menu.length, "item")} on the menu now
+            {t("menuImport.menuNow", {
+              items: t("count.items", { count: menu.length }),
+            })}
           </legend>
           <label className="flex min-h-11 items-center gap-2 text-sm">
             <input
@@ -305,7 +321,7 @@ export function MenuImportCard({
               onChange={() => setReplace(false)}
               className="accent-primary size-5"
             />
-            Keep them, and add these
+            {t("menuImport.keepThemAdd")}
           </label>
           <label className="flex min-h-11 items-center gap-2 text-sm">
             <input
@@ -315,7 +331,7 @@ export function MenuImportCard({
               onChange={() => setReplace(true)}
               className="accent-primary size-5"
             />
-            Replace them all with these
+            {t("menuImport.replaceThemAll")}
           </label>
         </fieldset>
       ) : null}
@@ -328,13 +344,18 @@ export function MenuImportCard({
         >
           <Icon name="check" size={18} />
           {busy
-            ? "Importing…"
-            : replace
-              ? `Replace the menu with ${plural(count, "item")}`
-              : `Import ${plural(count, "item")}`}
+            ? t("menuImport.importing")
+            : t(
+                replace
+                  ? "menuImport.replaceWith"
+                  : "menuImport.importItemsCount",
+                {
+                  items: t("count.items", { count }),
+                },
+              )}
         </Button>
         <Button variant="ghost" onClick={onClose} disabled={busy}>
-          {done ? "Done" : "Cancel"}
+          {done ? t("menuImport.done") : t("menuImport.cancel")}
         </Button>
       </div>
     </Card>
@@ -351,13 +372,12 @@ export function StarterMenuPicker({
   const { settings } = useCafeSettings();
   return (
     <Card className="p-4">
-      <h3 className="text-lg">Add a starter menu</h3>
+      <h3 className="text-lg">{t("menuImport.addStarterMenu")}</h3>
       <p className="text-muted mt-1 text-sm">
-        A whole menu to edit rather than type. You&apos;ll see every item before
-        anything is added, and can change any of them later.
+        {t("menuImport.starterIntro")}{" "}
         {hasStarterPrices(settings)
-          ? " Prices are a starting point: set your own."
-          : ` Prices are left empty for ${settings.currency}: fill them in before importing.`}
+          ? t("menuImport.starterPrices")
+          : t("menuImport.starterNoPrices", { currency: settings.currency })}
       </p>
       <ul className="mt-3 grid gap-2 sm:grid-cols-2">
         {STARTER_MENUS.map((menu) => (
@@ -371,7 +391,7 @@ export function StarterMenuPicker({
                 {menu.name}
               </span>
               <span className="text-muted text-sm">
-                {plural(menu.items.length, "item")} · {menu.blurb}
+                {t("count.items", { count: menu.items.length })} · {menu.blurb}
               </span>
             </button>
           </li>

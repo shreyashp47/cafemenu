@@ -65,8 +65,10 @@ export function setLocale(next: string): void {
   locale = next;
 }
 
-function catalogueFor(tag: string): Catalogue {
-  return CATALOGUES[tag.split("-")[0].toLowerCase()] ?? en;
+/** The language whose words are shown for a locale: English until another is added. */
+function languageOf(tag: string): string {
+  const language = tag.split("-")[0].toLowerCase();
+  return language in CATALOGUES ? language : "en";
 }
 
 function lookup(
@@ -85,15 +87,11 @@ function lookup(
 
 const pluralRules = new Map<string, Intl.PluralRules>();
 
-function pluralCategory(tag: string, count: number): string {
-  let rules = pluralRules.get(tag);
+function pluralCategory(language: string, count: number): string {
+  let rules = pluralRules.get(language);
   if (!rules) {
-    try {
-      rules = new Intl.PluralRules(tag);
-    } catch {
-      rules = new Intl.PluralRules("en");
-    }
-    pluralRules.set(tag, rules);
+    rules = new Intl.PluralRules(language);
+    pluralRules.set(language, rules);
   }
   return rules.select(count);
 }
@@ -104,7 +102,8 @@ function pluralCategory(tag: string, count: number): string {
  * message comes back as itself: visible, never a blank on screen.
  */
 export function t(key: MessageKey, params?: MessageParams): string {
-  const found = lookup(catalogueFor(locale), key) ?? lookup(en, key);
+  const language = languageOf(locale);
+  const found = lookup(CATALOGUES[language], key) ?? lookup(en, key);
   if (found === undefined) return key;
   let text: string;
   if (typeof found === "string") {
@@ -113,11 +112,23 @@ export function t(key: MessageKey, params?: MessageParams): string {
     const count = Number(params?.count);
     text =
       (count === 0 ? found.zero : undefined) ??
-      found[pluralCategory(locale, count) as keyof PluralMessage] ??
+      found[pluralCategory(language, count) as keyof PluralMessage] ??
       found.other;
   }
   if (!params) return text;
   return text.replace(/\{(\w+)\}/g, (whole, name: string) =>
     name in params ? String(params[name]) : whole,
   );
+}
+
+const numberFormats = new Map<string, Intl.NumberFormat>();
+
+/** A plain number in the cafe's locale: 1,000 or 1.000, 10,00,000 in India. */
+export function formatNumber(value: number): string {
+  let format = numberFormats.get(locale);
+  if (!format) {
+    format = new Intl.NumberFormat(locale);
+    numberFormats.set(locale, format);
+  }
+  return format.format(value);
 }
