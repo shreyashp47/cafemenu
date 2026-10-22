@@ -11,6 +11,7 @@ import {
 import { THEME_COLOURS } from "@cafemenu/shared";
 import { CafeTheme, CafeTitle, DEFAULT_TITLE } from "@/components/CafeIdentity";
 import { PwaRegister } from "@/components/Pwa";
+import { t } from "@/lib/i18n";
 import { THEME_SCRIPT } from "@/lib/theme";
 import "./globals.css";
 
@@ -92,8 +93,7 @@ const FONT_VARIABLES = [display, round, body, inter, outfit, serif, sans]
  */
 export const metadata: Metadata = {
   title: { default: DEFAULT_TITLE, template: "%s" },
-  description:
-    "Scan, order, and pay at the counter. Fresh brews and warm bites served straight to your table.",
+  description: t("meta.description"),
   appleWebApp: { capable: true, statusBarStyle: "default" },
   formatDetection: { telephone: false },
 };

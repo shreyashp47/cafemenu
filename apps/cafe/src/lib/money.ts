@@ -12,7 +12,7 @@
 import { formatMoney, type MoneySettings } from "@cafemenu/shared";
 
 import type { CartLine, MenuItem, Order, OrderLine } from "./types";
-import { t } from "./i18n";
+import { getLocale, t } from "./i18n";
 
 /** Per-line subtotal, in the cafe's unit. */
 export function lineSubtotal(line: Pick<OrderLine, "price" | "qty">): number {
@@ -129,23 +129,32 @@ export function withConsistentTotal(order: Order): Order {
 
 export { formatMoney };
 
-const timeFmt = new Intl.DateTimeFormat("en-IN", {
-  hour: "numeric",
-  minute: "2-digit",
-  hour12: true,
-});
+// One formatter per locale: building one costs more than using it.
+const formats = new Map<string, Intl.DateTimeFormat>();
 
-export function formatTime(epochMs: number): string {
-  return timeFmt.format(new Date(epochMs));
+function dateFormat(options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+  const locale = getLocale();
+  const key = `${locale}|${JSON.stringify(options)}`;
+  let format = formats.get(key);
+  if (!format) {
+    format = new Intl.DateTimeFormat(locale, options);
+    formats.set(key, format);
+  }
+  return format;
 }
 
-const dateFmt = new Intl.DateTimeFormat("en-IN", {
-  day: "numeric",
-  month: "short",
-});
+/** The time of day in the cafe's locale: "3:05 pm" in en-IN. */
+export function formatTime(epochMs: number): string {
+  return dateFormat({ hour: "numeric", minute: "2-digit" }).format(
+    new Date(epochMs),
+  );
+}
 
+/** The day and month in the cafe's locale: "5 Mar" in en-IN. */
 export function formatDate(epochMs: number): string {
-  return dateFmt.format(new Date(epochMs));
+  return dateFormat({ day: "numeric", month: "short" }).format(
+    new Date(epochMs),
+  );
 }
 
 /** "just now" / "4m ago" / "1h 12m ago" — used by the staff board. */

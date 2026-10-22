@@ -2,6 +2,7 @@
 
 import { cn } from "@/lib/cn";
 import { useEffect, useId, useRef, type ReactNode } from "react";
+import { t } from "@/lib/i18n";
 
 /**
  * Cart drawer (docs/anime-theme.md §5: "cart drawer/bottom sheet slides up with a
@@ -80,7 +81,7 @@ export function Sheet({
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close cart"
+            aria-label={t("ui.closeCart")}
             className="rounded-pill text-ink hover:bg-tan -mr-1 grid size-11 shrink-0 place-items-center transition-colors"
           >
             <svg

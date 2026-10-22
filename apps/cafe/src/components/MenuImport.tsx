@@ -210,7 +210,7 @@ export function MenuImportCard({
             setText(e.target.value);
             setDone(null);
           }}
-          placeholder={`name,category,price\n${t("menuImport.sampleRow", {
+          placeholder={`${MENU_COLUMNS.join(",")}\n${t("menuImport.sampleRow", {
             price: digits > 0 ? `4.${"5".padEnd(digits, "0")}` : "450",
           })}`}
           className="font-mono text-sm"

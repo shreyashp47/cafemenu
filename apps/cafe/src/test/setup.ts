@@ -2,6 +2,7 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
 import { afterEach, vi } from "vitest";
 
+import "@/lib/staff-messages";
 import { resetSettings } from "@/lib/settings";
 import { primeSuiteBoot } from "@/test/cafe";
 

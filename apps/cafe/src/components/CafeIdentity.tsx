@@ -15,15 +15,21 @@ import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 
 import { useCafeSettings } from "@/hooks/useCafeSettings";
+import { getLanguage, t } from "@/lib/i18n";
 import { applyPageTheme, pageTheme } from "@/lib/theme";
 
 /** The build's title for every page that does not set its own. */
-export const DEFAULT_TITLE = "Order from your table";
+export const DEFAULT_TITLE = t("meta.defaultTitle");
 
 /** "Mochi & Beans · Order from your table", "No connection · Mochi & Beans". */
 export function titleFor(base: string, name: string): string {
   if (!name) return base;
-  return base === DEFAULT_TITLE ? `${name} · ${base}` : `${base} · ${name}`;
+  return t(
+    "meta.titleWithName",
+    base === DEFAULT_TITLE
+      ? { first: name, second: base }
+      : { first: base, second: name },
+  );
 }
 
 // What this component last wrote, and the title it was made from, so running
@@ -76,11 +82,17 @@ export function CafeName() {
  */
 export function CafeTheme() {
   const { settings, ready } = useCafeSettings();
-  const { theme, accent } = settings;
+  const { theme, accent, locale } = settings;
 
   useEffect(() => {
     if (ready) applyPageTheme(pageTheme({ theme, accent }));
   }, [ready, theme, accent]);
+
+  // The page is written once, for every cafe: the language it reads in is the
+  // cafe's, once known.
+  useEffect(() => {
+    if (ready) document.documentElement.lang = getLanguage(locale);
+  }, [ready, locale]);
 
   return null;
 }

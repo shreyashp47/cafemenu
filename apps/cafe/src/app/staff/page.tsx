@@ -50,6 +50,7 @@ import {
 import type { MenuItem, Order } from "@/lib/types";
 import { DEMO_CREDENTIALS } from "@/lib/data/seed";
 import { t } from "@/lib/i18n";
+import "@/lib/staff-messages";
 
 export default function StaffPage() {
   return (

@@ -1,9 +1,10 @@
 import { Mascot, type MascotMood } from "@/components/Mascot";
 import { cn } from "@/lib/cn";
 import type { ReactNode } from "react";
+import { t } from "@/lib/i18n";
 
 /** Loading placeholder for menu fetch + order placement. */
-export function Loading({ label = "Warming up…" }: { label?: string }) {
+export function Loading({ label }: { label?: string }) {
   return (
     <div
       className="flex flex-col items-center gap-3 py-14"
@@ -11,7 +12,9 @@ export function Loading({ label = "Warming up…" }: { label?: string }) {
       aria-live="polite"
     >
       <Mascot mood="sleepy" size={104} />
-      <p className="font-hand text-muted text-xl">{label}</p>
+      <p className="font-hand text-muted text-xl">
+        {label ?? t("ui.warmingUp")}
+      </p>
     </div>
   );
 }
@@ -42,7 +45,7 @@ export function Spinner({ className }: { className?: string }) {
   return (
     <span
       role="status"
-      aria-label="Loading"
+      aria-label={t("ui.loading")}
       className={cn(
         "animate-spin-slow inline-block size-5 rounded-full border-[3px] border-current border-t-transparent",
         className,
