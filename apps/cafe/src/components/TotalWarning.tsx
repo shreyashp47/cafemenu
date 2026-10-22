@@ -7,10 +7,12 @@
  * src/lib/order-integrity.ts for what is compared and why.
  */
 
-import { formatINR } from "@/lib/money";
+import { useCafeSettings } from "@/hooks/useCafeSettings";
+import { formatMoney } from "@/lib/money";
 import type { IntegrityCheck } from "@/lib/order-integrity";
 
 export function TotalWarning({ check }: { check: IntegrityCheck }) {
+  const { settings } = useCafeSettings();
   if (check.ok) return null;
   return (
     <div
@@ -28,7 +30,7 @@ export function TotalWarning({ check }: { check: IntegrityCheck }) {
       </ul>
       {check.menuTotal !== null && check.menuTotal !== check.storedTotal ? (
         <p className="tnum mt-1 font-semibold">
-          At today&apos;s menu prices: {formatINR(check.menuTotal)}
+          At today&apos;s menu prices: {formatMoney(check.menuTotal, settings)}
         </p>
       ) : null}
     </div>
@@ -37,19 +39,24 @@ export function TotalWarning({ check }: { check: IntegrityCheck }) {
 
 /** The ticket's footer figure: struck through when it cannot be trusted. */
 export function TicketTotal({ check }: { check: IntegrityCheck }) {
+  const { settings } = useCafeSettings();
   if (check.ok) {
     return (
       <span className="tnum font-round text-ink text-lg">
-        {formatINR(check.storedTotal)}
+        {formatMoney(check.storedTotal, settings)}
       </span>
     );
   }
   return (
     <span className="tnum font-round text-berry-deep flex items-baseline gap-1.5 text-lg">
       <span className="sr-only">Order total, flagged:</span>
-      <s className="text-muted text-sm">{formatINR(check.storedTotal)}</s>
+      <s className="text-muted text-sm">
+        {formatMoney(check.storedTotal, settings)}
+      </s>
       <span aria-hidden="true">⚠</span>
-      {check.menuTotal !== null ? formatINR(check.menuTotal) : "Check"}
+      {check.menuTotal !== null
+        ? formatMoney(check.menuTotal, settings)
+        : "Check"}
     </span>
   );
 }

@@ -2,7 +2,11 @@ import { DEFAULT_SETTINGS } from "@cafemenu/shared";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { envFirebaseConfig, getDemoStaffPin } from "@/lib/config";
-import { OrderRejected, placeOrder } from "@/lib/place-order";
+import {
+  OrderRejected,
+  placeOrder as place,
+  type PlaceOrderArgs,
+} from "@/lib/place-order";
 import {
   ORDER_GAP_SECONDS,
   OrderThrottled,
@@ -25,6 +29,11 @@ import {
 } from "@/lib/data/demo-store";
 import { TableCodeRefused } from "@/lib/place-order";
 import type { CartLine, MenuItem } from "@/lib/types";
+import { INR } from "@/test/money";
+
+/** As the order page calls it, for the demo cafe: rupees, in paise. */
+const placeOrder = (args: Omit<PlaceOrderArgs, "settings">) =>
+  place({ ...args, settings: INR });
 
 beforeEach(() => {
   resetDemoStore();

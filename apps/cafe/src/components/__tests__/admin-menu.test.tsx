@@ -3,14 +3,14 @@
  * sold-out switch, an editor that opens for one item at a time.
  */
 
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import AdminMenuPage from "@/app/admin/page";
 import { DataProvider } from "@/components/providers/DataProvider";
 import { demoMenuRepo } from "@/lib/data/demo";
-import { resetDemoStore } from "@/lib/data/demo-store";
+import { demoSetSite, resetDemoStore } from "@/lib/data/demo-store";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn(), push: vi.fn(), prefetch: vi.fn() }),
@@ -94,7 +94,8 @@ describe("owner menu page", () => {
 
     expect(update).toHaveBeenCalledWith(
       expect.any(String),
-      expect.objectContaining({ name: "Masala Chai", price: 150 }),
+      // paise
+      expect.objectContaining({ name: "Masala Chai", price: 15_000 }),
     );
     await waitFor(() =>
       expect(
@@ -102,6 +103,72 @@ describe("owner menu page", () => {
       ).not.toBeInTheDocument(),
     );
     expect(await editButton("Masala Chai")).toHaveTextContent("₹150");
+  });
+
+  it("takes a price with paise, and refuses a third decimal", async () => {
+    const user = userEvent.setup();
+    const update = vi.spyOn(demoMenuRepo, "update");
+    renderPage();
+    await user.click(await editButton("Masala Chai"));
+    const form = screen.getByRole("form", { name: "Edit Masala Chai" });
+    const price = within(form).getByLabelText("Price (₹)");
+    const save = within(form).getByRole("button", { name: "Save" });
+    expect(price).toHaveAttribute("inputmode", "decimal");
+
+    await user.clear(price);
+    await user.type(price, "150.505");
+    expect(
+      within(form).getByText("Enter a price above 0, with up to 2 decimals."),
+    ).toBeInTheDocument();
+    expect(save).toBeDisabled();
+
+    await user.type(price, "{Backspace}");
+    await user.click(save);
+    expect(update).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ price: 15_050 }),
+    );
+    expect(await editButton("Masala Chai")).toHaveTextContent("₹150.50");
+  });
+
+  it("prices in the cafe's own currency: dollars and cents", async () => {
+    const user = userEvent.setup();
+    const update = vi.spyOn(demoMenuRepo, "update");
+    act(() => demoSetSite({ currency: "USD", locale: "en-US" }));
+    renderPage();
+    // The seed's 14,000 is $140 now: the same integer, in cents.
+    await user.click(await editButton("Masala Chai"));
+    const form = screen.getByRole("form", { name: "Edit Masala Chai" });
+    const price = within(form).getByLabelText("Price ($)");
+    expect(price).toHaveValue("140");
+
+    await user.clear(price);
+    await user.type(price, "4.5");
+    await user.click(within(form).getByRole("button", { name: "Save" }));
+    expect(update).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ price: 450 }),
+    );
+    expect(await editButton("Masala Chai")).toHaveTextContent("$4.50");
+  });
+
+  it("prices in whole yen, which have no decimals", async () => {
+    const user = userEvent.setup();
+    act(() => demoSetSite({ currency: "JPY", locale: "ja-JP" }));
+    renderPage();
+    await user.click(await editButton("Masala Chai"));
+    const form = screen.getByRole("form", { name: "Edit Masala Chai" });
+    const price = within(form).getByLabelText(/^Price \([¥￥]\)$/);
+    expect(price).toHaveAttribute("inputmode", "numeric");
+
+    await user.clear(price);
+    await user.type(price, "450.5");
+    expect(
+      within(form).getByText("Enter a whole price above 0."),
+    ).toBeInTheDocument();
+    await user.type(price, "{Backspace}{Backspace}");
+    await user.click(within(form).getByRole("button", { name: "Save" }));
+    expect(await editButton("Masala Chai")).toHaveTextContent(/[¥￥]450/);
   });
 
   it("cancel throws the draft away without saving", async () => {

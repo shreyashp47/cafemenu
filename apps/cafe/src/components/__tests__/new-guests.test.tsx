@@ -43,8 +43,8 @@ const byIdOf = (id: string) => loadDemoState().orders.find((o) => o.id === id);
 const newGuestOrder = (tableNumber = 2) =>
   demoOrderRepo.create({
     tableNumber,
-    items: [{ menuItemId: "m1", name: "Latte", qty: 2, price: 200 }],
-    total: 400,
+    items: [{ menuItemId: "m1", name: "Latte", qty: 2, price: 20_000 }],
+    total: 40_000,
   });
 
 describe("staff board: new guests", () => {

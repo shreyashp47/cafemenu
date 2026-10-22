@@ -6,7 +6,7 @@ import {
   cartTotal,
   clampQty,
   formatElapsed,
-  formatINR,
+  formatMoney,
   formatWait,
   lineSubtotal,
   orderTotal,
@@ -14,12 +14,13 @@ import {
   withConsistentTotal,
 } from "@/lib/money";
 import type { CartLine, MenuItem, Order } from "@/lib/types";
+import { CURRENCIES, INR, TOE_RUPEES } from "@/test/money";
 
 const item = (over: Partial<MenuItem> = {}): MenuItem => ({
   id: "m1",
   name: "Cappuccino",
   description: "",
-  price: 180,
+  price: 18_000,
   category: "Drinks",
   available: true,
   sortOrder: 10,
@@ -29,7 +30,7 @@ const item = (over: Partial<MenuItem> = {}): MenuItem => ({
 const line = (over: Partial<CartLine> = {}): CartLine => ({
   menuItemId: "m1",
   name: "Cappuccino",
-  price: 180,
+  price: 18_000,
   qty: 1,
   category: "Drinks",
   ...over,
@@ -43,9 +44,9 @@ describe("money", () => {
   it("sums a cart to an exact integer", () => {
     const cart = [
       line({ qty: 2 }),
-      line({ menuItemId: "m2", price: 120, qty: 1 }),
+      line({ menuItemId: "m2", price: 12_000, qty: 1 }),
     ];
-    expect(cartTotal(cart)).toBe(480);
+    expect(cartTotal(cart)).toBe(48_000);
   });
 
   it("never produces a fractional total from many odd lines", () => {
@@ -69,14 +70,18 @@ describe("money", () => {
     expect(clampQty(Number.NaN)).toBe(0);
   });
 
-  it("treats a negative or non-finite total as zero in the formatter", () => {
-    expect(formatINR(Number.NaN)).toBe(formatINR(0));
-    expect(formatINR(Number.POSITIVE_INFINITY)).toBe(formatINR(0));
+  it("treats a non-finite total as zero in the formatter", () => {
+    expect(formatMoney(Number.NaN, INR)).toBe(formatMoney(0, INR));
+    expect(formatMoney(Number.POSITIVE_INFINITY, INR)).toBe("₹0");
   });
 
-  it("formats whole rupees with no decimals", () => {
-    expect(formatINR(180)).toContain("180");
-    expect(formatINR(180)).not.toContain(".");
+  it("formats paise as rupees, decimals only when there are some", () => {
+    expect(formatMoney(18_000, INR)).toBe("₹180");
+    expect(formatMoney(18_050, INR)).toBe("₹180.50");
+  });
+
+  it("formats TOE's whole rupees as it always did", () => {
+    expect(formatMoney(180, TOE_RUPEES)).toBe("₹180");
   });
 
   it("formats an elapsed time for the staff board", () => {
@@ -96,57 +101,70 @@ describe("money", () => {
 
 describe("priceCart — authoritative pricing at order time", () => {
   it("accepts a cart that matches the live menu", () => {
-    const result = priceCart([line()], [item()]);
+    const result = priceCart([line()], [item()], INR);
     expect(result.ok).toBe(true);
-    expect(result.total).toBe(180);
+    expect(result.total).toBe(18_000);
     expect(result.totalChanged).toBe(false);
   });
 
   it("re-prices against the live menu rather than the cart copy", () => {
-    const result = priceCart([line({ price: 150 })], [item({ price: 180 })]);
-    expect(result.total).toBe(180);
+    const result = priceCart(
+      [line({ price: 15_000 })],
+      [item({ price: 18_000 })],
+      INR,
+    );
+    expect(result.total).toBe(18_000);
     expect(result.totalChanged).toBe(true);
-    expect(result.changes.join(" ")).toContain("180");
+    expect(result.changes).toEqual(["Cappuccino is now ₹180."]);
   });
 
   it("treats a price change as a notice, not a block", () => {
     // blocking here would strand a customer mid-checkout over a few rupees
-    const result = priceCart([line({ price: 150 })], [item({ price: 180 })]);
+    const result = priceCart(
+      [line({ price: 15_000 })],
+      [item({ price: 18_000 })],
+      INR,
+    );
     expect(result.ok).toBe(true);
     expect(result.blocking).toEqual([]);
   });
 
   it("sorts blocking problems ahead of price changes", () => {
     const result = priceCart(
-      [line({ price: 150 }), line({ menuItemId: "gone" })],
-      [item({ price: 180 })],
+      [line({ price: 15_000 }), line({ menuItemId: "gone" })],
+      [item({ price: 18_000 })],
+      INR,
     );
     expect(result.ok).toBe(false);
     expect(result.problems[0]).toMatch(/no longer on the menu/i);
   });
 
   it("refuses a sold-out item instead of smuggling it through", () => {
-    const result = priceCart([line()], [item({ available: false })]);
+    const result = priceCart([line()], [item({ available: false })], INR);
     expect(result.ok).toBe(false);
     expect(result.lines).toHaveLength(0);
     expect(result.blocking.join(" ")).toMatch(/sold out/i);
   });
 
   it("refuses an item that was deleted from the menu", () => {
-    const result = priceCart([line()], []);
+    const result = priceCart([line()], [], INR);
     expect(result.ok).toBe(false);
     expect(result.blocking.join(" ")).toMatch(/no longer on the menu/i);
   });
 
   it("keeps the good lines and reports only the bad ones", () => {
-    const result = priceCart([line(), line({ menuItemId: "gone" })], [item()]);
+    const result = priceCart(
+      [line(), line({ menuItemId: "gone" })],
+      [item()],
+      INR,
+    );
     expect(result.ok).toBe(false);
     expect(result.lines).toHaveLength(1);
-    expect(result.total).toBe(180);
+    expect(result.total).toBe(18_000);
   });
 
   it("clamps a tampered quantity", () => {
-    const result = priceCart([line({ qty: 9999 })], [item()]);
+    const result = priceCart([line({ qty: 9999 })], [item()], INR);
     expect(result.lines[0].qty).toBe(MAX_QTY_PER_LINE);
   });
 });
@@ -177,5 +195,38 @@ describe("order total integrity", () => {
   it("leaves a correct total alone", () => {
     const correct = { ...order, total: 520 };
     expect(withConsistentTotal(correct)).toBe(correct);
+  });
+});
+
+describe.each(CURRENCIES)("menu, cart and order in $code", (c) => {
+  const latte = (over: Partial<CartLine> = {}) =>
+    line({ name: "Latte", price: c.latte, ...over });
+
+  it("shows a menu price in the cafe's currency", () => {
+    expect(formatMoney(item({ price: c.latte }).price, c.settings)).toBe(
+      c.shown,
+    );
+  });
+
+  it("adds a cart and an order up exactly, in the stored unit", () => {
+    const cart = [latte({ qty: 3 }), latte({ menuItemId: "m2", qty: 1 })];
+    expect(cartTotal(cart)).toBe(c.latte * 4);
+    const check = priceCart(
+      cart,
+      [item({ price: c.latte }), item({ id: "m2", price: c.latte })],
+      c.settings,
+    );
+    expect(check.total).toBe(c.latte * 4);
+    expect(orderTotal(check.lines)).toBe(c.latte * 4);
+    expect(Number.isInteger(check.total)).toBe(true);
+  });
+
+  it("tells the customer a new price in the cafe's currency", () => {
+    const check = priceCart(
+      [latte({ price: c.latte - 1 })],
+      [item({ name: "Latte", price: c.latte })],
+      c.settings,
+    );
+    expect(check.changes).toEqual([`Latte is now ${c.shown}.`]);
   });
 });

@@ -716,7 +716,8 @@ on the free plan:
   reload the counter tablet (a page from before the deploy cannot accept
   guests); a customer page from before the deploy is refused on a closed table
   once it is on, until it reloads.
-- **Size caps:** at most 20 different items, 20 of each, and ₹10,000 per order.
+- **Size caps:** at most 20 different items, 20 of each, and the cafe's own
+  total cap per order (`maxOrderTotal` in `config/site`; ₹10,000 for TOE).
 - **Reject** on the staff board, for whatever still gets through.
 
 **Until the owner presses _Create codes_, nothing changes**: a table with no

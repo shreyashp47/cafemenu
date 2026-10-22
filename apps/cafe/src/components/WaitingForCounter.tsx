@@ -1,7 +1,8 @@
 import { Icon } from "@/components/icons";
 import { Mascot } from "@/components/Mascot";
 import { Card } from "@/components/ui/Card";
-import { formatINR, lineSubtotal } from "@/lib/money";
+import { useCafeSettings } from "@/hooks/useCafeSettings";
+import { formatMoney, lineSubtotal } from "@/lib/money";
 import { padDayNumber } from "@/lib/order-number";
 import type { Order } from "@/lib/types";
 
@@ -16,6 +17,7 @@ import type { Order } from "@/lib/types";
  * when staff accept, or to the rejected notice if they turn it away.
  */
 export function WaitingForCounter({ order }: { order: Order }) {
+  const { settings } = useCafeSettings();
   return (
     <div className="relative min-h-svh pb-8">
       <header className="safe-t border-line-soft bg-cream/85 relative z-10 border-b-2 px-4 py-3 backdrop-blur-sm">
@@ -72,14 +74,14 @@ export function WaitingForCounter({ order }: { order: Order }) {
                   {line.name}
                 </span>
                 <span className="tnum text-body shrink-0 font-semibold">
-                  {formatINR(lineSubtotal(line))}
+                  {formatMoney(lineSubtotal(line), settings)}
                 </span>
               </li>
             ))}
             <li className="bg-highlight-soft/40 flex items-center justify-between gap-3 px-4 py-3">
               <span className="font-round text-ink text-lg">Total</span>
               <span className="tnum font-round text-primary text-xl">
-                {formatINR(order.total)}
+                {formatMoney(order.total, settings)}
               </span>
             </li>
           </ul>

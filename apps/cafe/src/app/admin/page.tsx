@@ -12,6 +12,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import {
+  currencySymbol,
+  moneyDigits,
+  moneyToDecimal,
+  parseMoneyInput,
+  type MoneySettings,
+} from "@cafemenu/shared";
+
 import { CategoryPicker } from "@/components/CategoryPicker";
 import { NewGuestsSetting } from "@/components/NewGuestsSetting";
 import { Icon, categoryIcon, itemArtIcon } from "@/components/icons";
@@ -28,7 +36,8 @@ import { EmptyState, Loading } from "@/components/ui/Loading";
 import { Field, Input, Select, Textarea } from "@/components/ui/Input";
 import { Switch } from "@/components/ui/Switch";
 import { cn } from "@/lib/cn";
-import { formatINR } from "@/lib/money";
+import { useCafeSettings } from "@/hooks/useCafeSettings";
+import { formatMoney } from "@/lib/money";
 import { SEED_MENU } from "@/lib/data/seed";
 import type { MenuItem } from "@/lib/types";
 
@@ -352,6 +361,29 @@ function SpecialOfferCard() {
   );
 }
 
+/**
+ * The price field's label, keyboard and complaint, in the cafe's currency:
+ * "Price (₹)" with decimals for paise, whole numbers only for yen, or for a
+ * cafe still storing whole rupees (TOE until #21).
+ */
+function priceField(settings: MoneySettings) {
+  const digits = moneyDigits(settings);
+  return {
+    label: `Price (${currencySymbol(settings)})`,
+    inputMode: digits > 0 ? ("decimal" as const) : ("numeric" as const),
+    error:
+      digits > 0
+        ? `Enter a price above 0, with up to ${digits} decimals.`
+        : "Enter a whole price above 0.",
+  };
+}
+
+/** What the owner typed, as the stored price, or null when it is not one. */
+function typedPrice(text: string, settings: MoneySettings): number | null {
+  const price = parseMoneyInput(text, settings);
+  return price !== null && price > 0 ? price : null;
+}
+
 function AddItemCard({
   categories,
   onError,
@@ -362,6 +394,8 @@ function AddItemCard({
   onDone: () => void;
 }) {
   const repo = useMenuRepo();
+  const { settings } = useCafeSettings();
+  const field = priceField(settings);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
@@ -388,17 +422,14 @@ function AddItemCard({
     nameRef.current?.focus();
   }, []);
 
+  const priceValue = typedPrice(price, settings);
   const priceError =
-    price.trim() === ""
-      ? undefined
-      : Number.isFinite(Number(price)) && Number(price) > 0
-        ? undefined
-        : "Enter a price above 0.";
+    price.trim() === "" || priceValue !== null ? undefined : field.error;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!repo) return;
-    if (!name.trim() || priceError) {
+    if (!name.trim() || priceValue === null) {
       onError("Give the item a name and a valid price.");
       return;
     }
@@ -412,7 +443,7 @@ function AddItemCard({
       await repo.create({
         name: name.trim(),
         description: description.trim(),
-        price: Math.round(Number(price)),
+        price: priceValue,
         category: category.trim(),
       });
       setAdded(`Added “${name.trim()}” to ${category.trim()}.`);
@@ -457,12 +488,12 @@ function AddItemCard({
             required
           />
         </Field>
-        <Field label="Price (₹)" htmlFor="new-price" error={priceError}>
+        <Field label={field.label} htmlFor="new-price" error={priceError}>
           <Input
             id="new-price"
-            inputMode="numeric"
+            inputMode={field.inputMode}
             value={price}
-            onChange={(e) => setPrice(e.target.value.replace(/[^\d.]/g, ""))}
+            onChange={(e) => setPrice(e.target.value.replace(/[^\d.,]/g, ""))}
             placeholder="140"
             required
           />
@@ -520,6 +551,7 @@ function MenuRow({
   onSave: (patch: Patch) => Promise<void>;
   onDelete: () => void;
 }) {
+  const { settings } = useCafeSettings();
   const soldOut = !item.available;
   return (
     <li
@@ -560,7 +592,7 @@ function MenuRow({
             </span>
             <span className="text-muted block truncate text-sm leading-snug">
               <span className="tnum text-primary font-semibold">
-                {formatINR(item.price)}
+                {formatMoney(item.price, settings)}
               </span>
               {/* on a phone the name needs the room; the editor shows it all */}
               {item.description ? (
@@ -621,25 +653,29 @@ function MenuItemEditor({
   onSave: (patch: Patch) => Promise<void>;
   onDelete: () => void;
 }) {
+  const { settings } = useCafeSettings();
+  const field = priceField(settings);
   const [draft, setDraft] = useState(item);
+  // As typed, so "4." can become "4.50": the stored price is worked out from it.
+  const [priceText, setPriceText] = useState(() =>
+    moneyToDecimal(item.price, settings),
+  );
+  const price = typedPrice(priceText, settings);
   const dirty =
     draft.name !== item.name ||
     draft.description !== item.description ||
-    draft.price !== item.price ||
+    price !== item.price ||
     draft.category !== item.category;
 
-  const priceError =
-    Number.isFinite(draft.price) && draft.price > 0
-      ? undefined
-      : "Price must be above 0.";
+  const priceError = price !== null ? undefined : field.error;
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!dirty || priceError || !draft.name.trim()) return;
+    if (!dirty || price === null || !draft.name.trim()) return;
     void onSave({
       name: draft.name.trim(),
       description: draft.description.trim(),
-      price: draft.price,
+      price,
       category: draft.category.trim() || "Drinks",
     });
   }
@@ -658,17 +694,16 @@ function MenuItemEditor({
           onChange={(e) => setDraft({ ...draft, name: e.target.value })}
         />
       </Field>
-      <Field label="Price (₹)" htmlFor={`price-${item.id}`} error={priceError}>
+      <Field
+        label={field.label}
+        htmlFor={`price-${item.id}`}
+        error={priceError}
+      >
         <Input
           id={`price-${item.id}`}
-          inputMode="numeric"
-          value={String(draft.price)}
-          onChange={(e) =>
-            setDraft({
-              ...draft,
-              price: Math.max(0, Math.round(Number(e.target.value) || 0)),
-            })
-          }
+          inputMode={field.inputMode}
+          value={priceText}
+          onChange={(e) => setPriceText(e.target.value)}
         />
       </Field>
       <div className="sm:col-span-2">

@@ -447,6 +447,6 @@ describe("demo store resilience", () => {
   });
 
   it("uses a single storage key so writes stay atomic", () => {
-    expect(DEMO_STORAGE_KEY).toBe("cafe-qr-order.demo.v1");
+    expect(DEMO_STORAGE_KEY).toBe("cafe-qr-order.demo.v2");
   });
 });
