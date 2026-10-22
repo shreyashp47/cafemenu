@@ -28,6 +28,7 @@ import { Loading } from "@/components/ui/Loading";
 import { useCafeSettings } from "@/hooks/useCafeSettings";
 import { DEMO_CREDENTIALS } from "@/lib/data/seed";
 import { t, type MessageKey } from "@/lib/i18n";
+import "@/lib/staff-messages";
 
 const NAV: Array<{ href: string; label: MessageKey; icon: IconName }> = [
   { href: "/admin", label: "adminLayout.menu", icon: "drink" },

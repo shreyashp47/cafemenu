@@ -25,8 +25,8 @@
 import { DEFAULT_SETTINGS } from "@cafemenu/shared";
 
 import en from "../../messages/en.json";
-
-type Catalogue = typeof en;
+// Types only: the staff words are fetched by the routes that show them.
+import type enStaff from "../../messages/en.staff.json";
 
 /** A message that varies with a count. Only `other` is required. */
 interface PluralMessage {
@@ -46,12 +46,25 @@ type Paths<T> = {
       : `${K}.${Paths<T[K]>}`;
 }[keyof T & string];
 
-/** Every message in messages/en.json, as the dotted path to it. */
-export type MessageKey = Paths<Catalogue>;
+/** Every message in messages/en.json and en.staff.json, as the dotted path to it. */
+export type MessageKey = Paths<typeof en> | Paths<typeof enStaff>;
 
 export type MessageParams = Record<string, string | number>;
 
-const CATALOGUES: Record<string, Catalogue> = { en };
+/**
+ * What each language has loaded, as the files it is made of. English starts
+ * with messages/en.json, the words of the customer's screens and of the code
+ * they share. The staff board, the owner dashboard and the join page add
+ * messages/en.staff.json by importing src/lib/staff-messages.ts, so a customer's
+ * phone never downloads words it will not show.
+ */
+const CATALOGUES: Record<string, object[]> = { en: [en] };
+
+/** Adds a file of messages to a language. Adding the same one twice is fine. */
+export function addMessages(language: string, messages: object): void {
+  const parts = (CATALOGUES[language] ??= []);
+  if (!parts.includes(messages)) parts.push(messages);
+}
 
 let locale: string = DEFAULT_SETTINGS.locale;
 
@@ -72,20 +85,32 @@ function languageOf(tag: string): string {
 }
 
 function lookup(
-  catalogue: Catalogue,
+  parts: readonly object[],
   key: string,
 ): string | PluralMessage | undefined {
-  let node: unknown = catalogue;
-  for (const part of key.split(".")) {
-    if (typeof node !== "object" || node === null) return undefined;
-    node = (node as Record<string, unknown>)[part];
+  const path = key.split(".");
+  for (const part of parts) {
+    let node: unknown = part;
+    for (const step of path) {
+      if (typeof node !== "object" || node === null) break;
+      node = (node as Record<string, unknown>)[step];
+    }
+    if (
+      typeof node === "string" ||
+      (typeof node === "object" && node !== null)
+    ) {
+      return node as string | PluralMessage;
+    }
   }
-  return typeof node === "string" || (typeof node === "object" && node !== null)
-    ? (node as string | PluralMessage)
-    : undefined;
+  return undefined;
 }
 
 const pluralRules = new Map<string, Intl.PluralRules>();
+
+/** The language the words are in for a cafe locale, for <html lang>. */
+export function getLanguage(tag: string = locale): string {
+  return languageOf(tag);
+}
 
 function pluralCategory(language: string, count: number): string {
   let rules = pluralRules.get(language);
@@ -103,7 +128,7 @@ function pluralCategory(language: string, count: number): string {
  */
 export function t(key: MessageKey, params?: MessageParams): string {
   const language = languageOf(locale);
-  const found = lookup(CATALOGUES[language], key) ?? lookup(en, key);
+  const found = lookup(CATALOGUES[language], key) ?? lookup(CATALOGUES.en, key);
   if (found === undefined) return key;
   let text: string;
   if (typeof found === "string") {

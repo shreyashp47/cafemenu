@@ -12,6 +12,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { CafeMark } from "@/components/CafeMark";
 import { Button } from "@/components/ui/Button";
+import { t } from "@/lib/i18n";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -98,15 +99,15 @@ export function UpdateBar({ onDismiss }: { onDismiss: () => void }) {
     >
       <div className="border-secondary bg-paper shadow-card pointer-events-auto flex max-w-md items-center gap-2 rounded-lg border-2 py-1.5 pr-1.5 pl-3">
         <p className="text-ink min-w-0 flex-1 text-sm font-semibold">
-          A new version is ready.
+          {t("pwa.newVersionReady")}
         </p>
         <Button size="sm" onClick={() => window.location.reload()}>
-          Reload
+          {t("pwa.reload")}
         </Button>
         <button
           type="button"
           onClick={onDismiss}
-          aria-label="Not now"
+          aria-label={t("pwa.notNow")}
           className="rounded-pill border-line bg-paper text-muted grid size-11 shrink-0 place-items-center border-2"
         >
           <svg
@@ -172,11 +173,10 @@ export function InstallHint({ appName }: { appName: string }) {
       <div className="border-secondary/50 bg-highlight-soft/40 flex items-center gap-3 rounded-lg border-2 border-dashed p-3">
         <CafeMark size={44} className="shrink-0" />
         <div className="min-w-0 flex-1">
-          <p className="text-ink font-semibold">Install {appName}</p>
-          <p className="text-muted text-sm">
-            Add it to your home screen for a full-screen board. No app store, no
-            install required to use it.
+          <p className="text-ink font-semibold">
+            {t("pwa.installApp", { name: appName })}
           </p>
+          <p className="text-muted text-sm">{t("pwa.addHomeScreen")}</p>
         </div>
         <Button
           size="sm"
@@ -186,12 +186,12 @@ export function InstallHint({ appName }: { appName: string }) {
             dismiss();
           }}
         >
-          Install
+          {t("pwa.install")}
         </Button>
         <button
           type="button"
           onClick={() => void dismiss()}
-          aria-label="Dismiss install hint"
+          aria-label={t("pwa.dismissInstallHint")}
           className="rounded-pill border-line bg-paper text-muted grid size-11 shrink-0 place-items-center border-2"
         >
           <svg

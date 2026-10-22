@@ -9,6 +9,8 @@
  * any size crisply.
  */
 
+import { t } from "@/lib/i18n";
+
 export type MascotMood = "happy" | "cheer" | "sleepy" | "worry";
 
 const HAIR = "#4A2C1B";
@@ -151,11 +153,11 @@ export function Mascot({
       width={(size * 120) / 132}
       height={size}
       role="img"
-      aria-label="Mochi, the cafe barista mascot"
+      aria-label={t("mascot.alt")}
       // Mochi belongs to the Cozy theme (docs/anime-theme.md §1).
       className={`plain:hidden ${still ? "" : "animate-bob"} ${className}`}
     >
-      <title>Mochi, the cafe barista mascot</title>
+      <title>{t("mascot.alt")}</title>
 
       {/* ---- body: apron over a cream tee ---- */}
       <g>

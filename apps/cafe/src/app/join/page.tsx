@@ -36,6 +36,7 @@ import {
   type InviteRole,
 } from "@/lib/invites";
 import { t } from "@/lib/i18n";
+import "@/lib/staff-messages";
 import { rich } from "@/lib/i18n-rich";
 
 export default function JoinPage() {

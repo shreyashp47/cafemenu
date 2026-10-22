@@ -66,14 +66,13 @@ function cafeClock(timeZone: string, locale: string) {
   const format = (options: Intl.DateTimeFormatOptions) =>
     new Intl.DateTimeFormat(locale, { ...options, timeZone });
   const date = format({ day: "numeric", month: "short" });
-  const time = format({ hour: "numeric", minute: "2-digit", hour12: true });
+  const time = format({ hour: "numeric", minute: "2-digit" });
   const full = format({
     day: "numeric",
     month: "short",
     year: "numeric",
     hour: "numeric",
     minute: "2-digit",
-    hour12: true,
   });
   return {
     short: (ms: number) =>

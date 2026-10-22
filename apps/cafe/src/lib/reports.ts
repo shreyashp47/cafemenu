@@ -22,7 +22,7 @@ import {
 import { orderTotal } from "./money";
 import { orderLabel } from "./order-number";
 import type { Order } from "./types";
-import { t } from "./i18n";
+import { getLocale, t } from "./i18n";
 
 export interface Range {
   /** inclusive */
@@ -84,15 +84,21 @@ export function countsAsSale(order: Pick<Order, "status">): boolean {
 
 // A calendar date, not an instant: formatted at noon UTC, in UTC, so neither
 // the device's zone nor a daylight-saving change can move it to another day.
-const dayLabel = new Intl.DateTimeFormat("en-IN", {
-  day: "numeric",
-  month: "short",
-  timeZone: "UTC",
-});
+const dayLabels = new Map<string, Intl.DateTimeFormat>();
 
 export function dayLabelOf(key: string): string {
   const [y, m, d] = key.split("-").map(Number);
-  return dayLabel.format(Date.UTC(y, (m ?? 1) - 1, d ?? 1, 12));
+  const locale = getLocale();
+  let format = dayLabels.get(locale);
+  if (!format) {
+    format = new Intl.DateTimeFormat(locale, {
+      day: "numeric",
+      month: "short",
+      timeZone: "UTC",
+    });
+    dayLabels.set(locale, format);
+  }
+  return format.format(Date.UTC(y, (m ?? 1) - 1, d ?? 1, 12));
 }
 
 /** "2026-03-01" for (2026, 2). */

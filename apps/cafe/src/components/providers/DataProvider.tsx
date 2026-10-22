@@ -59,6 +59,7 @@ import {
   type TableSessions,
 } from "@/lib/table-open";
 import type { MenuItem, Order, SpecialOffer } from "@/lib/types";
+import { t } from "@/lib/i18n";
 
 interface DataContextValue {
   /** null until the page has booted and its backend has loaded. */
@@ -425,21 +426,21 @@ export function useStaffSession(): {
     loading: !repo,
     signIn: useCallback(
       async (email, password) => {
-        if (!repo) throw new Error("Storage is not ready yet.");
+        if (!repo) throw new Error(t("common.storageNotReady"));
         await repo.signIn(email, password);
       },
       [repo],
     ),
     signUp: useCallback(
       async (email, password) => {
-        if (!repo) throw new Error("Storage is not ready yet.");
+        if (!repo) throw new Error(t("common.storageNotReady"));
         await repo.signUp(email, password);
       },
       [repo],
     ),
     signInWithPin: useCallback(
       async (pin) => {
-        if (!repo) throw new Error("Storage is not ready yet.");
+        if (!repo) throw new Error(t("common.storageNotReady"));
         await repo.signInWithPin(pin);
       },
       [repo],

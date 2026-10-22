@@ -34,69 +34,69 @@ function humanOrNull(error: unknown): string | null {
 }
 
 const SIGN_IN: Record<string, MessageKey> = {
-  "auth/invalid-credential": "errors.signInMismatch",
-  "auth/wrong-password": "errors.signInMismatch",
-  "auth/user-not-found": "errors.signInMismatch",
-  "auth/invalid-login-credentials": "errors.signInMismatch",
-  "auth/invalid-email": "errors.invalidEmail",
-  "auth/missing-password": "errors.missingPassword",
-  "auth/too-many-requests": "errors.tooManyTries",
-  "auth/network-request-failed": "errors.signInNetwork",
-  "auth/user-disabled": "errors.userDisabled",
-  "auth/operation-not-allowed": "errors.emailSignInOff",
+  "auth/invalid-credential": "friendlyErrors.signInMismatch",
+  "auth/wrong-password": "friendlyErrors.signInMismatch",
+  "auth/user-not-found": "friendlyErrors.signInMismatch",
+  "auth/invalid-login-credentials": "friendlyErrors.signInMismatch",
+  "auth/invalid-email": "friendlyErrors.invalidEmail",
+  "auth/missing-password": "friendlyErrors.missingPassword",
+  "auth/too-many-requests": "friendlyErrors.tooManyTries",
+  "auth/network-request-failed": "friendlyErrors.signInNetwork",
+  "auth/user-disabled": "friendlyErrors.userDisabled",
+  "auth/operation-not-allowed": "friendlyErrors.emailSignInOff",
   // Signing up on /join.
-  "auth/weak-password": "errors.weakPassword",
-  "auth/email-already-in-use": "errors.emailInUse",
+  "auth/weak-password": "friendlyErrors.weakPassword",
+  "auth/email-already-in-use": "friendlyErrors.emailInUse",
 };
 
 export function friendlySignInError(error: unknown): string {
   const code = codeOf(error);
   if (code && SIGN_IN[code]) return t(SIGN_IN[code]);
-  return humanOrNull(error) ?? t("errors.signInFailed");
+  return humanOrNull(error) ?? t("friendlyErrors.signInFailed");
 }
 
 const WRITE: Record<string, MessageKey> = {
-  "permission-denied": "errors.writeDenied",
-  unavailable: "errors.saveDropped",
-  "deadline-exceeded": "errors.saveSlow",
-  "not-found": "errors.orderGone",
-  unauthenticated: "errors.signedOutUpdate",
+  "permission-denied": "friendlyErrors.writeDenied",
+  unavailable: "friendlyErrors.saveDropped",
+  "deadline-exceeded": "friendlyErrors.saveSlow",
+  "not-found": "friendlyErrors.orderGone",
+  unauthenticated: "friendlyErrors.signedOutUpdate",
 };
 
 export function friendlyStatusError(error: unknown): string {
   const code = codeOf(error);
   if (code && WRITE[code]) return t(WRITE[code]);
-  return humanOrNull(error) ?? t("errors.updateFailed");
+  return humanOrNull(error) ?? t("friendlyErrors.updateFailed");
 }
 
 const READ: Record<string, MessageKey> = {
-  "permission-denied": "errors.readDenied",
-  unauthenticated: "errors.signedOutHistory",
-  unavailable: "errors.readDropped",
-  "deadline-exceeded": "errors.readSlow",
-  "resource-exhausted": "errors.quotaUsed",
+  "permission-denied": "friendlyErrors.readDenied",
+  unauthenticated: "friendlyErrors.signedOutHistory",
+  unavailable: "friendlyErrors.readDropped",
+  "deadline-exceeded": "friendlyErrors.readSlow",
+  "resource-exhausted": "friendlyErrors.quotaUsed",
 };
 
 /** Loading a list of orders (the owner's history). */
 export function friendlyLoadError(error: unknown): string {
   const code = codeOf(error);
   if (code && READ[code]) return t(READ[code]);
-  return humanOrNull(error) ?? t("errors.loadFailed");
+  return humanOrNull(error) ?? t("friendlyErrors.loadFailed");
 }
 
 const TEAM: Record<string, MessageKey> = {
-  "permission-denied": "errors.teamDenied",
-  "not-found": "errors.teamGone",
-  unauthenticated: "errors.signedOut",
-  unavailable: "errors.saveDropped",
-  "deadline-exceeded": "errors.saveSlow",
+  "permission-denied": "friendlyErrors.teamDenied",
+  "not-found": "friendlyErrors.teamGone",
+  unauthenticated: "friendlyErrors.signedOut",
+  unavailable: "friendlyErrors.saveDropped",
+  "deadline-exceeded": "friendlyErrors.saveSlow",
 };
 
 /** The owner's staff page: invites, roles, removals. */
 export function friendlyTeamError(error: unknown): string {
   const code = codeOf(error);
   if (code && TEAM[code]) return t(TEAM[code]);
-  return humanOrNull(error) ?? t("errors.teamFailed");
+  return humanOrNull(error) ?? t("friendlyErrors.teamFailed");
 }
 
 /**
@@ -106,7 +106,7 @@ export function friendlyTeamError(error: unknown): string {
 export function friendlyJoinError(error: unknown): string {
   const code = codeOf(error);
   if (code && SIGN_IN[code]) return t(SIGN_IN[code]);
-  if (code === "permission-denied") return t("errors.inviteRefused");
+  if (code === "permission-denied") return t("friendlyErrors.inviteRefused");
   if (code && TEAM[code]) return t(TEAM[code]);
-  return humanOrNull(error) ?? t("errors.joinFailed");
+  return humanOrNull(error) ?? t("friendlyErrors.joinFailed");
 }

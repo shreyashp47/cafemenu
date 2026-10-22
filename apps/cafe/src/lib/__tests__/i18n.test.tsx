@@ -1,7 +1,8 @@
 import { render } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { getLocale, setLocale, t } from "@/lib/i18n";
+import { formatNumber, getLocale, setLocale, t } from "@/lib/i18n";
+import { dayLabelOf } from "@/lib/reports";
 import { rich } from "@/lib/i18n-rich";
 
 afterEach(() => setLocale("en-IN"));
@@ -44,6 +45,17 @@ describe("t", () => {
     expect(t("order.itemsGoing", { count: 2 })).toBe(
       "2 items going on order #soon.",
     );
+  });
+});
+
+describe("dates and numbers", () => {
+  it("follow the cafe's locale, not a fixed one", () => {
+    setLocale("en-IN");
+    expect(dayLabelOf("2026-03-05")).toBe("5 Mar");
+    expect(formatNumber(1234567)).toBe("12,34,567");
+    setLocale("en-US");
+    expect(dayLabelOf("2026-03-05")).toBe("Mar 5");
+    expect(formatNumber(1234567)).toBe("1,234,567");
   });
 });
 
