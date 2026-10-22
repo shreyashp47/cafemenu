@@ -44,6 +44,8 @@ with the old address keep working.
 | Order confirmation | `/order/confirmation?table=N&id=…`      | Customer             |
 | Staff board        | `/staff`                                | Staff and owner      |
 | Owner dashboard    | `/admin`, `/admin/reports`, `/admin/qr` | Owner                |
+| Team               | `/admin/staff`                          | Owner                |
+| Joining the team   | `/join#…` (an invite link)              | Whoever has the link |
 | Offline            | `/offline`                              | Anyone, when offline |
 
 The customer half needs no account. The staff half needs an email and password,
@@ -319,7 +321,34 @@ and `baseUrl`.
 ### 3. Create staff and owner accounts
 
 Every account needs two things: an Email/Password user in Firebase Auth, and a
-`/staff/{uid}` document saying what it may do. One command does both:
+`/staff/{uid}` document saying what it may do.
+
+**Everyday: invite links.** Signed in as the owner, open **Owner dashboard →
+Staff**, choose _Staff_ or _Owner_ and tap **Make invite link**, then send the
+link however you like. It works once, for seven days, and gives exactly the role
+you chose. The person opens it, types their name, their email and a password
+(or the password of an account they already have), and is on the order board
+straight away: the page creates their account and their `/staff` document
+itself, with no terminal and no Cloud Functions. The same page lists the team,
+changes a role, removes someone (they keep their login but get the _"not set up
+yet"_ screen) and cancels an invite sent to the wrong person. While you are the
+only owner it will not let you remove or demote yourself.
+
+How that stays safe with only the rules to guard it: an invite is
+`/invites/{id}` `{ role, createdBy, createdAt, usedBy, usedAt }`, and its id is
+the secret the link carries — 24 random letters and digits, in the link's `#`
+part so it never reaches a server log. Anyone may read one invite by its id,
+but only the owner may list them. A new account may create its own `/staff`
+document only in the same batch that sets that invite's `usedBy` to its uid,
+only while the invite is unused and under seven days old (counted from the
+server's `createdAt`), and only with exactly the invite's role. Someone already
+on the team cannot use an invite at all, so a barista cannot become an owner
+with one. `scripts/rules-test.mjs` tries each of these.
+
+**The first owner: `seed:staff`.** Someone has to be the owner before there is
+anyone to make invites, so the first owner account comes from a terminal (on
+CafeMenu, the platform makes it). It is also the way back in if every owner is
+locked out:
 
 ```bash
 firebase login                      # once; the script borrows this login
@@ -353,6 +382,10 @@ What the documents look like, if you would rather use the console
 { "name": "Asha", "role": "staff" }
 ```
 
+Someone who joined by invite also has `email` (from their sign-in) and
+`invite` (the invite's id) in theirs; the Staff page shows the email when there
+is one.
+
 **Every account needs a document here, not just owners.** A missing document
 means "not staff", and that is deliberate: customers sign in anonymously so the
 rules can let each one read back its own order, and a rule that treated "any
@@ -362,8 +395,8 @@ QR code.
 `role` may be `staff` (works the board) or `owner` (also edits the menu, sets
 the tables and sees the reports). An account with no document can sign in, but
 `/staff` and `/admin` then say _"Your account isn't set up yet — ask the
-owner"_ and show its email, user ID and the exact `seed:staff` command to run,
-instead of an empty board.
+owner"_ and show its email, user ID, a pointer to the Staff page's invite links
+and the exact `seed:staff` command, instead of an empty board.
 
 ### 4. Add the menu
 
