@@ -884,3 +884,33 @@ the digits can change (INR to JPY is 2 to 0) and the stored integers would
 mean something else. The console should refuse it, or run a migration, once a
 cafe has a menu. The cap table is a 2026 snapshot of exchange rates; the
 platform can store any cap per cafe.
+
+### Starter menus and import: CSV in a box, checked row by row
+
+An owner with thirty items should not type thirty forms (#16), and a new cafe
+should not start from nothing.
+
+**Decision: one import, on the owner's menu screen, fed by a paste, a CSV
+file, or a starter menu.** All three put CSV in one text box. Every row is
+checked as the box changes (`readMenuImport` in
+[`packages/shared/src/menu-import.ts`](../../../packages/shared/src/menu-import.ts)):
+a missing name, category or price, a price that isn't one in the cafe's
+currency or that no order could reach under the cap, text too long, a name
+twice or already on the menu. Import writes the good rows in one batch
+(`MenuRepository.importItems`) and leaves the bad ones in the box, with what
+is wrong next to each, to fix and import again. The menu stays as it is
+unless the owner picks "Replace them all", which asks first and deletes the
+old items in the same batch.
+
+**Starter menus are priced, for eight currencies.** Each item has a US price;
+each currency has one cafe price level and a rounding step (₹40 and ₹10 per
+dollar, so a $4.50 cappuccino is ₹180). Unpriced, a starter menu could take
+no order until fifteen prices were typed; a price per item per currency would
+be some five hundred numbers nobody checks, for a guess the owner edits
+anyway. Other currencies get empty prices to fill in before importing, rather
+than an exchange-rate guess that is off by a factor of two.
+
+**No rules change.** `/menu` is owner-write with no shape check, as before;
+the import writes the same documents the add form does. Firestore takes 500
+writes a batch: an import is at most 200 items, so only replacing a menu of
+over 300 takes a second batch, and the new items go first.

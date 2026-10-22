@@ -120,6 +120,45 @@ describe("repository contract: menu", () => {
     }
   });
 
+  it("imports after the last item, in order, keeping the menu", async () => {
+    const before = await demoMenuRepo.list();
+    const { values, stop } = collect<MenuItem[]>((cb) =>
+      demoMenuRepo.subscribe(cb),
+    );
+    await demoMenuRepo.importItems([
+      { name: "Oat Flat White", price: 20_000, category: "Drinks" },
+      {
+        name: "Rye Loaf",
+        price: 30_000,
+        category: "Bread",
+        description: "Seeded",
+        available: false,
+      },
+    ]);
+    // One write, so one new menu for every listener.
+    expect(values).toHaveLength(2);
+    stop();
+    const after = await demoMenuRepo.list();
+    expect(after.slice(0, before.length)).toEqual(before);
+    expect(after.slice(before.length)).toMatchObject([
+      { name: "Oat Flat White", description: "", available: true },
+      { name: "Rye Loaf", description: "Seeded", available: false },
+    ]);
+    expect(new Set(after.map((i) => i.id)).size).toBe(after.length);
+    expect(loadDemoState().menu).toHaveLength(before.length + 2);
+  });
+
+  it("imports in place of the whole menu with replace", async () => {
+    await demoMenuRepo.importItems(
+      [
+        { name: "B", price: 100, category: "Bites" },
+        { name: "A", price: 100, category: "Bites" },
+      ],
+      true,
+    );
+    expect((await demoMenuRepo.list()).map((i) => i.name)).toEqual(["B", "A"]);
+  });
+
   it("persists so a second repo instance sees the change", async () => {
     await demoMenuRepo.create({
       name: "Persisted",

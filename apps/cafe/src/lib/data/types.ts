@@ -62,6 +62,13 @@ export interface MenuRepository {
   reorder(items: MenuItem[]): Promise<void>;
   /** Replace the menu wholesale (used by the seed button in demo mode). */
   replaceAll(items: MenuItem[]): Promise<void>;
+  /**
+   * The menu import on /admin (@cafemenu/shared readMenuImport): new items
+   * after the menu's last, in their order, in one batch. With `replace`, the
+   * rest of the menu goes in the same batch, so the menu is never half one
+   * and half the other.
+   */
+  importItems(items: MenuWriteInput[], replace?: boolean): Promise<void>;
 }
 
 export interface OrderRepository {

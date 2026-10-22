@@ -309,6 +309,41 @@ export const firestoreMenuRepo: MenuRepository = {
       batch.set(fs.doc(db, MENU, item.id), menuDoc(item));
     await batch.commit();
   },
+
+  async importItems(inputs, replace = false) {
+    const { db, fs } = await dbAndFs();
+    const snap = await fs.getDocs(fs.collection(db, MENU));
+    const last = replace
+      ? 0
+      : Math.max(0, ...snap.docs.map((d) => Number(d.data().sortOrder) || 0));
+    const writes: ((batch: ReturnType<typeof fs.writeBatch>) => void)[] =
+      inputs.map((input, index) => {
+        const ref = fs.doc(fs.collection(db, MENU));
+        const item: MenuItem = {
+          id: ref.id,
+          name: input.name,
+          description: input.description ?? "",
+          price: input.price,
+          category: input.category,
+          available: input.available ?? true,
+          art: input.art,
+          sortOrder: last + (index + 1) * 10,
+        };
+        return (batch) => batch.set(ref, menuDoc(item));
+      });
+    if (replace) {
+      for (const doc of snap.docs)
+        writes.push((batch) => batch.delete(doc.ref));
+    }
+    // A batch takes 500 writes. An import is at most 200 items, so only
+    // replacing a menu of over 300 needs a second. The new items go first:
+    // a failure between the two leaves both menus, never neither.
+    for (let at = 0; at < writes.length; at += 500) {
+      const batch = fs.writeBatch(db);
+      for (const write of writes.slice(at, at + 500)) write(batch);
+      await batch.commit();
+    }
+  },
 };
 
 // --- orders -----------------------------------------------------------------
