@@ -18,6 +18,9 @@
   "engines": {
     "node": ">=20.9.0"
   },
+  "dependencies": {
+    "@cafemenu/shared": "*"
+  },
   "scripts": {
     "test": "node --test",
     "verify": "node --test",
