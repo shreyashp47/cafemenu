@@ -35,6 +35,16 @@ Work that is built but not yet merged is tracked in
 
 ### Added
 
+- **Theme presets** (#10): Cozy (TOE's look, unchanged), Minimal, Dark and
+  Bistro, picked by `settings.theme`, each with its own fonts. Mochi and the
+  doodles are Cozy's alone. `settings.accent` recolours buttons and links and
+  is darkened (lightened, on Dark) just enough to pass WCAG AA. The browser's
+  toolbar and the manifest follow the theme. See docs/anime-theme.md.
+- **The cafe's logo** (#11) in the customer, staff and owner headers and on
+  the printed QR cards, above the code so it still scans; without one, the
+  cafe's monogram (Mochi on Cozy's headers). The deployer makes the app icons
+  from the logo or the monogram (`@cafemenu/shared/icons`), including a
+  separate maskable icon, `/icon-maskable-512.png`.
 - A **"Can't reach the cafe · Try again"** screen for a real cafe that cannot
   load its config, which also retries when the phone comes back online. A real
   cafe never falls back to demo data.
