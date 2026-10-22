@@ -14,6 +14,7 @@ import {
   demoMenuRepo,
   demoOrderRepo,
   demoSessionRepo,
+  demoStaffRepo,
 } from "./demo";
 import type { DataBundle } from "./types";
 
@@ -23,6 +24,7 @@ export const demoBundle: DataBundle = {
   auth: demoAuthRepo,
   config: demoConfigRepo,
   sessions: demoSessionRepo,
+  staff: demoStaffRepo,
   isDemo: true,
 };
 
@@ -64,6 +66,7 @@ export async function loadBundle(): Promise<DataBundle> {
     auth: m.firestoreAuthRepo,
     config: m.firestoreConfigRepo,
     sessions: m.firestoreSessionRepo,
+    staff: m.firestoreStaffRepo,
     isDemo: false,
   };
 }

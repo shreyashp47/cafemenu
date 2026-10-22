@@ -45,6 +45,10 @@ const SIGN_IN: Record<string, string> = {
   "auth/user-disabled": "This account has been switched off. Ask the owner.",
   "auth/operation-not-allowed":
     "Email sign-in isn't switched on for this cafe yet. The owner needs to enable it in the Firebase console.",
+  // Signing up on /join.
+  "auth/weak-password": "Pick a longer password: at least 6 characters.",
+  "auth/email-already-in-use":
+    "That email already has an account. Enter its password to sign in.",
 };
 
 export function friendlySignInError(error: unknown): string {
@@ -84,4 +88,34 @@ export function friendlyLoadError(error: unknown): string {
   const code = codeOf(error);
   if (code && READ[code]) return READ[code];
   return humanOrNull(error) ?? "Couldn't load orders. Try again.";
+}
+
+const TEAM: Record<string, string> = {
+  "permission-denied":
+    "The database refused that change. Only an owner can manage the team.",
+  "not-found": "That person or invite is already gone.",
+  unauthenticated: "You've been signed out. Sign in again.",
+  unavailable: "Couldn't save — the connection dropped. Try again.",
+  "deadline-exceeded": "Couldn't save — the connection is slow. Try again.",
+};
+
+/** The owner's staff page: invites, roles, removals. */
+export function friendlyTeamError(error: unknown): string {
+  const code = codeOf(error);
+  if (code && TEAM[code]) return TEAM[code];
+  return humanOrNull(error) ?? "That didn't work. Try again.";
+}
+
+/**
+ * Joining with an invite on /join: the sign-up's errors, and the rules
+ * refusing the invite itself, which is all the reasons it can be refused.
+ */
+export function friendlyJoinError(error: unknown): string {
+  const code = codeOf(error);
+  if (code && SIGN_IN[code]) return SIGN_IN[code];
+  if (code === "permission-denied") {
+    return "This invite doesn't work any more: it was used, cancelled or has expired. Ask the owner for a new link.";
+  }
+  if (code && TEAM[code]) return TEAM[code];
+  return humanOrNull(error) ?? "Joining didn't work. Try again.";
 }

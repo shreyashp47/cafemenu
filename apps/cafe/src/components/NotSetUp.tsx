@@ -6,8 +6,9 @@
  * Before this, the symptom was "I signed in and the screen is empty": the rules
  * refuse such an account everything, so the board sat on a permissions error
  * that told nobody what to do. Now it says so in plain words and shows exactly
- * what the owner needs to set the account up — the email for the seed command,
- * and the uid for anyone doing it in the console.
+ * what the owner needs to set the account up: an invite link from the Staff
+ * page (issue #15), or the email for the seed command and the uid for anyone
+ * doing it in the console. A removed team member lands here too.
  */
 
 import { Mascot } from "@/components/Mascot";
@@ -43,7 +44,13 @@ export function NotSetUp({
           <dt className="text-muted">User ID</dt>
           <dd className="tnum text-ink break-all select-all">{user.uid}</dd>
         </dl>
-        <p className="text-muted mt-3">The owner runs, from the project:</p>
+        <p className="text-muted mt-3">
+          The owner can send you an invite link from{" "}
+          <span className="text-ink font-semibold">
+            Owner dashboard → Staff
+          </span>
+          , or run, from the project:
+        </p>
         <p className="border-line bg-cream-soft text-ink mt-1 rounded-sm border-2 px-2 py-1.5 text-xs break-all select-all">
           npm run seed:staff -- --email={email} --role=staff
         </p>

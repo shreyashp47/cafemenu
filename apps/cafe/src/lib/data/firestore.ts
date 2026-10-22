@@ -13,6 +13,9 @@
  *   /tableSessions/{n} { openUntil }, table n is open until then; public
  *                     read, staff write (table-open.ts)
  *   /config/ordering  { confirmNewGuests }, the owner's switch (table-open.ts)
+ *   /staff/{uid}      { name, role, email?, invite? }: who is on the team
+ *   /invites/{id}     { role, createdBy, createdAt, usedBy, usedAt }: an
+ *                     owner's invite link; public get, owner list (invites.ts)
  *
  *   /dayCounters/{YYYY-MM-DD}  { next, last }: today's order numbers; staff-only
  *
@@ -41,6 +44,14 @@ import { OrderThrottled, throttleFromServerStamp } from "../order-throttle";
 import { checkTablesForSave, normalizeTables } from "../tables";
 import { roleFromStaffDoc, staffDisplayName } from "./roles";
 import {
+  cleanStaffName,
+  generateInviteId,
+  isInviteId,
+  parseInvite,
+  parseStaffMember,
+  type Invite,
+} from "../invites";
+import {
   parseMenuItem,
   parseOrder,
   parseSpecialOffer,
@@ -58,6 +69,7 @@ import type {
   NewOrderInput,
   OrderRepository,
   SessionRepository,
+  StaffRepository,
   StaffRole,
 } from "./types";
 
@@ -73,6 +85,7 @@ const SPECIAL_DOC = "special";
 const SITE_DOC = "site";
 const TABLES_DOC = "tables";
 const STAFF = "staff";
+const INVITES = "invites";
 const THROTTLE = "orderThrottle";
 const TABLE_KEYS = "tableKeys";
 const DAY_COUNTERS = "dayCounters";
@@ -716,6 +729,13 @@ function cacheRole(uid: string, role: StaffRole) {
   }
 }
 
+/**
+ * Re-reads the role of whoever is signed in, for every live subscription.
+ * The role is otherwise read on auth changes only, and joining with an
+ * invite changes it with no auth change at all.
+ */
+const roleRechecks = new Set<() => void>();
+
 export const firestoreAuthRepo: AuthRepository = {
   async signIn(email, password) {
     const { auth } = await getBundle();
@@ -726,6 +746,12 @@ export const firestoreAuthRepo: AuthRepository = {
     // the role itself and default a missing document to "staff", which the
     // rules stopped honouring when membership became explicit.)
     await signInWithEmailAndPassword(auth, email.trim(), password);
+  },
+
+  async signUp(email, password) {
+    const { auth } = await getBundle();
+    const { createUserWithEmailAndPassword } = await import("firebase/auth");
+    await createUserWithEmailAndPassword(auth, email.trim(), password);
   },
 
   async signInWithPin(pin) {
@@ -754,7 +780,7 @@ export const firestoreAuthRepo: AuthRepository = {
       const { auth, db, fs } = await getBundle();
       const { onAuthStateChanged } = await import("firebase/auth");
       if (cancelled) return;
-      off = onAuthStateChanged(auth, (user) => {
+      const check = (user: import("firebase/auth").User | null) => {
         const mine = ++generation;
         const live = () => !cancelled && mine === generation;
 
@@ -799,7 +825,14 @@ export const firestoreAuthRepo: AuthRepository = {
             if (!live() || cached) return;
             listener({ ...base, role: "staff", displayName: fallbackName });
           });
-      });
+      };
+      const recheck = () => check(auth.currentUser);
+      roleRechecks.add(recheck);
+      const offAuth = onAuthStateChanged(auth, check);
+      off = () => {
+        roleRechecks.delete(recheck);
+        offAuth();
+      };
     })();
 
     return () => {
@@ -812,5 +845,102 @@ export const firestoreAuthRepo: AuthRepository = {
     // The auth state is owned by onAuthStateChanged; the synchronous getter is
     // only a best-effort read used before the first listener resolves.
     return null;
+  },
+};
+
+// --- staff and invites -------------------------------------------------------
+
+export const firestoreStaffRepo: StaffRepository = {
+  subscribe(listener, onError) {
+    return deferred(async () => {
+      const { db, fs } = await dbAndFs();
+      // One small document per person: a whole-collection listener is cheap.
+      return fs.onSnapshot(
+        fs.collection(db, STAFF),
+        (snap) =>
+          listener(snap.docs.map((d) => parseStaffMember(d.id, d.data()))),
+        (error) => onError?.(error),
+      );
+    });
+  },
+  subscribeInvites(listener, onError) {
+    return deferred(async () => {
+      const { db, fs } = await dbAndFs();
+      return fs.onSnapshot(
+        fs.collection(db, INVITES),
+        (snap) => {
+          const invites: Invite[] = [];
+          for (const d of snap.docs) {
+            // "estimate": a just-made invite has its createdAt at once.
+            const parsed = parseInvite(
+              d.id,
+              d.data({ serverTimestamps: "estimate" }),
+            );
+            if (parsed) invites.push(parsed);
+          }
+          listener(invites);
+        },
+        (error) => onError?.(error),
+      );
+    });
+  },
+  async createInvite(role) {
+    const { auth, db, fs } = await getBundle();
+    const uid = auth.currentUser?.uid;
+    if (!uid) throw new Error("Sign in as the owner first.");
+    const id = generateInviteId();
+    // Whole document, exactly the fields the rules allow. createdAt is the
+    // server's, and the invite works for seven days from it.
+    await fs.setDoc(fs.doc(db, INVITES, id), {
+      role,
+      createdBy: uid,
+      createdAt: fs.serverTimestamp(),
+      usedBy: null,
+      usedAt: null,
+    });
+    return { id, role, createdAt: Date.now(), usedBy: null };
+  },
+  async deleteInvite(id) {
+    const { db, fs } = await dbAndFs();
+    await fs.deleteDoc(fs.doc(db, INVITES, id));
+  },
+  async setRole(uid, role) {
+    const { db, fs } = await dbAndFs();
+    await fs.updateDoc(fs.doc(db, STAFF, uid), { role });
+  },
+  async remove(uid) {
+    const { db, fs } = await dbAndFs();
+    await fs.deleteDoc(fs.doc(db, STAFF, uid));
+  },
+  async readInvite(id) {
+    if (!isInviteId(id)) return null;
+    const { db, fs } = await dbAndFs();
+    const snap = await fs.getDoc(fs.doc(db, INVITES, id));
+    return snap.exists() ? parseInvite(id, snap.data()) : null;
+  },
+  async join(id, name) {
+    const { auth, db, fs } = await getBundle();
+    const user = auth.currentUser;
+    if (!user || user.isAnonymous || !user.email) {
+      throw new Error("Sign in with your email first.");
+    }
+    const invite = await firestoreStaffRepo.readInvite(id);
+    if (!invite) throw new Error("This invite link doesn't work any more.");
+    const batch = fs.writeBatch(db);
+    batch.set(fs.doc(db, STAFF, user.uid), {
+      name: cleanStaffName(name),
+      role: invite.role,
+      email: user.email,
+      invite: id,
+    });
+    batch.update(fs.doc(db, INVITES, id), {
+      usedBy: user.uid,
+      usedAt: fs.serverTimestamp(),
+    });
+    await batch.commit();
+    // Paint the new role straight away, then let every board re-read it.
+    cacheRole(user.uid, invite.role);
+    for (const recheck of roleRechecks) recheck();
+    return invite.role;
   },
 };

@@ -48,8 +48,10 @@ import type {
   MenuRepository,
   OrderRepository,
   SessionRepository,
+  StaffRepository,
   StaffUser,
 } from "@/lib/data/types";
+import type { Invite, StaffMember } from "@/lib/invites";
 import type { TableKeys } from "@/lib/table-keys";
 import {
   DEFAULT_ORDERING,
@@ -185,6 +187,11 @@ export function useConfigRepo(): ConfigRepository | null {
 export function useSessionRepo(): SessionRepository | null {
   const { bundle } = useData();
   return useMemo(() => bundle?.sessions ?? null, [bundle]);
+}
+
+export function useStaffRepo(): StaffRepository | null {
+  const { bundle } = useData();
+  return useMemo(() => bundle?.staff ?? null, [bundle]);
 }
 
 /** Generic live subscription bridged onto useSyncExternalStore. */
@@ -396,6 +403,7 @@ export function useStaffSession(): {
   user: StaffUser | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string) => Promise<void>;
   signInWithPin: (pin: string) => Promise<void>;
   signOut: () => Promise<void>;
 } {
@@ -422,6 +430,13 @@ export function useStaffSession(): {
       },
       [repo],
     ),
+    signUp: useCallback(
+      async (email, password) => {
+        if (!repo) throw new Error("Storage is not ready yet.");
+        await repo.signUp(email, password);
+      },
+      [repo],
+    ),
     signInWithPin: useCallback(
       async (pin) => {
         if (!repo) throw new Error("Storage is not ready yet.");
@@ -433,6 +448,59 @@ export function useStaffSession(): {
       if (!repo) return;
       await repo.signOut();
     }, [repo]),
+  };
+}
+
+const NO_MEMBERS: StaffMember[] = [];
+const NO_INVITES: Invite[] = [];
+
+/**
+ * The team and its invites, live, for /admin/staff. Owner-only: the rules
+ * refuse anyone else, so only that page (behind the owner gate) calls this.
+ */
+export function useTeam(): {
+  members: StaffMember[];
+  invites: Invite[];
+  loading: boolean;
+  error: Error | null;
+} {
+  const repo = useStaffRepo();
+  const [members, setMembers] = useState<{
+    repo: StaffRepository;
+    value: StaffMember[];
+    error: Error | null;
+  } | null>(null);
+  const [invites, setInvites] = useState<{
+    repo: StaffRepository;
+    value: Invite[];
+    error: Error | null;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!repo) return;
+    const offMembers = repo.subscribe(
+      (value) => setMembers({ repo, value, error: null }),
+      (error) => setMembers({ repo, value: [], error }),
+    );
+    const offInvites = repo.subscribeInvites(
+      (value) => setInvites({ repo, value, error: null }),
+      (error) => setInvites({ repo, value: [], error }),
+    );
+    return () => {
+      offMembers();
+      offInvites();
+    };
+  }, [repo]);
+
+  const membersLoaded = members !== null && members.repo === repo;
+  const invitesLoaded = invites !== null && invites.repo === repo;
+  return {
+    members: membersLoaded ? members.value : NO_MEMBERS,
+    invites: invitesLoaded ? invites.value : NO_INVITES,
+    loading: !membersLoaded || !invitesLoaded,
+    error:
+      (membersLoaded ? members.error : null) ??
+      (invitesLoaded ? invites.error : null),
   };
 }
 

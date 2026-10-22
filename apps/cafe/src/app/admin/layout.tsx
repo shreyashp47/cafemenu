@@ -33,6 +33,7 @@ const NAV: Array<{ href: string; label: string; icon: IconName }> = [
   // "History", not "Orders": the Orders | Owner switch above means the live board
   { href: "/admin/orders", label: "History", icon: "clock" },
   { href: "/admin/qr", label: "Table QR codes", icon: "qr" },
+  { href: "/admin/staff", label: "Staff", icon: "people" },
 ];
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
