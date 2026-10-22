@@ -16,6 +16,7 @@
 import { formatMoney, type CafeSettings } from "@cafemenu/shared";
 
 import { MAX_QTY_PER_LINE } from "./money";
+import { t } from "./i18n";
 
 /** Distinct lines (menu items) in one order. */
 export const MAX_ORDER_LINES = 20;
@@ -36,16 +37,16 @@ export function orderCapProblems(
 ): string[] {
   const problems: string[] = [];
   if (lines.length > MAX_ORDER_LINES) {
-    problems.push(
-      `One order can have up to ${MAX_ORDER_LINES} different items — please split it into two orders.`,
-    );
+    problems.push(t("cart.tooManyLines", { max: MAX_ORDER_LINES }));
   }
   if (lines.some((l) => l.qty > MAX_QTY_PER_LINE)) {
-    problems.push(`Up to ${MAX_QTY_PER_LINE} of each item per order.`);
+    problems.push(t("cart.tooManyOfOne", { max: MAX_QTY_PER_LINE }));
   }
   if (total > settings.maxOrderTotal) {
     problems.push(
-      `One order can be up to ${formatMoney(settings.maxOrderTotal, settings)} — please split it, or order at the counter.`,
+      t("cart.totalTooHigh", {
+        max: formatMoney(settings.maxOrderTotal, settings),
+      }),
     );
   }
   return problems;

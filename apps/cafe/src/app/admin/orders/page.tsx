@@ -52,6 +52,7 @@ import {
 } from "@/lib/order-history";
 import { buildReport, ordersToCsv } from "@/lib/reports";
 import type { MenuItem, Order } from "@/lib/types";
+import { t } from "@/lib/i18n";
 
 /** Rows rendered at a time; the rest are one tap away. */
 const PAGE_SIZE = 50;
@@ -226,7 +227,7 @@ export default function OrderHistoryPage() {
                   : "border-line bg-paper text-ink",
               )}
             >
-              {p.label}
+              {t(p.label)}
             </button>
           ))}
         </div>

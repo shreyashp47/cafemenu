@@ -17,6 +17,7 @@ import {
   demoStaffRepo,
 } from "./demo";
 import type { DataBundle } from "./types";
+import { t } from "../i18n";
 
 export const demoBundle: DataBundle = {
   menu: demoMenuRepo,
@@ -57,7 +58,7 @@ export async function loadBundle(): Promise<DataBundle> {
   const { backend } = await boot();
   if (backend.kind === "demo") return demoBundle;
   if (backend.kind === "unreachable") {
-    throw new Error("Can't reach the cafe right now. Check the connection.");
+    throw new Error(t("errors.cantReachCafe"));
   }
   const m = await firestore();
   return {

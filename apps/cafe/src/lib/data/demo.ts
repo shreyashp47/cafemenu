@@ -24,6 +24,7 @@ import type {
   StaffUser,
 } from "./types";
 import { looksOpen } from "../table-open";
+import { t } from "../i18n";
 
 const SESSION_KEY = "cafe-qr-order.session.v1";
 
@@ -57,7 +58,9 @@ function readStoredSession(): StaffUser | null {
       email: typeof user.email === "string" ? user.email : "",
       role: user.role === "owner" ? "owner" : "staff",
       displayName:
-        typeof user.displayName === "string" ? user.displayName : "Staff",
+        typeof user.displayName === "string"
+          ? user.displayName
+          : t("roles.staff"),
     };
   } catch {
     return null;
@@ -232,7 +235,7 @@ export const demoAuthRepo: AuthRepository = {
     }
 
     if (!match) {
-      throw new Error("That email and password do not match.");
+      throw new Error(t("errors.demoMismatch"));
     }
     const isOwner = email.trim().toLowerCase() === DEMO_CREDENTIALS.owner.email;
     writeSession(isOwner ? { ...DEMO_OWNER_USER } : { ...DEMO_STAFF_USER });
@@ -242,19 +245,16 @@ export const demoAuthRepo: AuthRepository = {
   async signUp(email, password) {
     const typed = email.trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(typed)) {
-      throw authError("auth/invalid-email", "That isn't an email address.");
+      throw authError("auth/invalid-email", t("errors.demoNotEmail"));
     }
     if (password.length < 6) {
-      throw authError("auth/weak-password", "Use at least 6 characters.");
+      throw authError("auth/weak-password", t("errors.demoShortPassword"));
     }
     if (
       isDemoEmail(typed) ||
       store.selectAccount(store.loadDemoState(), typed)
     ) {
-      throw authError(
-        "auth/email-already-in-use",
-        "That email has an account.",
-      );
+      throw authError("auth/email-already-in-use", t("errors.demoEmailTaken"));
     }
     const uid = store.makeId("demo-user");
     store.demoAddAccount(typed, { uid, password });
@@ -269,7 +269,7 @@ export const demoAuthRepo: AuthRepository = {
 
   async signInWithPin(pin) {
     if (pin !== getDemoStaffPin()) {
-      throw new Error("Wrong PIN. Ask the counter for today's code.");
+      throw new Error(t("errors.wrongPin"));
     }
     writeSession({ ...DEMO_STAFF_USER });
     emitSession();
@@ -439,7 +439,7 @@ export const demoStaffRepo: StaffRepository = {
   },
   async join(id, name) {
     const user = readStoredSession();
-    if (!user?.email) throw new Error("Sign in with your email first.");
+    if (!user?.email) throw new Error(t("errors.signInFirst"));
     return store.demoJoin(user, id, cleanStaffName(name));
   },
 };

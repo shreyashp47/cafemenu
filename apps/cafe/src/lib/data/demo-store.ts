@@ -58,6 +58,7 @@ import {
   SEED_OFFER,
 } from "./seed";
 import type { NewOrderInput } from "./types";
+import { t } from "../i18n";
 
 /**
  * v2: prices and totals in minor units (#12). A v1 state on the device is in
@@ -843,7 +844,7 @@ export function demoSetStaffRole(uid: string, role: InviteRole): void {
   const state = load();
   const member = state.staff[uid];
   // updateDoc on a missing document fails in Firestore too.
-  if (!member) throw new Error("That person is no longer on the team.");
+  if (!member) throw new Error(t("errors.notOnTeam"));
   commit({ ...state, staff: { ...state.staff, [uid]: { ...member, role } } });
 }
 

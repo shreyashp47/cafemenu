@@ -1,6 +1,7 @@
 /** Table-number plumbing for `/order?table=N` (docs/requirements.md §5.5). */
 
 import { MAX_TABLE_NUMBER } from "@cafemenu/shared";
+import { t } from "./i18n";
 
 /**
  * The highest table number an order can carry. firestore.rules refuses an
@@ -127,11 +128,9 @@ export function parseTableText(text: string): {
  */
 export function checkTablesForSave(tables: readonly number[]): number[] {
   if (!tables.every(isTable)) {
-    throw new Error(
-      `Table numbers must be whole numbers from 1 to ${MAX_TABLE_NUMBER}.`,
-    );
+    throw new Error(t("tables.wholeNumbers", { max: MAX_TABLE_NUMBER }));
   }
   const clean = normalizeTables(tables);
-  if (!clean) throw new Error("Add at least one table.");
+  if (!clean) throw new Error(t("tables.addOne"));
   return clean;
 }

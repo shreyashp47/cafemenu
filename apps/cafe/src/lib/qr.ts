@@ -15,6 +15,8 @@
  * rather than silently producing an unscannable code.
  */
 
+import { t } from "./i18n";
+
 export type Matrix = boolean[][]; // true = dark module
 
 // --- Galois field GF(256), primitive polynomial 0x11D ------------------------
@@ -545,7 +547,7 @@ export function qrToSvg(
 
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}"`,
-    ` shape-rendering="crispEdges" role="img" aria-label="Table QR code">`,
+    ` shape-rendering="crispEdges" role="img" aria-label="${t("qr.tableQrCode")}">`,
     `<rect width="${size}" height="${size}" fill="#fff"/>`,
     `<path d="${path}" fill="#000"/>`,
     `</svg>`,

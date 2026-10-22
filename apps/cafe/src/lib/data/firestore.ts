@@ -72,6 +72,7 @@ import type {
   StaffRepository,
   StaffRole,
 } from "./types";
+import { t } from "../i18n";
 
 type Firestore = import("firebase/firestore").Firestore;
 type DocData = import("firebase/firestore").DocumentData;
@@ -791,11 +792,9 @@ export const firestoreAuthRepo: AuthRepository = {
 
   async signInWithPin(pin) {
     if (pin !== getDemoStaffPin()) {
-      throw new Error("Wrong PIN. Ask the counter for today's code.");
+      throw new Error(t("errors.wrongPin"));
     }
-    throw new Error(
-      "PIN sign-in is a demo-only shortcut. Use your staff email and password.",
-    );
+    throw new Error(t("errors.pinDemoOnly"));
   },
 
   async signOut() {
@@ -829,7 +828,7 @@ export const firestoreAuthRepo: AuthRepository = {
 
         const base = { uid: user.uid, email: user.email ?? "" };
         const fallbackName =
-          user.displayName ?? user.email?.split("@")[0] ?? "Staff";
+          user.displayName ?? user.email?.split("@")[0] ?? t("roles.staff");
 
         // Paint straight away from the cached role, if there is one, so the
         // counter phone does not flash a sign-in form on every reload.
@@ -922,7 +921,7 @@ export const firestoreStaffRepo: StaffRepository = {
   async createInvite(role) {
     const { auth, db, fs } = await getBundle();
     const uid = auth.currentUser?.uid;
-    if (!uid) throw new Error("Sign in as the owner first.");
+    if (!uid) throw new Error(t("errors.signInOwnerFirst"));
     const id = generateInviteId();
     // Whole document, exactly the fields the rules allow. createdAt is the
     // server's, and the invite works for seven days from it.
@@ -957,10 +956,10 @@ export const firestoreStaffRepo: StaffRepository = {
     const { auth, db, fs } = await getBundle();
     const user = auth.currentUser;
     if (!user || user.isAnonymous || !user.email) {
-      throw new Error("Sign in with your email first.");
+      throw new Error(t("errors.signInFirst"));
     }
     const invite = await firestoreStaffRepo.readInvite(id);
-    if (!invite) throw new Error("This invite link doesn't work any more.");
+    if (!invite) throw new Error(t("errors.inviteGone"));
     const batch = fs.writeBatch(db);
     batch.set(fs.doc(db, STAFF, user.uid), {
       name: cleanStaffName(name),

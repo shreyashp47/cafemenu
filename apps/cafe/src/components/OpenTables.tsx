@@ -9,6 +9,7 @@ import {
   openTables,
   type TableSessions,
 } from "@/lib/table-open";
+import { t } from "@/lib/i18n";
 
 /**
  * The staff board's "Open tables" strip: every table staff have confirmed,
@@ -51,12 +52,10 @@ export function OpenTables({
         id="open-tables"
         className="text-2xs text-muted mb-1.5 font-semibold tracking-[0.12em] uppercase"
       >
-        Open tables
+        {t("openTables.openTables")}
       </h2>
       {open.length === 0 ? (
-        <p className="text-muted text-sm">
-          None. A new group&apos;s first order waits for you to accept it.
-        </p>
+        <p className="text-muted text-sm">{t("openTables.noneNewGroups")}</p>
       ) : (
         <>
           <ul className="flex gap-2 overflow-x-auto pb-1">
@@ -67,7 +66,7 @@ export function OpenTables({
                 className="rounded-pill border-sage bg-sage-soft flex shrink-0 items-center gap-2 border-2 py-1 pr-1 pl-3"
               >
                 <span className="font-round text-sage-deep text-lg leading-none">
-                  T{table}
+                  {t("openTables.tableTag", { table })}
                 </span>
                 <span className="tnum text-sage-deep text-xs font-semibold">
                   {formatTimeLeft(msLeft)}
@@ -76,11 +75,13 @@ export function OpenTables({
                   type="button"
                   onClick={() => setConfirming(table)}
                   disabled={busyTable === table}
-                  aria-label={`Close table ${table}`}
+                  aria-label={t("openTables.closeTableAria", { table })}
                   aria-expanded={asking === table}
                   className="rounded-pill border-line bg-paper text-ink min-h-11 border-2 px-3 text-sm font-semibold disabled:opacity-60"
                 >
-                  {busyTable === table ? "Closing…" : "Close"}
+                  {busyTable === table
+                    ? t("openTables.closing")
+                    : t("openTables.close")}
                 </button>
               </li>
             ))}
@@ -92,11 +93,10 @@ export function OpenTables({
               className="border-line bg-paper mt-2 rounded-md border-2 p-3"
             >
               <p id="close-table-question" className="text-ink font-semibold">
-                Close table {asking}?
+                {t("openTables.closeTableQuestion", { table: asking })}
               </p>
               <p className="text-muted mt-0.5 text-sm">
-                Do it when the group has left: the next order from this table
-                will wait for you to accept it.
+                {t("openTables.doWhenGroup")}
               </p>
               <div className="mt-2 flex flex-wrap gap-2">
                 <Button
@@ -106,14 +106,14 @@ export function OpenTables({
                     setConfirming(null);
                   }}
                 >
-                  Close table
+                  {t("openTables.closeTable")}
                 </Button>
                 <Button
                   size="sm"
                   variant="ghost"
                   onClick={() => setConfirming(null)}
                 >
-                  Keep open
+                  {t("openTables.keepOpen")}
                 </Button>
               </div>
             </div>

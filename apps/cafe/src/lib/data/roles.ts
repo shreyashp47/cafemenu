@@ -11,6 +11,7 @@
  */
 
 import type { StaffRole } from "./types";
+import { t } from "../i18n";
 
 export function roleFromStaffDoc(exists: boolean, data: unknown): StaffRole {
   if (!exists) return "unassigned";
@@ -31,5 +32,5 @@ export function staffDisplayName(
       ? (data as { name?: unknown }).name
       : undefined;
   if (typeof name === "string" && name.trim()) return name.trim();
-  return email?.split("@")[0] || "Staff";
+  return email?.split("@")[0] || t("roles.staff");
 }

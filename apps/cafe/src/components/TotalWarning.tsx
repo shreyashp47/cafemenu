@@ -10,6 +10,7 @@
 import { useCafeSettings } from "@/hooks/useCafeSettings";
 import { formatMoney } from "@/lib/money";
 import type { IntegrityCheck } from "@/lib/order-integrity";
+import { t } from "@/lib/i18n";
 
 export function TotalWarning({ check }: { check: IntegrityCheck }) {
   const { settings } = useCafeSettings();
@@ -20,9 +21,7 @@ export function TotalWarning({ check }: { check: IntegrityCheck }) {
       data-integrity="flagged"
       className="border-berry bg-paper text-berry-deep mx-3 mb-2 rounded-sm border-2 px-2.5 py-1.5 text-sm"
     >
-      <p className="font-semibold">
-        Total doesn&apos;t match menu — check before charging
-      </p>
+      <p className="font-semibold">{t("totalWarning.totalDoesntMatch")}</p>
       <ul className="mt-0.5 list-disc pl-4">
         {check.issues.map((issue) => (
           <li key={issue.message}>{issue.message}</li>
@@ -30,7 +29,9 @@ export function TotalWarning({ check }: { check: IntegrityCheck }) {
       </ul>
       {check.menuTotal !== null && check.menuTotal !== check.storedTotal ? (
         <p className="tnum mt-1 font-semibold">
-          At today&apos;s menu prices: {formatMoney(check.menuTotal, settings)}
+          {t("totalWarning.menuPrices", {
+            price: formatMoney(check.menuTotal, settings),
+          })}
         </p>
       ) : null}
     </div>
@@ -49,14 +50,14 @@ export function TicketTotal({ check }: { check: IntegrityCheck }) {
   }
   return (
     <span className="tnum font-round text-berry-deep flex items-baseline gap-1.5 text-lg">
-      <span className="sr-only">Order total, flagged:</span>
+      <span className="sr-only">{t("totalWarning.orderTotalFlagged")}</span>
       <s className="text-muted text-sm">
         {formatMoney(check.storedTotal, settings)}
       </s>
       <span aria-hidden="true">⚠</span>
       {check.menuTotal !== null
         ? formatMoney(check.menuTotal, settings)
-        : "Check"}
+        : t("totalWarning.check")}
     </span>
   );
 }

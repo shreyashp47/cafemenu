@@ -32,6 +32,7 @@ import { formatMoney, type MoneySettings } from "@cafemenu/shared";
 
 import { orderTotal } from "./money";
 import type { MenuItem, Order } from "./types";
+import { t } from "./i18n";
 
 export type IntegrityIssueKind =
   "total-mismatch" | "price-differs" | "name-differs" | "not-on-menu";
@@ -72,7 +73,10 @@ export function checkOrderIntegrity(
   if (linesTotal !== order.total) {
     issues.push({
       kind: "total-mismatch",
-      message: `Order says ${fmt(order.total)}, but its items add up to ${fmt(linesTotal)}.`,
+      message: t("integrity.totalMismatch", {
+        total: fmt(order.total),
+        sum: fmt(linesTotal),
+      }),
     });
   }
 
@@ -88,7 +92,7 @@ export function checkOrderIntegrity(
         priceable = false;
         issues.push({
           kind: "not-on-menu",
-          message: `${line.name} is not on the menu.`,
+          message: t("integrity.notOnMenu", { name: line.name }),
         });
         continue;
       }
@@ -96,13 +100,20 @@ export function checkOrderIntegrity(
       if (item.price !== line.price) {
         issues.push({
           kind: "price-differs",
-          message: `${line.name}: ${fmt(line.price)} on the order, ${fmt(item.price)} on the menu.`,
+          message: t("integrity.priceDiffers", {
+            name: line.name,
+            ordered: fmt(line.price),
+            menu: fmt(item.price),
+          }),
         });
       }
       if (item.name.trim().toLowerCase() !== line.name.trim().toLowerCase()) {
         issues.push({
           kind: "name-differs",
-          message: `"${line.name}" is priced as ${item.name}.`,
+          message: t("integrity.nameDiffers", {
+            name: line.name,
+            menuName: item.name,
+          }),
         });
       }
     }

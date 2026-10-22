@@ -1,46 +1,47 @@
 import { cn } from "@/lib/cn";
+import { t, type MessageKey } from "@/lib/i18n";
 import { ORDER_STATUSES, type OrderStatus } from "@/lib/order-status";
 
 const LOOK: Record<
   OrderStatus,
-  { label: string; emoji: string; className: string }
+  { label: MessageKey; emoji: string; className: string }
 > = {
   // An order from a table staff have not confirmed yet (order-status.ts).
   // Dashed, like a note still to be checked, and not alarming: it is usually
   // a real guest who simply has not been seen yet.
   pending: {
-    label: "Waiting for the counter",
+    label: "orderStatus.pending",
     emoji: "⏳",
     className: "bg-paper text-secondary-deep border-secondary border-dashed",
   },
   received: {
-    label: "Received",
+    label: "orderStatus.received",
     emoji: "📝",
     className: "bg-tan text-ink border-line",
   },
   preparing: {
-    label: "Preparing",
+    label: "orderStatus.preparing",
     emoji: "🔥",
     className: "bg-highlight-soft text-primary-dark border-highlight",
   },
   ready: {
-    label: "Ready",
+    label: "orderStatus.ready",
     emoji: "☕",
     // text-sage-deep, not text-sage: sage on sage-soft is 2.99:1
     className: "bg-sage-soft text-sage-deep border-sage",
   },
   served: {
-    label: "Served",
+    label: "orderStatus.served",
     emoji: "✨",
     className: "bg-sage-deep text-on-dark border-sage-deep",
   },
   completed: {
-    label: "Completed",
+    label: "orderStatus.completed",
     emoji: "✓",
     className: "bg-tan-deep text-primary-dark border-tan-deep",
   },
   rejected: {
-    label: "Rejected",
+    label: "orderStatus.rejected",
     emoji: "✕",
     className: "bg-paper text-berry-deep border-berry-deep",
   },
@@ -59,8 +60,9 @@ function lookOf(status: string): {
   const known = Object.prototype.hasOwnProperty.call(LOOK, status)
     ? LOOK[status as OrderStatus]
     : undefined;
-  if (known) return known;
-  const words = status.replace(/[-_]+/g, " ").trim() || "Unknown";
+  if (known) return { ...known, label: t(known.label) };
+  const words =
+    status.replace(/[-_]+/g, " ").trim() || t("orderStatus.unknown");
   return {
     label: words.charAt(0).toUpperCase() + words.slice(1),
     emoji: "•",
