@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   DEFAULT_SETTINGS,
+  LEGACY_MONEY,
   SETTINGS_KEYS,
   SETTINGS_SCHEMA_VERSION,
   mergeCafeSettings,
@@ -12,7 +13,7 @@ import {
 } from "../settings.ts";
 
 const berlin: CafeSettings = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   name: "Kaffeehaus Mitte",
   tagline: "",
   theme: "cozy",
@@ -20,6 +21,8 @@ const berlin: CafeSettings = {
   logo: "/logo.png",
   currency: "EUR",
   locale: "de-DE",
+  moneyUnit: "minor",
+  maxOrderTotal: 15_000,
   timeZone: "Europe/Berlin",
   utcOffsets: { standard: 60, daylight: 120 },
   tables: [1, 2, 3, 10],
@@ -38,6 +41,8 @@ describe("DEFAULT_SETTINGS", () => {
       logo: null,
       currency: "INR",
       locale: "en-IN",
+      moneyUnit: "minor",
+      maxOrderTotal: 1_000_000,
       timeZone: "Asia/Kolkata",
       utcOffsets: { standard: 330, daylight: 330 },
       tables: [1, 2, 3, 4, 5, 6],
@@ -101,6 +106,8 @@ describe("parseCafeSettings (the lenient read)", () => {
       logo: "javascript:alert(1)",
       currency: "rupees",
       locale: "not a locale",
+      moneyUnit: "paise",
+      maxOrderTotal: 12.5,
       timeZone: "Mars/Olympus_Mons",
       utcOffsets: { standard: 330 },
       tables: [0, 1],
@@ -223,6 +230,37 @@ describe("parseCafeSettings (the lenient read)", () => {
     expect(parsed.utcOffsets).toEqual({ standard: 345, daylight: 345 });
   });
 
+  it("reads a document from before #12 (schemaVersion 1) as whole units", () => {
+    // TOE's settings: no unit, no cap. Its menu is in whole rupees, and the
+    // rules cap its orders at 10,000 of them.
+    const { moneyUnit, maxOrderTotal, ...toe } = berlin;
+    expect({ moneyUnit, maxOrderTotal }).not.toEqual(LEGACY_MONEY);
+    const parsed = parseCafeSettings({ ...toe, schemaVersion: 1 });
+    expect(parsed).toEqual({ ...berlin, schemaVersion: 1, ...LEGACY_MONEY });
+    expect(LEGACY_MONEY).toEqual({ moneyUnit: "major", maxOrderTotal: 10_000 });
+  });
+
+  it("reads schemaVersion 1 as whole units over a base in minor units", () => {
+    // site.json in minor units, config/site still from before #12: the rules
+    // read config/site, so the page does too.
+    const parsed = parseCafeSettings({ schemaVersion: 1 }, berlin);
+    expect(parsed.moneyUnit).toBe("major");
+    expect(parsed.maxOrderTotal).toBe(10_000);
+  });
+
+  it("gives a new currency its default cap, unless the layer has one", () => {
+    expect(parseCafeSettings({ currency: "JPY" }).maxOrderTotal).toBe(20_000);
+    expect(parseCafeSettings({ currency: "USD" }).maxOrderTotal).toBe(15_000);
+    expect(
+      parseCafeSettings({ currency: "USD", maxOrderTotal: 9_900 })
+        .maxOrderTotal,
+    ).toBe(9_900);
+    expect(parseCafeSettings({ name: "Same currency" }, berlin)).toEqual({
+      ...berlin,
+      name: "Same currency",
+    });
+  });
+
   it("keeps the base's offsets when the zone does not change", () => {
     expect(
       parseCafeSettings({ name: "Berlin again" }, berlin).utcOffsets,
@@ -297,10 +335,10 @@ describe("validateCafeSettings (the strict check for writers)", () => {
   });
 
   it("refuses another schema version", () => {
-    const check = validateCafeSettings({ ...berlin, schemaVersion: 2 });
+    const check = validateCafeSettings({ ...berlin, schemaVersion: 1 });
     expect(check).toEqual({
       ok: false,
-      problems: ["schemaVersion: must be 1"],
+      problems: ["schemaVersion: must be 2"],
     });
   });
 
@@ -338,7 +376,20 @@ describe("newCafeSettings", () => {
       locale: "en-AU",
       timeZone: "Australia/Sydney",
       utcOffsets: { standard: 600, daylight: 660 },
+      maxOrderTotal: 25_000,
     });
     expect(validateCafeSettings(settings).ok).toBe(true);
+  });
+
+  it("starts every new cafe in minor units, at the current schema", () => {
+    // Even when handed an old schema version: a new cafe has no whole-unit
+    // data to be read the old way.
+    expect(
+      newCafeSettings({ currency: "JPY", schemaVersion: 1 }),
+    ).toMatchObject({
+      schemaVersion: SETTINGS_SCHEMA_VERSION,
+      moneyUnit: "minor",
+      maxOrderTotal: 20_000,
+    });
   });
 });

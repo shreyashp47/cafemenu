@@ -19,21 +19,23 @@ import {
 `CafeSettings` ([`src/settings.ts`](./src/settings.ts)) is everything that makes
 one cafe's site its own:
 
-| Field           | Example                                  | Notes                                                      |
-| --------------- | ---------------------------------------- | ---------------------------------------------------------- |
-| `schemaVersion` | `1`                                      | `SETTINGS_SCHEMA_VERSION` when written                     |
-| `name`          | `"TOE Cafe"`                             | 1–60 characters                                            |
-| `tagline`       | `"Good Coffee, Better Days"`             | 0–80 characters                                            |
-| `theme`         | `"cozy"`                                 | one of `THEMES`: `cozy`, `minimal`, `dark`, `bistro`       |
-| `accent`        | `"#7A3E1D"` or `null`                    | over the theme's own accent                                |
-| `logo`          | `"/logo.png"`, an https URL, or `null`   | `null` keeps the theme's artwork                           |
-| `currency`      | `"INR"`                                  | ISO 4217                                                   |
-| `locale`        | `"en-IN"`                                | BCP 47                                                     |
-| `timeZone`      | `"Asia/Kolkata"`                         | IANA                                                       |
-| `utcOffsets`    | `{ "standard": 330, "daylight": 330 }`   | minutes east of UTC, for `firestore.rules`                 |
-| `tables`        | `[1, 2, 3, 4, 5, 6]`                     | default table list, 1–50, until the owner saves one        |
-| `baseUrl`       | `"https://their-cafe.web.app"` or `null` | origin printed on QR cards; `null` uses the page's address |
-| `plan`          | `"free"`                                 | one of `PLANS`                                             |
+| Field           | Example                                  | Notes                                                       |
+| --------------- | ---------------------------------------- | ----------------------------------------------------------- |
+| `schemaVersion` | `2`                                      | `SETTINGS_SCHEMA_VERSION` when written                      |
+| `name`          | `"TOE Cafe"`                             | 1–60 characters                                             |
+| `tagline`       | `"Good Coffee, Better Days"`             | 0–80 characters                                             |
+| `theme`         | `"cozy"`                                 | one of `THEMES`: `cozy`, `minimal`, `dark`, `bistro`        |
+| `accent`        | `"#7A3E1D"` or `null`                    | over the theme's own accent                                 |
+| `logo`          | `"/logo.png"`, an https URL, or `null`   | `null` keeps the theme's artwork                            |
+| `currency`      | `"INR"`                                  | ISO 4217                                                    |
+| `locale`        | `"en-IN"`                                | BCP 47                                                      |
+| `moneyUnit`     | `"minor"`                                | what stored prices count: `minor` (paise) or `major`        |
+| `maxOrderTotal` | `1000000`                                | most one order may total, in `moneyUnit`; the rules read it |
+| `timeZone`      | `"Asia/Kolkata"`                         | IANA                                                        |
+| `utcOffsets`    | `{ "standard": 330, "daylight": 330 }`   | minutes east of UTC, for `firestore.rules`                  |
+| `tables`        | `[1, 2, 3, 4, 5, 6]`                     | default table list, 1–50, until the owner saves one         |
+| `baseUrl`       | `"https://their-cafe.web.app"` or `null` | origin printed on QR cards; `null` uses the page's address  |
+| `plan`          | `"free"`                                 | one of `PLANS`                                              |
 
 `DEFAULT_SETTINGS` is the demo cafe, "Mochi & Beans".
 
@@ -54,15 +56,39 @@ Two ways to read them:
 - **`parseCafeSettings(raw, base?)`** and **`mergeCafeSettings(...layers)`**:
   lenient, for readers. Every valid field of `raw` replaces the base's;
   anything missing or invalid keeps the base's value. Never throws. A layer that
-  changes the time zone without giving its offsets gets them worked out.
+  changes the time zone without giving its offsets gets them worked out, and
+  one that changes the currency without a cap gets that currency's default. A
+  layer at `schemaVersion` 1 is from before money had a unit and reads as
+  `LEGACY_MONEY`: whole units, a cap of 10,000.
 - **`validateCafeSettings(raw)`**: strict, for writers (the console, the
   deployer). Every field present and valid, no unknown fields, the current
   schema version, offsets that match the time zone. Returns the cleaned
   settings or every problem by name. `validateSiteFile` does the same for a
   whole `site.json`, and `siteFileFor(settings, { demo })` builds one.
 
-`newCafeSettings(fields)` fills in the defaults and the zone's offsets for a new
-cafe.
+`newCafeSettings(fields)` fills in the defaults, the zone's offsets and the
+currency's cap for a new cafe, in minor units.
+
+## Money
+
+Prices and totals are integers in the cafe's `moneyUnit`
+([`src/money.ts`](./src/money.ts)): `"minor"`, the currency's smallest unit
+(paise, cents; yen have none), or `"major"`, whole units, which is TOE's data
+until its migration (#21). The digits come from `Intl`:
+`currencyDigits("INR")` is 2, `currencyDigits("JPY")` 0, and `moneyDigits(settings)`
+is 0 for a cafe in whole units.
+
+- `formatMoney(amount, settings)`: "₹180", "₹180.50", "$4.50", "¥1,200";
+  decimals only when there is something after the point.
+- `parseMoneyInput(text, settings)`: what an owner typed into a price field,
+  as the stored integer, or null. "4.50" and "4,50" are 450 cents.
+- `moneyToDecimal(amount, settings, { padded })`: "180.50", for the CSV.
+- `currencySymbol(settings)`: "₹", for labels.
+- `defaultMaxOrderTotal(settings)`: the cap a cafe starts with, about US$150
+  (TOE's ₹10,000 sets the scale), in its unit.
+
+See [`apps/cafe/docs/decisions.md`](../../apps/cafe/docs/decisions.md), "Any
+currency", for why, and for how TOE's rupees are read until they move.
 
 ## Plans and features
 
