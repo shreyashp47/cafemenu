@@ -80,11 +80,13 @@ service cloud.firestore {
     function isSettings(s) {
       return s is map
         && s.keys().hasOnly(['schemaVersion', 'name', 'tagline', 'theme',
-          'accent', 'logo', 'currency', 'locale', 'timeZone', 'utcOffsets',
-          'tables', 'baseUrl', 'plan'])
+          'accent', 'logo', 'currency', 'locale', 'moneyUnit',
+          'maxOrderTotal', 'timeZone', 'utcOffsets', 'tables', 'baseUrl',
+          'plan'])
         && s.keys().hasAll(['schemaVersion', 'name', 'tagline', 'theme',
-          'accent', 'logo', 'currency', 'locale', 'timeZone', 'utcOffsets',
-          'tables', 'baseUrl', 'plan'])
+          'accent', 'logo', 'currency', 'locale', 'moneyUnit',
+          'maxOrderTotal', 'timeZone', 'utcOffsets', 'tables', 'baseUrl',
+          'plan'])
         && s.schemaVersion is int && s.schemaVersion >= 1
         && s.name is string && s.name.size() >= 1 && s.name.size() <= 60
         && s.tagline is string && s.tagline.size() <= 80
@@ -94,6 +96,9 @@ service cloud.firestore {
         && (s.logo == null || (s.logo is string && s.logo.size() <= 500))
         && s.currency is string && s.currency.matches('[A-Z]{3}')
         && s.locale is string && s.locale.size() >= 2 && s.locale.size() <= 35
+        && s.moneyUnit in ['minor', 'major']
+        && s.maxOrderTotal is int && s.maxOrderTotal >= 1
+        && s.maxOrderTotal <= 1000000000000
         && s.timeZone is string && s.timeZone.size() >= 1 && s.timeZone.size() <= 64
         && s.utcOffsets is map
         && s.utcOffsets.keys().hasOnly(['standard', 'daylight'])
@@ -140,6 +145,9 @@ service cloud.firestore {
         && isSettings(request.resource.data.settings)
         // Every cafe starts free. Plans are the backend's to change (#17).
         && request.resource.data.settings.plan == 'free'
+        // A new cafe has no data, so its money is in minor units from the
+        // start. "major" is TOE's whole rupees until its migration (#21).
+        && request.resource.data.settings.moneyUnit == 'minor'
         && request.resource.data.release is map
         && request.resource.data.release.keys().hasOnly(['channel', 'pinned', 'current', 'previous'])
         && request.resource.data.release.keys().hasAll(['channel', 'pinned', 'current', 'previous'])
@@ -154,8 +162,10 @@ service cloud.firestore {
       // started they are fixed, because the backend deploys to them.
       //
       // Never the owner's: ownerUid, ownerEmail, status, createdAt, the plan
-      // in settings, and release.current and release.previous, which say what
-      // is actually deployed. The diff on `release` names the two keys an owner may touch,
+      // and the money unit in settings (the unit says what the cafe's stored
+      // prices count, which only a migration changes; a record from before
+      // #12 has none and is whole units), and release.current and
+      // release.previous, which say what is actually deployed. The diff on `release` names the two keys an owner may touch,
       // so adding or removing a key there is refused too.
       allow update: if verified()
         && owns(resource.data)
@@ -164,6 +174,8 @@ service cloud.firestore {
         && request.resource.data.updatedAt == request.time
         && isSettings(request.resource.data.settings)
         && request.resource.data.settings.plan == resource.data.settings.plan
+        && request.resource.data.settings.moneyUnit
+          == resource.data.settings.get('moneyUnit', 'major')
         && request.resource.data.release is map
         && request.resource.data.release.diff(resource.data.release).affectedKeys()
           .hasOnly(['channel', 'pinned'])
