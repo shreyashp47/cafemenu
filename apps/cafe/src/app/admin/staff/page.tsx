@@ -273,7 +273,7 @@ function InviteRow({
 
   return (
     <li className="border-line-soft flex flex-wrap items-center gap-2 rounded-sm border-2 p-2.5">
-      <div className="min-w-0 flex-1">
+      <div className="min-w-40 flex-1">
         <p className="text-ink font-semibold">
           {ROLE_LABEL[invite.role]} invite
         </p>
@@ -292,21 +292,23 @@ function InviteRow({
           </p>
         ) : null}
       </div>
-      {expired ? null : <CopyButton text={link} size="sm" />}
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={async () => {
-          setError(null);
-          try {
-            await onDelete();
-          } catch (err) {
-            setError(friendlyTeamError(err));
-          }
-        }}
-      >
-        {expired ? "Clear" : "Cancel invite"}
-      </Button>
+      <div className="flex gap-2">
+        {expired ? null : <CopyButton text={link} size="sm" />}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={async () => {
+            setError(null);
+            try {
+              await onDelete();
+            } catch (err) {
+              setError(friendlyTeamError(err));
+            }
+          }}
+        >
+          {expired ? "Clear" : "Cancel invite"}
+        </Button>
+      </div>
     </li>
   );
 }
@@ -345,7 +347,7 @@ function MemberRow({
   return (
     <li className="border-line-soft rounded-sm border-2 p-2.5">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="min-w-0 flex-1">
+        <div className="min-w-40 flex-1">
           <p className="text-ink truncate font-semibold">
             {member.name}
             {isMe ? (
@@ -356,29 +358,32 @@ function MemberRow({
             <p className="text-muted truncate text-sm">{member.email}</p>
           ) : null}
         </div>
-        <label className="sr-only" htmlFor={`role-${member.uid}`}>
-          Role for {member.name}
-        </label>
-        <Select
-          id={`role-${member.uid}`}
-          value={member.role}
-          disabled={locked || busy}
-          onChange={(e) =>
-            void run(() => onSetRole(e.target.value as InviteRole))
-          }
-          className="w-auto min-w-32"
-        >
-          <option value="staff">Staff</option>
-          <option value="owner">Owner</option>
-        </Select>
-        <Button
-          variant="ghost"
-          size="sm"
-          disabled={locked || busy}
-          onClick={() => setConfirming(true)}
-        >
-          Remove
-        </Button>
+        <div className="flex items-center gap-2">
+          <label className="sr-only" htmlFor={`role-${member.uid}`}>
+            Role for {member.name}
+          </label>
+          <div className="w-32">
+            <Select
+              id={`role-${member.uid}`}
+              value={member.role}
+              disabled={locked || busy}
+              onChange={(e) =>
+                void run(() => onSetRole(e.target.value as InviteRole))
+              }
+            >
+              <option value="staff">Staff</option>
+              <option value="owner">Owner</option>
+            </Select>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={locked || busy}
+            onClick={() => setConfirming(true)}
+          >
+            Remove
+          </Button>
+        </div>
       </div>
       {locked ? (
         <p className="text-muted mt-1.5 text-sm">
