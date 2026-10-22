@@ -49,6 +49,14 @@ Work that is built but not yet merged is tracked in
 - **TOE Cafe as a fixture** (#18): `fixtures/toe.json`, and CI runs the unit
   tests, the rules attack, `test:entry` and `flow` as TOE Cafe on every pull
   request (demo mode only).
+- **Staff invites** (#15): the owner adds staff and owners from
+  _Owner dashboard → Staff_ with a one-time invite link (seven days, exactly
+  one role), and the person signs up on `/join` with no terminal. The same page
+  lists the team, changes roles, removes people and cancels invites.
+  `seed:staff` stays for the first owner.
+- `firestore.rules`: `/invites` (public `get` by id, owner `list` and write),
+  and a new account may create its own `/staff` record only in the batch that
+  spends an open invite with exactly that role.
 
 ### Fixed
 
