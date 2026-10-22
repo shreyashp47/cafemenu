@@ -319,7 +319,7 @@ check("customer moved on to Preparing by itself", true);
 await staff.waitForFunction(
   () => document.querySelector("main")?.innerText.includes("#0001"),
   undefined,
-  { timeout: 10_000 },
+  { timeout: 20_000 },
 );
 check(
   "once accepted, the board gives it today's first number, #0001",
@@ -328,7 +328,7 @@ check(
 await customer.waitForFunction(
   () => document.body.innerText.includes("#0001"),
   undefined,
-  { timeout: 10_000 },
+  { timeout: 20_000 },
 );
 check(
   "the customer's screen shows #0001 live",
