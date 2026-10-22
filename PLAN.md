@@ -8,17 +8,17 @@ _"CafeMenu" is a working name._
 
 ## Decisions so far
 
-| Question                       | Decision                                                                                                                                                            |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Where does a cafe's data live? | In **the owner's own Firebase project**, in their own Google account. They own the data and pay any Firebase bill (usually ₹0 on the free Spark plan, same as TOE). |
-| Who updates the sites?         | **You.** Your platform has deploy access to each owner's project and pushes new releases.                                                                           |
-| "Versions"                     | **Releases** (v1, v2, …). Each owner picks which release their cafe runs and when to upgrade.                                                                       |
-| Look                           | **Preset themes** + the cafe's own name, tagline, logo and accent colour.                                                                                           |
-| Countries                      | **Any country from day one**: currency, time zone, date and number formats are per cafe.                                                                            |
-| Language                       | **English first**, with every string in a translation file so more languages are a drop-in later.                                                                   |
-| Pricing                        | **Free for now, paid later.** Leave room for plans without building billing yet.                                                                                    |
-| Code and tracking              | Public, MIT-licensed repo [shreyashp47/cafemenu](https://github.com/shreyashp47/cafemenu). One milestone per phase, one issue per piece of work.                    |
-| Version 1.0                    | Phases 0–4, then a full test of every feature ([v1.0 release testing](#v10-release-testing)) before tagging `v1.0.0`.                                               |
+| Question                       | Decision                                                                                                                                                                                                                          |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Where does a cafe's data live? | In **the owner's own Firebase project**, in their own Google account. They own the data and pay any Firebase bill (usually ₹0 on the free Spark plan, same as TOE).                                                               |
+| Who updates the sites?         | **You.** Your platform has deploy access to each owner's project and pushes new releases.                                                                                                                                         |
+| "Versions"                     | **Releases** (v1, v2, …). Each owner picks which release their cafe runs and when to upgrade.                                                                                                                                     |
+| Look                           | **Preset themes** + the cafe's own name, tagline, logo and accent colour.                                                                                                                                                         |
+| Countries                      | **Any country from day one**: currency, time zone, date and number formats are per cafe.                                                                                                                                          |
+| Language                       | **English first**, with every string in a translation file so more languages are a drop-in later.                                                                                                                                 |
+| Pricing                        | **Free for now, paid later.** Leave room for plans without building billing yet.                                                                                                                                                  |
+| Code and tracking              | Public, MIT-licensed repo [shreyashp47/cafemenu](https://github.com/shreyashp47/cafemenu). One milestone per phase, one issue per piece of work.                                                                                  |
+| Version 1.0                    | **Lean** (decided 2026-10-22): generic cafe sites, each on the owner's own Firebase project, set up and updated by you with the deployer CLI. Self-serve signup and automatic rollouts move to v1.1 (see [Lean v1.0](#lean-v10)). |
 
 ## What TOE gives us, and what has to change
 
@@ -151,6 +151,26 @@ Later, steps 3–4 can become one **Connect with Google** button that creates th
 project for them. That needs Google's OAuth app verification for Cloud scopes:
 until an app is verified, Google shows a warning screen and caps it at 100 users
 for the life of the project. So it isn't in the first version.
+
+## Lean v1.0
+
+Making TOE generic (Phase 1) is the small part. Most of the original plan is
+the platform around it: self-serve signup, automatic project setup, and safe
+rollouts to many cafes. To get cafes running sooner, v1.0 is lean:
+
+- **In v1.0:** Phase 0 (the deployer against real Firebase, which needs #2),
+  the rest of Phase 1 (#14), Phase 2 (#20 deploys and rollback, #21
+  migrations, #22 the after-deploy check, #23 TOE onto the pipeline), the
+  legal drafts (#31), and release testing (#41, adjusted to the lean scope).
+- **How a cafe gets its site:** the owner creates a Firebase project and adds
+  CafeMenu's deploy account (the steps from Phase 0); you run
+  `deployer provision`, `deployer deploy` and `deployer owner`; they print their
+  QR cards. Updates are `deployer deploy --version …` per cafe.
+- **Moved to v1.1** ([milestone](https://github.com/shreyashp47/cafemenu/milestone/8)):
+  the console's signup, onboarding wizard, automatic setup, owner updates
+  page and admin (#26–#30), and rollout waves, auto-rollback, owner emails and
+  the support window (#32–#35). The console app and landing page (#24, #25)
+  are already built and stay.
 
 ## Work plan
 
