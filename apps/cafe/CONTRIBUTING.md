@@ -166,6 +166,17 @@ These exist because of specific problems, not taste.
 8. **Never put body text on a mid-tone palette colour.** Use the `-deep` token
    variants. `npm run audit` will fail otherwise.
 
+9. **Every word a person reads goes through `t()`.** Add the message to
+   `messages/en.json` (what a customer's screens can reach) or
+   `messages/en.staff.json` (the staff board, owner dashboard and join page),
+   under the screen's group, and write `t("group.key", { name })` with
+   `{name}` where the code fills something in. A word that varies with a
+   count is `{ "one": …, "other": … }` and takes `{ count }`. Dates and
+   numbers format in the cafe's locale (`getLocale()`), never `"en-IN"`. Two
+   tests fail otherwise: one on words typed into JSX, one on keys that are
+   missing, unused or called with the wrong placeholders, or a customer route
+   reaching a staff message. See docs/decisions.md, "Words in a catalogue".
+
 ## Commit messages
 
 Conventional Commits, one logical change per commit:
