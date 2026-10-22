@@ -252,7 +252,7 @@ const WHEN = new Date("2026-10-01T09:00:00Z");
 // DEFAULT_SETTINGS from @cafemenu/shared (packages/shared/src/settings.ts),
 // written out because this script is plain Node and cannot import TypeScript.
 const settings = (o = {}) => ({
-  schemaVersion: 1,
+  schemaVersion: 2,
   name: "Mochi & Beans",
   tagline: "Good Coffee, Better Days",
   theme: "cozy",
@@ -260,6 +260,8 @@ const settings = (o = {}) => ({
   logo: null,
   currency: "INR",
   locale: "en-IN",
+  moneyUnit: "minor",
+  maxOrderTotal: 1_000_000,
   timeZone: "Asia/Kolkata",
   utcOffsets: { standard: 330, daylight: 330 },
   tables: [1, 2, 3, 4, 5, 6],
@@ -592,12 +594,19 @@ for (const [what, bad] of [
   ["a base URL with a path", { baseUrl: "https://their-cafe.web.app/order" }],
   ["offsets as text", { utcOffsets: { standard: "330", daylight: 330 } }],
   ["schema version 0", { schemaVersion: 0 }],
+  ["a money unit it does not know", { moneyUnit: "paise" }],
+  ["an order cap of 0", { maxOrderTotal: 0 }],
+  ["an order cap in decimals", { maxOrderTotal: 99.5 }],
 ]) {
   await t(
     `cannot create with ${what} in the settings`,
     denied(() => create(carol, { settings: settings(bad) })),
   );
 }
+await t(
+  "cannot create a cafe in whole units (#12: new cafes are in minor units)",
+  denied(() => create(carol, { settings: settings({ moneyUnit: "major" }) })),
+);
 await t(
   "cannot create a cafe on a paid plan",
   denied(() => create(carol, { settings: settings({ plan: "pro" }) })),
@@ -651,6 +660,44 @@ await t(
     }),
   ),
 );
+await t(
+  "owner A sets their own order cap",
+  allowed(() =>
+    edit(alice, "cafe-a", { settings: settings({ maxOrderTotal: 500_000 }) }),
+  ),
+);
+await t(
+  "owner A cannot change what their stored prices count (a migration's job)",
+  denied(() =>
+    edit(alice, "cafe-a", { settings: settings({ moneyUnit: "major" }) }),
+  ),
+);
+{
+  // Records from before #12: version 1 settings, no unit, whole units.
+  const before = settings({ schemaVersion: 1 });
+  delete before.moneyUnit;
+  delete before.maxOrderTotal;
+  for (const id of ["cafe-toe", "cafe-toe-2"]) {
+    await seed(
+      `cafes/${id}`,
+      cafeRecord(ALICE, { site: id, settings: before }),
+    );
+  }
+  await t(
+    "a cafe from before #12 is saved in whole units, as its data is",
+    allowed(() =>
+      edit(alice, "cafe-toe", {
+        settings: settings({ moneyUnit: "major", maxOrderTotal: 10_000 }),
+      }),
+    ),
+  );
+  await t(
+    "…and not switched to minor units by the owner",
+    denied(() =>
+      edit(alice, "cafe-toe-2", { settings: settings({ moneyUnit: "minor" }) }),
+    ),
+  );
+}
 await t(
   "owner A cannot change one setting to something invalid",
   denied(() => edit(alice, "cafe-a", { "settings.tables": [0] })),

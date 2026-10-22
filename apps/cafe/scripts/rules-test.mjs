@@ -568,6 +568,9 @@ await t(
     }),
   ),
 );
+// No config/site yet (a rerun may have left one): TOE's cap of 10,000 whole
+// rupees. The per-currency caps are further down, once it is seeded.
+await adminDoc("config/site", { method: "DELETE" });
 await t(
   "a ₹10,000 order is allowed",
   allowed(() =>
@@ -1989,6 +1992,82 @@ const numberUnder = async (c, id, key) => {
     "and the settings put right, the same order numbers",
     allowed(() => numberUnder(staffC, b, "2026-06-21")),
   );
+}
+
+// -- order caps per currency (#12) -------------------------------------------
+// The total's bound is config/site's maxOrderTotal, an integer in the cafe's
+// own money unit (orderWithinCap). With none, TOE's 10,000 whole rupees.
+console.log("\n order caps per currency (config/site maxOrderTotal)");
+{
+  const capped = (total, price = total) => ({
+    items: [line({ qty: 1, price })],
+    total,
+  });
+  // Exactly these fields, nothing merged in: setSite always adds the seeded
+  // settings, which with CAFE_FIXTURE=toe carry a cap of their own.
+  const putSite = async (fields) => {
+    const r = await adminDoc("config/site", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fields: restFields(fields) }),
+    });
+    if (!r.ok) throw new Error(`could not seed config/site: ${r.status}`);
+  };
+  const minor = { schemaVersion: 2, moneyUnit: "minor" };
+  const currencies = [
+    ["INR in paise (₹10,000)", "INR", "en-IN", 1_000_000],
+    ["USD in cents ($150)", "USD", "en-US", 15_000],
+    ["JPY, no minor unit (¥20,000)", "JPY", "ja-JP", 20_000],
+  ];
+  for (const [label, currency, locale, cap] of currencies) {
+    await setSite({ ...minor, currency, locale, maxOrderTotal: cap });
+    await t(
+      `${label}: an order of exactly the cap is taken`,
+      allowed(() => placeAs(publicC, capped(cap))),
+    );
+    await t(
+      `${label}: one more is refused`,
+      denied(() => placeAs(publicC, capped(cap + 1))),
+    );
+  }
+  await t(
+    "a first line dearer than the cap is refused, whatever the total says",
+    denied(() => placeAs(publicC, capped(1, 20_001))),
+  );
+  await t(
+    "a cafe in paise takes the ₹150 order TOE's whole-rupee cap would refuse",
+    allowed(() => placeAs(publicC, capped(15_000))),
+  );
+
+  // TOE's settings from before #12: no cap, so 10,000, as the rule always said.
+  const before = { ...SITE_SETTINGS, schemaVersion: 1 };
+  delete before.maxOrderTotal;
+  delete before.moneyUnit;
+  await putSite(before);
+  await t(
+    "config/site with no cap (TOE before #12): 10,000 is taken",
+    allowed(() => placeAs(publicC, capped(10_000))),
+  );
+  await t(
+    "and 10,001 is refused",
+    denied(() => placeAs(publicC, capped(10_001))),
+  );
+  await adminDoc("config/site", { method: "DELETE" });
+  await t(
+    "no config/site at all: 10,000 is taken",
+    allowed(() => placeAs(publicC, capped(10_000))),
+  );
+  await t(
+    "and 10,001 is refused",
+    denied(() => placeAs(publicC, capped(10_001))),
+  );
+  // A cap the platform got wrong refuses orders rather than guess one.
+  await setSite({ maxOrderTotal: "1000000" });
+  await t(
+    "a cap that is not a number refuses every order",
+    denied(() => placeAs(publicC, capped(100))),
+  );
+  await setSite({});
 }
 
 // -- open tables: staff confirm new guests (src/lib/table-open.ts) ----------
