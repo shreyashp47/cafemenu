@@ -18,12 +18,15 @@ export async function getRelease(api, project, releaseId) {
   });
 }
 
-/** {name, source: {files: [{name, content}]}, createTime}. */
-export async function getRuleset(api, rulesetName) {
+/**
+ * {name, source: {files: [{name, content}]}, createTime}. Pass
+ * `{notFound: null}` to get null for a ruleset that no longer exists.
+ */
+export async function getRuleset(api, rulesetName, options) {
   // https://firebase.google.com/docs/reference/rules/rest/v1/projects.rulesets/get
   // GET v1/projects/{id}/rulesets/{ruleset} → Ruleset
   // UNVERIFIED: run in spike #5
-  return api.get(`${RULES}/${rulesetName}`);
+  return api.get(`${RULES}/${rulesetName}`, options);
 }
 
 /** Compiles and stores `files`. A syntax error comes back as a 400 naming the line. */

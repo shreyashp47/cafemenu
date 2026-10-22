@@ -39,6 +39,7 @@ describe("check", () => {
       "owner",
       "provision",
       "rollback",
+      "sync-branding",
     ]);
     assert.deepEqual(result.missing.owner, [
       {
