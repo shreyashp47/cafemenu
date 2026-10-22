@@ -30,6 +30,8 @@ import { formatMoney, lineSubtotal, priceCart } from "@/lib/money";
 import { orderCapProblems } from "@/lib/order-caps";
 import { readTableCode, type TableCode } from "@/lib/table-keys";
 import type { MenuItem } from "@/lib/types";
+import { t } from "@/lib/i18n";
+import { rich } from "@/lib/i18n-rich";
 
 export default function OrderPage() {
   return (
@@ -40,7 +42,7 @@ export default function OrderPage() {
         It also keeps the "Finding your table…" loader inside the boundary,
         which is where it belongs — it is the fallback, not the whole page.
       */}
-      <Suspense fallback={<Loading label="Finding your table…" />}>
+      <Suspense fallback={<Loading label={t("order.findingTable")} />}>
         <OrderScreen />
       </Suspense>
     </DataProvider>
@@ -58,7 +60,7 @@ function OrderScreen() {
   // address bar, so it is not left in history, a bookmark or a shared link.
   useTakeKeyFromAddress(ready, tableNumber, tableKey);
 
-  if (!ready || loading) return <Loading label="Finding your table…" />;
+  if (!ready || loading) return <Loading label={t("order.findingTable")} />;
   if (tableNumber === null) return <ScanPrompt odd={raw !== null} />;
   // A number that parses but is not a table this cafe has. Reachable by editing
   // the URL, or by scanning a QR code left over from a table that has since been
@@ -87,22 +89,17 @@ function ScanPrompt({ odd }: { odd: boolean }) {
       <Doodles />
       <Mascot mood="worry" size={140} />
       <h1 className="font-hand text-primary-dark text-4xl">
-        {odd ? "That table number looks odd" : "Scan the QR code on your table"}
+        {odd ? t("order.oddTable") : t("order.scanTitle")}
       </h1>
       <div className="border-line bg-paper shadow-card flex w-full items-center gap-3 rounded-lg border-2 p-4 text-left">
         <span className="bg-highlight-soft text-primary grid size-12 shrink-0 place-items-center rounded-md">
           <Icon name="qr" size={28} />
         </span>
         <p className="text-body text-sm leading-snug">
-          {odd
-            ? "Scan the QR code on your table again — it opens the menu for that table."
-            : "Point your phone's camera at the card on your table. It opens the menu for that table."}
+          {odd ? t("order.scanAgainHint") : t("order.scanHint")}
         </p>
       </div>
-      <p className="text-muted max-w-xs text-sm">
-        No card on your table? Ask at the counter and we&apos;ll take your order
-        there.
-      </p>
+      <p className="text-muted max-w-xs text-sm">{t("order.noCardTable")}</p>
     </main>
   );
 }
@@ -199,7 +196,7 @@ function MenuScreen({
       {/* category rail — docs/anime-theme.md §4: icons, not plain text labels */}
       {items.length > 0 ? (
         <nav
-          aria-label="Menu categories"
+          aria-label={t("order.menuCategories")}
           className="no-scrollbar border-line-soft bg-cream/90 sticky top-0 z-20 mt-4 overflow-x-auto border-y-2 backdrop-blur-sm"
           // fades the right edge so a cut-off chip reads as "scroll me"
           style={{
@@ -209,7 +206,7 @@ function MenuScreen({
         >
           <div className="shell flex gap-2 py-2">
             <CategoryChip
-              label="All"
+              label={t("order.all")}
               icon="sparkle"
               active={showAll}
               onClick={() => jumpTo("All")}
@@ -234,12 +231,12 @@ function MenuScreen({
             className="border-berry bg-paper rounded-lg border-2 p-4 text-center"
           >
             <p className="text-berry-deep font-semibold">
-              We couldn&apos;t load the menu.
+              {t("order.couldntLoadMenu")}
             </p>
             <p className="text-muted mt-1 text-sm">{error.message}</p>
           </div>
         ) : loading || items.length === 0 ? (
-          <Loading label="Setting out the cups…" />
+          <Loading label={t("order.settingOutCups")} />
         ) : (
           <div className="flex flex-col gap-7 pb-4">
             {groups.map(([category, icon]) => (
@@ -278,8 +275,7 @@ function MenuScreen({
         )}
 
         <p className="text-muted pt-2 pb-6 text-center text-sm">
-          Pay at the counter when you&apos;re done — no app, no OTP, no
-          cash-handling here.
+          {t("order.payCounterWhen")}
         </p>
       </main>
 
@@ -293,7 +289,7 @@ function MenuScreen({
             className="shadow-lift"
           >
             <Icon name="cart" size={22} />
-            <span>View order</span>
+            <span>{t("order.viewOrder")}</span>
             <span className="tnum rounded-pill bg-on-dark/20 px-2.5 py-0.5 text-sm">
               {cart.count}
             </span>
@@ -404,12 +400,12 @@ function MenuCard({
         </span>
         {soldOut ? (
           <span className="rounded-pill bg-tan-deep font-round text-ink px-3 py-1.5 text-sm">
-            Sold out
+            {t("order.soldOut")}
           </span>
         ) : qty === 0 ? (
           <Button size="sm" variant="highlight" onClick={onAdd}>
             <Icon name="plus" size={18} />
-            Add
+            {t("order.add")}
           </Button>
         ) : (
           <Stepper
@@ -450,7 +446,7 @@ function Stepper({
         className ?? "",
       ].join(" ")}
     >
-      <StepperButton label={`Remove one ${name}`} onClick={onDec}>
+      <StepperButton label={t("order.removeOne", { name })} onClick={onDec}>
         <Icon name="minus" size={18} />
       </StepperButton>
       <span
@@ -459,7 +455,7 @@ function Stepper({
       >
         {qty}
       </span>
-      <StepperButton label={`Add one more ${name}`} onClick={onInc}>
+      <StepperButton label={t("order.addOneMore", { name })} onClick={onInc}>
         <Icon name="plus" size={18} />
       </StepperButton>
     </div>
@@ -524,7 +520,7 @@ function CartSheet({
     // 3 hours must not send a code that has run out.
     const fresh = readTableCode(tableNumber);
     if (fresh.state === "expired") {
-      setError(SCAN_AGAIN);
+      setError(scanAgain());
       return;
     }
     setPlacing(true);
@@ -546,11 +542,7 @@ function CartSheet({
         `/order/confirmation?table=${tableNumber}&id=${order.id}`,
       );
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "We couldn't send that. Try again.",
-      );
+      setError(err instanceof Error ? err.message : t("order.sendFailed"));
       setPlacing(false);
     }
   }
@@ -559,7 +551,7 @@ function CartSheet({
     <Sheet
       open={open}
       onClose={onClose}
-      title={`Table ${tableNumber}`}
+      title={t("order.tableTitle", { table: tableNumber })}
       footer={
         cart.isEmpty ? null : (
           <div className="flex flex-col gap-2 pb-1">
@@ -568,15 +560,16 @@ function CartSheet({
                 role="alert"
                 className="border-berry/40 bg-berry/10 text-berry-deep rounded-sm border-2 px-3 py-2 text-sm"
               >
-                {[...priceCheck.blocking, ...caps].join(" ")} Please adjust your
-                order.
+                {t("order.adjustOrder", {
+                  problems: [...priceCheck.blocking, ...caps].join(" "),
+                })}
               </p>
             ) : priceCheck.changes.length > 0 ? (
               <p
                 role="status"
                 className="border-secondary/40 bg-highlight-soft/60 text-primary-dark rounded-sm border-2 px-3 py-2 text-sm"
               >
-                Price updated &mdash; the total below is what you&apos;ll pay.
+                {t("order.priceUpdatedTotal")}
               </p>
             ) : null}
             {needsScan && !error ? (
@@ -584,7 +577,7 @@ function CartSheet({
                 role="alert"
                 className="border-berry/40 bg-berry/10 text-berry-deep rounded-sm border-2 px-3 py-2 text-sm"
               >
-                {SCAN_AGAIN}
+                {scanAgain()}
               </p>
             ) : null}
             {error ? (
@@ -602,7 +595,7 @@ function CartSheet({
                 onChange={(e) => setAgreed(e.target.checked)}
                 className="size-5 accent-[var(--primary)]"
               />
-              I&apos;ll pay at the counter.
+              {t("order.illPayCounter")}
             </label>
             <Button
               size="lg"
@@ -611,8 +604,10 @@ function CartSheet({
               onClick={place}
             >
               {placing
-                ? "Sending…"
-                : `Place order · ${formatMoney(priceCheck.total, settings)}`}
+                ? t("order.sending")
+                : t("order.placeOrder", {
+                    total: formatMoney(priceCheck.total, settings),
+                  })}
             </Button>
           </div>
         )
@@ -621,8 +616,8 @@ function CartSheet({
       {cart.isEmpty ? (
         <EmptyState
           mood="worry"
-          title="Nothing here yet"
-          body="Tap + Add on anything that looks good. It stays here if you switch apps."
+          title={t("order.nothingHereYet")}
+          body={t("order.tapAddAnything")}
         />
       ) : (
         <ul className="flex flex-col gap-2.5">
@@ -639,7 +634,9 @@ function CartSheet({
                       {line.name}
                     </p>
                     <p className="tnum text-muted text-sm">
-                      {formatMoney(line.price, settings)} each
+                      {t("order.priceEach", {
+                        price: formatMoney(line.price, settings),
+                      })}
                     </p>
                   </div>
                   <Stepper
@@ -658,12 +655,12 @@ function CartSheet({
                     onClick={() => cart.remove(line.menuItemId)}
                     className="text-muted hover:text-berry-deep min-h-11 px-2 text-sm font-semibold underline-offset-2 hover:underline"
                   >
-                    Remove
+                    {t("order.remove")}
                   </button>
                 </div>
                 {item && !item.available ? (
                   <p className="text-berry-deep mt-1 text-sm font-semibold">
-                    Just sold out — remove it to continue.
+                    {t("order.justSoldOut")}
                   </p>
                 ) : null}
               </li>
@@ -674,17 +671,14 @@ function CartSheet({
 
       {!cart.isEmpty ? (
         <SpeechBubble mood="happy" className="mt-4" tail="none">
-          {cart.count === 1
-            ? "One for the road?"
-            : `${cart.count} items going on order #soon.`}
+          {t("order.itemsGoing", { count: cart.count })}
         </SpeechBubble>
       ) : null}
     </Sheet>
   );
 }
 
-const SCAN_AGAIN =
-  "It's been a while since you scanned. To order, please scan the QR code on your table again.";
+const scanAgain = () => t("order.scanAgain");
 
 /**
  * Said before the customer builds a basket, not only at checkout, whenever this
@@ -712,9 +706,7 @@ function ScanNotice({ code }: { code: TableCode }) {
       >
         <Icon name="qr" size={22} className="text-primary shrink-0" />
         <p className="text-ink text-sm leading-snug">
-          {code.state === "expired"
-            ? SCAN_AGAIN
-            : "To order, scan the QR code on your table."}
+          {code.state === "expired" ? scanAgain() : t("order.scanToOrder")}
         </p>
       </div>
     </div>
@@ -727,9 +719,10 @@ function DemoNotice() {
       <div className="border-secondary/50 bg-highlight-soft/50 flex items-start gap-2 rounded-md border-2 border-dashed px-3 py-2">
         <Icon name="sparkle" size={18} className="text-secondary mt-0.5" />
         <p className="text-primary-dark text-sm leading-snug">
-          <strong className="font-semibold">Demo mode.</strong> Orders are saved
-          in this browser only. Add Firebase keys to <code>.env.local</code> to
-          go live.
+          {rich("order.demoNotice", {
+            strong: (c) => <strong className="font-semibold">{c}</strong>,
+            code: (c) => <code>{c}</code>,
+          })}
         </p>
       </div>
     </div>

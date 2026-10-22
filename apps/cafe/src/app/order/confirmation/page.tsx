@@ -42,13 +42,15 @@ import { orderHref } from "@/lib/tables";
 import type { Order, OrderLine } from "@/lib/types";
 import { NUMBER_WAIT_MS, padDayNumber } from "@/lib/order-number";
 import { readSessionOrderId, rememberSessionOrder } from "@/lib/order-session";
+import { t } from "@/lib/i18n";
+import { rich } from "@/lib/i18n-rich";
 
 export default function ConfirmationPage() {
   return (
     <DataProvider>
       {/* See src/app/order/page.tsx: a static export prerenders with no query
           string, so the reader needs a Suspense boundary. */}
-      <Suspense fallback={<Loading label="Finding your order…" />}>
+      <Suspense fallback={<Loading label={t("confirmation.findingOrder")} />}>
         <ConfirmationScreen />
       </Suspense>
     </DataProvider>
@@ -77,17 +79,17 @@ function ConfirmationScreen() {
     dropKeyFromAddress();
   }, [ready, tableNumber, idFromUrl]);
 
-  if (!ready) return <Loading label="Finding your table…" />;
+  if (!ready) return <Loading label={t("confirmation.findingTable")} />;
 
   if (tableNumber === null) {
     return (
       <EmptyState
         mood="worry"
-        title="We lost that order"
-        body="Head back to the menu and order again — it'll only take a moment."
+        title={t("confirmation.lostOrder")}
+        body={t("confirmation.headBackMenu")}
         action={
           <Link href="/order">
-            <Button>Back to the menu</Button>
+            <Button>{t("confirmation.backMenu")}</Button>
           </Link>
         }
       />
@@ -131,7 +133,7 @@ function OrderNotFound({
     router.replace(menuHref);
   }, [hadId, router, menuHref]);
 
-  return <Loading label="Finding your order…" />;
+  return <Loading label={t("confirmation.findingOrder")} />;
 }
 
 function StatusScreen({
@@ -183,18 +185,18 @@ function StatusScreen({
     [order],
   );
 
-  if (loading) return <Loading label="Sending it up to the counter…" />;
+  if (loading) return <Loading label={t("confirmation.sendingUpCounter")} />;
 
   if (!order) {
     return (
       <main className="shell py-10">
         <EmptyState
           mood="worry"
-          title="We can't find that order"
-          body="It may have been cleared from this device. Ask the counter and we'll take another one."
+          title={t("confirmation.cantFindOrder")}
+          body={t("confirmation.mayHaveBeen")}
           action={
             <Link href={menuHref}>
-              <Button>Start a new order</Button>
+              <Button>{t("confirmation.startNewOrder")}</Button>
             </Link>
           }
         />
@@ -226,7 +228,7 @@ function StatusScreen({
       <header className="safe-t border-line-soft bg-cream/85 relative z-10 border-b-2 px-4 py-3 backdrop-blur-sm">
         <div className="shell text-muted flex items-center gap-2 text-sm font-semibold">
           <Icon name="pin" size={16} />
-          Table {tableNumber}
+          {t("confirmation.table", { table: tableNumber })}
           <HeaderNumber dayNumber={order.dayNumber} />
         </div>
       </header>
@@ -237,7 +239,7 @@ function StatusScreen({
           <Mascot mood={done ? "cheer" : "happy"} size={132} />
           <div>
             <h1 className="font-hand text-primary text-4xl leading-none">
-              {done ? "All yours!" : "Got it!"}
+              {done ? t("confirmation.allYours") : t("confirmation.gotIt")}
             </h1>
             <NumberLine
               order={order}
@@ -254,17 +256,17 @@ function StatusScreen({
           showMascot={false}
         >
           {done
-            ? "Enjoy! Pay at the counter whenever you're ready."
+            ? t("confirmation.enjoy")
             : offer.enabled && offer.text
               ? offer.text
-              : "We'll bring it over. Sit tight, this takes a minute."}
+              : t("confirmation.bringOver")}
         </SpeechBubble>
 
         <StatusTimeline current={order.status} activeStep={activeStep} />
 
         <Card className="overflow-hidden">
           <h2 className="border-line-soft border-b-2 px-4 py-2.5 text-lg">
-            What you ordered
+            {t("confirmation.whatOrdered")}
           </h2>
           <ul className="divide-line-soft divide-y-2">
             {order.items.map((line) => (
@@ -284,7 +286,9 @@ function StatusScreen({
               </li>
             ))}
             <li className="bg-highlight-soft/40 flex items-center justify-between gap-3 px-4 py-3">
-              <span className="font-round text-ink text-lg">Total</span>
+              <span className="font-round text-ink text-lg">
+                {t("confirmation.total")}
+              </span>
               <span className="tnum font-round text-primary text-xl">
                 {formatMoney(order.total, settings)}
               </span>
@@ -298,7 +302,7 @@ function StatusScreen({
             size={16}
             className="mr-1 inline-block align-[-2px]"
           />
-          Pay at the counter when you&apos;re done. Nothing to install, no OTP.
+          {t("confirmation.payCounterWhen")}
         </p>
 
         <div className="flex flex-col gap-2 pb-6 sm:flex-row">
@@ -311,14 +315,14 @@ function StatusScreen({
               window.location.assign(menuHref);
             }}
           >
-            Order again
+            {t("confirmation.orderAgain")}
           </Button>
           <Button
             variant="ghost"
             fullWidth
             onClick={() => window.location.assign(menuHref)}
           >
-            Back to the menu
+            {t("confirmation.backMenu")}
           </Button>
         </div>
       </main>
@@ -348,7 +352,7 @@ function RejectedNotice({
       <header className="safe-t border-line-soft bg-cream/85 relative z-10 border-b-2 px-4 py-3 backdrop-blur-sm">
         <div className="shell text-muted flex items-center gap-2 text-sm font-semibold">
           <Icon name="pin" size={16} />
-          Table {tableNumber}
+          {t("confirmation.table", { table: tableNumber })}
           <HeaderNumber dayNumber={dayNumber} />
         </div>
       </header>
@@ -357,34 +361,34 @@ function RejectedNotice({
         <Mascot mood="worry" size={132} />
         <div role="status" aria-live="polite">
           <h1 className="font-hand text-berry-deep text-4xl leading-tight">
-            The counter couldn&apos;t accept this order
+            {t("confirmation.counterCouldntAccept")}
           </h1>
           <p className="text-muted mt-2">
-            {dayNumber !== undefined ? (
-              <>
-                Order{" "}
-                <span className="tnum font-round text-ink">
-                  #{padDayNumber(dayNumber)}
-                </span>{" "}
-              </>
-            ) : (
-              "Your order "
-            )}
-            won&apos;t be made, and there&apos;s nothing to pay for it.
+            {dayNumber !== undefined
+              ? rich(
+                  "confirmation.rejectedNumbered",
+                  {
+                    num: (c) => (
+                      <span className="tnum font-round text-ink">{c}</span>
+                    ),
+                  },
+                  { number: padDayNumber(dayNumber) },
+                )
+              : t("confirmation.rejectedUnnumbered")}
           </p>
         </div>
 
         {reason ? (
           <Card className="w-full px-4 py-3">
             <p className="text-2xs text-muted font-semibold tracking-[0.12em] uppercase">
-              Reason
+              {t("confirmation.reason")}
             </p>
             <p className="text-ink mt-0.5 text-lg">{reason}</p>
           </Card>
         ) : null}
 
         <p className="border-line bg-tan/50 text-body w-full rounded-md border-2 border-dashed px-4 py-3 text-sm">
-          Please speak to the counter — they&apos;ll sort it out with you.
+          {t("confirmation.pleaseSpeakCounter")}
         </p>
 
         <Button
@@ -392,7 +396,7 @@ function RejectedNotice({
           fullWidth
           onClick={() => window.location.assign(menuHref)}
         >
-          Back to the menu
+          {t("confirmation.backMenu")}
         </Button>
       </main>
     </div>
@@ -437,8 +441,8 @@ function HeaderNumber({ dayNumber }: { dayNumber?: number }) {
   return (
     <span className="tnum rounded-pill bg-paper text-primary ml-auto px-2.5 py-0.5">
       {dayNumber !== undefined
-        ? `Order #${padDayNumber(dayNumber)}`
-        : "Order received"}
+        ? t("confirmation.orderNumber", { number: padDayNumber(dayNumber) })
+        : t("confirmation.orderReceived")}
     </span>
   );
 }
@@ -460,23 +464,32 @@ function NumberLine({
   if (order.dayNumber !== undefined) {
     return (
       <p className="text-muted mt-1" aria-live="polite">
-        Order{" "}
-        <span className="tnum font-round text-ink text-lg">
-          #{padDayNumber(order.dayNumber)}
-        </span>{" "}
-        is on its way to table {tableNumber}.
+        {rich(
+          "confirmation.onItsWay",
+          {
+            num: (c) => (
+              <span className="tnum font-round text-ink text-lg">{c}</span>
+            ),
+          },
+          { number: padDayNumber(order.dayNumber), table: tableNumber },
+        )}
       </p>
     );
   }
   return (
     <p className="text-muted mt-1" aria-live="polite">
-      <span className="text-ink font-semibold">Order received</span> for table{" "}
-      {tableNumber}.{" "}
+      {rich(
+        "confirmation.receivedFor",
+        { b: (c) => <span className="text-ink font-semibold">{c}</span> },
+        { table: tableNumber },
+      )}{" "}
       {waitedOut ? (
-        <span className="mt-0.5 block text-sm">The counter has it.</span>
+        <span className="mt-0.5 block text-sm">
+          {t("confirmation.counterHas")}
+        </span>
       ) : (
         <span className="mt-0.5 block animate-pulse text-sm">
-          Your number is coming…
+          {t("confirmation.numberComing")}
         </span>
       )}
     </p>
@@ -491,7 +504,7 @@ function StatusTimeline({
   activeStep: number;
 }) {
   return (
-    <section aria-label="Order progress">
+    <section aria-label={t("confirmation.orderProgress")}>
       <ol className="flex items-stretch gap-1.5">
         {CUSTOMER_STEPS.map((step, index) => {
           const done = index < activeStep;
@@ -519,14 +532,14 @@ function StatusTimeline({
       </ol>
       <p className="text-muted mt-3 text-center text-sm" aria-live="polite">
         {current === "received"
-          ? "The counter has your order."
+          ? t("confirmation.noteReceived")
           : current === "preparing"
-            ? "Being made right now."
+            ? t("confirmation.notePreparing")
             : current === "ready"
-              ? "Ready — a barista is bringing it over."
+              ? t("confirmation.noteReady")
               : current === "served"
-                ? "Served. Enjoy!"
-                : "This order is closed."}
+                ? t("confirmation.noteServed")
+                : t("confirmation.noteClosed")}
       </p>
     </section>
   );
