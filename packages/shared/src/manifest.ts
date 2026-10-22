@@ -8,15 +8,22 @@
  * deployer must agree on it.
  */
 
-import type { CafeSettings, ThemeId } from "./settings.ts";
+import type { CafeSettings } from "./settings.ts";
+import { themeColours } from "./themes.ts";
 
-/** Page and browser-chrome colours of each theme preset. */
-export const THEME_COLOURS: Record<
-  ThemeId,
-  { background: string; theme: string }
-> = {
-  cozy: { background: "#F2E4D3", theme: "#7A3E1D" },
-};
+/**
+ * The app's icons, at the paths every build and every deploy use. The build
+ * ships the demo cafe's; the deployer overwrites them all with the cafe's own
+ * from `appIcons()` (@cafemenu/shared/icons).
+ */
+export const ICON_PATHS = Object.freeze({
+  svg: "/icon.svg",
+  any192: "/icon-192.png",
+  any512: "/icon-512.png",
+  maskable: "/icon-maskable-512.png",
+  apple: "/apple-touch-icon.png",
+  favicon: "/favicon.ico",
+});
 
 export interface ManifestIcon {
   src: string;
@@ -45,7 +52,7 @@ export interface WebManifest {
  * counter phone; customers arrive by QR code and never need to install.
  */
 export function webManifest(settings: CafeSettings): WebManifest {
-  const colours = THEME_COLOURS[settings.theme] ?? THEME_COLOURS.cozy;
+  const colours = themeColours(settings);
   return {
     name: settings.tagline
       ? `${settings.name} · ${settings.tagline}`
@@ -61,21 +68,26 @@ export function webManifest(settings: CafeSettings): WebManifest {
     theme_color: colours.theme,
     categories: ["food", "shopping", "business"],
     icons: [
-      { src: "/icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" },
       {
-        src: "/icon-192.png",
+        src: ICON_PATHS.svg,
+        sizes: "any",
+        type: "image/svg+xml",
+        purpose: "any",
+      },
+      {
+        src: ICON_PATHS.any192,
         sizes: "192x192",
         type: "image/png",
         purpose: "any",
       },
       {
-        src: "/icon-512.png",
+        src: ICON_PATHS.any512,
         sizes: "512x512",
         type: "image/png",
         purpose: "any",
       },
       {
-        src: "/icon-512.png",
+        src: ICON_PATHS.maskable,
         sizes: "512x512",
         type: "image/png",
         purpose: "maskable",

@@ -31,11 +31,11 @@ import {
 export const SETTINGS_SCHEMA_VERSION = 1;
 
 /**
- * Theme presets (`data-theme` on the page). TOE's look is "cozy"; more arrive
- * with their CSS (issue #10). An unknown theme reads as the default, so a cafe
- * on a newer release's theme still renders on an older one.
+ * Theme presets (`data-theme` on the page; see ./themes.ts). TOE's look is
+ * "cozy". An unknown theme reads as the default, so a cafe on a newer
+ * release's theme still renders on an older one.
  */
-export const THEMES = ["cozy"] as const;
+export const THEMES = ["cozy", "minimal", "dark", "bistro"] as const;
 export type ThemeId = (typeof THEMES)[number];
 
 /** Free for now (issue #17); see ./features.ts for what each plan includes. */
