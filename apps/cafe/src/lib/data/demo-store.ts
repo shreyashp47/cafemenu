@@ -1,10 +1,10 @@
 /**
  * Demo storage backend.
  *
- * Zero-config, browser-local, and — importantly — still *live*: writes are
- * broadcast to every other tab on the same origin, so opening `/order?table=3`
- * and `/staff` side by side on one laptop behaves like the real thing. This is
- * how the app is demoed before a Firebase project exists.
+ * Zero-config, browser-local, and — importantly — still *live*: writes reach
+ * every other tab on the same origin, so opening `/order?table=3` and `/staff`
+ * side by side on one laptop behaves like the real thing. This is how the app
+ * is demoed before a Firebase project exists.
  *
  * Everything lives under a single localStorage key so a write is atomic and the
  * two-tab sync can't interleave a half-written state.
@@ -66,7 +66,6 @@ import { t } from "../i18n";
  * demo starts again from the seed.
  */
 export const DEMO_STORAGE_KEY = "cafe-qr-order.demo.v2";
-const SYNC_EVENT = "cafe-qr-order:sync";
 
 interface DemoState {
   menu: MenuItem[];
@@ -227,21 +226,25 @@ function load(): DemoState {
 
 type Listener = (state: DemoState) => void;
 const listeners = new Set<Listener>();
-let channel: BroadcastChannel | null | undefined;
+let watching = false;
 
-function getChannel(): BroadcastChannel | null {
-  if (channel === undefined) {
-    channel = null;
-    try {
-      if (typeof BroadcastChannel === "function") {
-        channel = new BroadcastChannel(SYNC_EVENT);
-        channel.onmessage = () => emit();
-      }
-    } catch {
-      channel = null;
-    }
-  }
-  return channel;
+/**
+ * Other tabs' writes arrive as `storage` events, which the browser fires once
+ * this tab's localStorage holds the new value, so the state read then is never
+ * older than the write. Not a BroadcastChannel message posted after each
+ * write, as this used to be: the browser delivers that message and the new
+ * value separately, in either order, and a tab busy rendering can be handed
+ * the message first. It re-read the old state, the value landed a moment
+ * later with nothing listening for it, and the tab showed the old state until
+ * the next write (#63: the customer's number missing after Accept).
+ */
+function watchOtherTabs() {
+  if (watching || typeof window === "undefined") return;
+  watching = true;
+  window.addEventListener("storage", (event) => {
+    // A null key: another tab cleared localStorage altogether.
+    if (event.key === DEMO_STORAGE_KEY || event.key === null) emit();
+  });
 }
 
 function emit() {
@@ -249,7 +252,8 @@ function emit() {
   for (const listener of listeners) listener(state);
 }
 
-function commit(next: DemoState, broadcast = true) {
+/** This tab's listeners hear it now; other tabs' through watchOtherTabs. */
+function commit(next: DemoState) {
   const store = getStorage();
   if (store) {
     try {
@@ -261,13 +265,6 @@ function commit(next: DemoState, broadcast = true) {
     memoryState = next;
   }
   emit();
-  if (broadcast) {
-    try {
-      getChannel()?.postMessage("changed");
-    } catch {
-      /* channel closed */
-    }
-  }
 }
 
 function mutate(fn: (state: DemoState) => DemoState) {
@@ -275,7 +272,7 @@ function mutate(fn: (state: DemoState) => DemoState) {
 }
 
 function subscribeState(listener: Listener): Unsubscribe {
-  getChannel();
+  watchOtherTabs();
   listeners.add(listener);
   listener(load());
   return () => {

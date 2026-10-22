@@ -66,12 +66,12 @@ storage backend.
 `src/lib/data/` defines the contracts (`MenuRepository`, `OrderRepository`,
 `AuthRepository`, `ConfigRepository`) with two implementations:
 
-|               | `demo/`                             | `firestore/`       |
-| ------------- | ----------------------------------- | ------------------ |
-| backing store | `localStorage` + `BroadcastChannel` | Firestore          |
-| live updates  | cross-tab sync                      | `onSnapshot`       |
-| auth          | fixed demo accounts                 | Firebase Auth      |
-| loaded        | statically                          | dynamic `import()` |
+|               | `demo/`                       | `firestore/`       |
+| ------------- | ----------------------------- | ------------------ |
+| backing store | `localStorage`                | Firestore          |
+| live updates  | `storage` events, across tabs | `onSnapshot`       |
+| auth          | fixed demo accounts           | Firebase Auth      |
+| loaded        | statically                    | dynamic `import()` |
 
 Because the Firestore module is behind a dynamic import and the demo path is the
 default, **a demo-mode visitor never downloads the Firebase SDK at all** — the
