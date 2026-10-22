@@ -21,14 +21,28 @@
  */
 
 import {
+  LEGACY_MAX_ORDER_TOTAL,
+  MAX_ORDER_TOTAL_LIMIT,
+  MONEY_UNITS,
+  defaultMaxOrderTotal,
+  type MoneyUnit,
+} from "./money.ts";
+import {
   isTimeZone,
   isUtcOffsets,
   utcOffsetsOf,
   type UtcOffsets,
 } from "./time-zone.ts";
 
-/** Bump on a change existing documents cannot be read under. */
-export const SETTINGS_SCHEMA_VERSION = 1;
+/**
+ * Bump on a change existing documents cannot be read under.
+ *
+ *   1. TOE's settings, as CafeMenu first wrote them.
+ *   2. Money in minor units (#12): adds `moneyUnit` and `maxOrderTotal`. A
+ *      version 1 document is from before them, when every cafe kept whole
+ *      units, and reads as LEGACY_MONEY.
+ */
+export const SETTINGS_SCHEMA_VERSION = 2;
 
 /**
  * Theme presets (`data-theme` on the page; see ./themes.ts). TOE's look is
@@ -69,6 +83,17 @@ export interface CafeSettings {
   currency: string;
   /** BCP 47 tag for number and date formats: "en-IN". */
   locale: string;
+  /**
+   * What the stored prices and totals count: "minor" (paise, cents; see
+   * ./money.ts) or "major", whole units, which is TOE's data until #21
+   * migrates it.
+   */
+  moneyUnit: MoneyUnit;
+  /**
+   * The most one order may total, in `moneyUnit`. firestore.rules reads it
+   * from config/site; defaultMaxOrderTotal is where a cafe starts.
+   */
+  maxOrderTotal: number;
   /** IANA zone the cafe's day runs in: "Asia/Kolkata". */
   timeZone: string;
   /** That zone's offsets, for firestore.rules, which cannot look them up. */
@@ -95,6 +120,8 @@ export const SETTINGS_KEYS = [
   "logo",
   "currency",
   "locale",
+  "moneyUnit",
+  "maxOrderTotal",
   "timeZone",
   "utcOffsets",
   "tables",
@@ -112,6 +139,8 @@ export const DEFAULT_SETTINGS: CafeSettings = deepFreeze({
   logo: null,
   currency: "INR",
   locale: "en-IN",
+  moneyUnit: "minor",
+  maxOrderTotal: 1_000_000,
   timeZone: "Asia/Kolkata",
   utcOffsets: { standard: 330, daylight: 330 },
   tables: [1, 2, 3, 4, 5, 6],
@@ -209,6 +238,15 @@ function localeTag(value: unknown): string | undefined {
   }
 }
 
+function orderCap(value: unknown): number | undefined {
+  return typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= 1 &&
+    value <= MAX_ORDER_TOTAL_LIMIT
+    ? value
+    : undefined;
+}
+
 function timeZone(value: unknown): string | undefined {
   // Kept as written: engines disagree on canonical names (some answer
   // "Asia/Calcutta" for "Asia/Kolkata"), and either is a valid zone.
@@ -249,6 +287,8 @@ const PARSERS: Parsers = {
   logo: nullable(logoRef),
   currency: currencyCode,
   locale: localeTag,
+  moneyUnit: oneOf(MONEY_UNITS),
+  maxOrderTotal: orderCap,
   timeZone,
   utcOffsets: offsets,
   tables: tableList,
@@ -269,6 +309,8 @@ const EXPECTS: { [K in keyof CafeSettings]: string } = {
   logo: 'a path like "/logo.png", an https URL, or null',
   currency: 'an ISO 4217 code like "INR"',
   locale: 'a language tag like "en-IN"',
+  moneyUnit: `one of ${MONEY_UNITS.join(", ")}`,
+  maxOrderTotal: "a whole number from 1, in moneyUnit",
   timeZone: 'an IANA zone like "Asia/Kolkata"',
   utcOffsets:
     "{ standard, daylight } in whole minutes east of UTC, daylight at least standard",
@@ -278,6 +320,18 @@ const EXPECTS: { [K in keyof CafeSettings]: string } = {
 };
 
 // --- reading ----------------------------------------------------------------
+
+/**
+ * How a version 1 document's money reads: whole units, and the cap the rules
+ * had for every cafe before #12. firestore.rules uses the same cap when
+ * config/site has none.
+ */
+export const LEGACY_MONEY: Readonly<
+  Pick<CafeSettings, "moneyUnit" | "maxOrderTotal">
+> = Object.freeze({
+  moneyUnit: "major",
+  maxOrderTotal: LEGACY_MAX_ORDER_TOTAL,
+});
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -298,7 +352,13 @@ function copy(settings: CafeSettings): CafeSettings {
  *
  * A layer that moves the cafe to another time zone without saying its offsets
  * gets them worked out, rather than keeping the base's, which belong to a
- * different zone.
+ * different zone. One that moves it to another currency without a cap gets
+ * that currency's default.
+ *
+ * A layer at schemaVersion 1 was written before money had a unit, when every
+ * cafe stored whole units: whatever the base says, it reads as LEGACY_MONEY.
+ * This is what keeps TOE's whole rupees from reading as paise until #21
+ * migrates them.
  */
 export function parseCafeSettings(
   raw: unknown,
@@ -306,6 +366,8 @@ export function parseCafeSettings(
 ): CafeSettings {
   const out = copy(base);
   if (!isRecord(raw)) return out;
+  const legacy = raw.schemaVersion === 1;
+  if (legacy) Object.assign(out, LEGACY_MONEY);
   const target = out as unknown as Record<string, unknown>;
   for (const key of SETTINGS_KEYS) {
     if (!(key in raw)) continue;
@@ -314,6 +376,13 @@ export function parseCafeSettings(
   }
   if (out.timeZone !== base.timeZone && !isUtcOffsets(raw.utcOffsets)) {
     out.utcOffsets = utcOffsetsOf(out.timeZone);
+  }
+  if (
+    !legacy &&
+    out.currency !== base.currency &&
+    orderCap(raw.maxOrderTotal) === undefined
+  ) {
+    out.maxOrderTotal = defaultMaxOrderTotal(out);
   }
   return out;
 }
@@ -338,7 +407,8 @@ export type SettingsCheck =
 /**
  * The strict check, for whatever writes settings: every field present and
  * valid, nothing unknown, the current schema version, and offsets that match
- * the time zone. Returns the cleaned settings (trimmed text, upper-case codes,
+ * the time zone. The cap is the platform's to choose, so any whole number in
+ * range passes. Returns the cleaned settings (trimmed text, upper-case codes,
  * sorted tables) when it passes, and every problem when it does not.
  */
 export function validateCafeSettings(raw: unknown): SettingsCheck {
@@ -378,8 +448,9 @@ export function validateCafeSettings(raw: unknown): SettingsCheck {
 
 /**
  * Settings for a new cafe: the defaults with `fields` over them, offsets worked
- * out from the time zone, at the current schema version. Still worth a
- * validateCafeSettings before writing, since `fields` may be bad.
+ * out from the time zone and the cap from the currency, at the current schema
+ * version, money in minor units. Still worth a validateCafeSettings before
+ * writing, since `fields` may be bad.
  */
 export function newCafeSettings(fields: Partial<CafeSettings>): CafeSettings {
   return parseCafeSettings(
