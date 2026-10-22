@@ -152,7 +152,8 @@ export function Mascot({
       height={size}
       role="img"
       aria-label="Mochi, the cafe barista mascot"
-      className={`${still ? "" : "animate-bob"} ${className}`}
+      // Mochi belongs to the Cozy theme (docs/anime-theme.md §1).
+      className={`plain:hidden ${still ? "" : "animate-bob"} ${className}`}
     >
       <title>Mochi, the cafe barista mascot</title>
 

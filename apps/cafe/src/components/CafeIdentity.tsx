@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * The cafe's name where the build cannot put it.
+ * The cafe's name and theme where the build cannot put them.
  *
  * A static export writes every page's <title> and <meta> at build time, and one
  * build serves every cafe, so the build's own carry no cafe name ("Order from
@@ -15,6 +15,7 @@ import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 
 import { useCafeSettings } from "@/hooks/useCafeSettings";
+import { applyPageTheme, pageTheme } from "@/lib/theme";
 
 /** The build's title for every page that does not set its own. */
 export const DEFAULT_TITLE = "Order from your table";
@@ -66,4 +67,20 @@ export function CafeTitle() {
 export function CafeName() {
   const { settings } = useCafeSettings();
   return <>{settings.name}</>;
+}
+
+/**
+ * Puts the cafe's theme and accent on the page once its settings are known
+ * (src/lib/theme.ts). Until then the page keeps what the inline theme script
+ * painted, rather than flashing the default.
+ */
+export function CafeTheme() {
+  const { settings, ready } = useCafeSettings();
+  const { theme, accent } = settings;
+
+  useEffect(() => {
+    if (ready) applyPageTheme(pageTheme({ theme, accent }));
+  }, [ready, theme, accent]);
+
+  return null;
 }
