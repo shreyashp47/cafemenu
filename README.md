@@ -94,7 +94,12 @@ The full design, including how releases and versions work, is in
 | [4 · Automatic rollouts](https://github.com/shreyashp47/cafemenu/milestone/5)   | Releases roll out in waves, with auto-rollback and owner emails              | 8–12                    |
 | [v1.0 · Release testing](https://github.com/shreyashp47/cafemenu/milestone/7)   | Every feature tested end to end before v1.0                                  | 10–17                   |
 
-About **86–131 working days** in total for one developer: roughly 4–6 months
+**Scope update:** v1.0 is now lean (generic sites set up and updated with the
+deployer); Phases 3–4's self-serve signup and automatic rollouts move to
+[v1.1](https://github.com/shreyashp47/cafemenu/milestone/8). See
+[PLAN.md](./PLAN.md#lean-v10).
+
+The original full plan was about **86–131 working days** in total for one developer: roughly 4–6 months
 full-time. How the estimate was made is in
 [PLAN.md](./PLAN.md#timeline).
 
