@@ -290,7 +290,10 @@ export async function deployHosting(
  * from a version Hosting has); if Hosting asks for it anyway, this fails
  * before anything goes live.
  */
-export async function deployHostingFiles(ctx, { site, files, config, message }) {
+export async function deployHostingFiles(
+  ctx,
+  { site, files, config, message },
+) {
   const { api, log, dryRun } = ctx;
   const live = await getLiveRelease(api, site);
   if (await liveMatches(api, live, files, config)) {

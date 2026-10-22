@@ -47,6 +47,7 @@ export function freshState() {
     users: [],
     docs: new Map(),
     emails: [],
+    github: new Map(), // release asset URL → Buffer, served without a token
   };
 }
 
@@ -539,6 +540,19 @@ export function createFakeGoogle({ publicKeyPem, state = freshState() } = {}) {
       }
       if (
         method === "GET" &&
+        (m = path.match(/^\/v1beta1\/(sites\/[^/]+\/versions\/[^/]+)$/))
+      ) {
+        const version = state.versions.get(m[1]);
+        return version
+          ? json(200, {
+              name: version.name,
+              status: version.status,
+              config: version.config,
+            })
+          : googleError(404, "NOT_FOUND", "no version");
+      }
+      if (
+        method === "GET" &&
         (m = path.match(/^\/v1beta1\/(sites\/[^/]+\/versions\/[^/]+)\/files$/))
       ) {
         const version = state.versions.get(m[1]);
@@ -605,6 +619,12 @@ export function createFakeGoogle({ publicKeyPem, state = freshState() } = {}) {
         expires_in: 3599,
         token_type: "Bearer",
       });
+    }
+    if (url.hostname === "github.com") {
+      const asset = method === "GET" && state.github.get(url.toString());
+      return asset
+        ? new Response(asset, { status: 200 })
+        : new Response("Not Found", { status: 404 });
     }
     if (!/^Bearer fake-token-\d+$/.test(headers.authorization ?? "")) {
       return googleError(

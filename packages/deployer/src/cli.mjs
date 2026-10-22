@@ -11,11 +11,14 @@ import { check } from "./commands/check.mjs";
 import { PARTS, deploy } from "./commands/deploy.mjs";
 import { owner } from "./commands/owner.mjs";
 import { DEFAULT_APP_NAME, provision } from "./commands/provision.mjs";
+import { deployRelease, syncBranding } from "./commands/release.mjs";
 import { rollback } from "./commands/rollback.mjs";
+import { DEFAULT_LOG_FILE, createJsonDeployLog } from "./deploy-log.mjs";
 import { ActionNeededError, ApiError, UsageError } from "./errors.mjs";
 import { createGoogleClient } from "./http.mjs";
 import { createLogger } from "./log.mjs";
 import { COMMANDS_WITH_PERMISSIONS } from "./permissions.mjs";
+import { releaseVersion } from "./release-package.mjs";
 
 export const EXIT = { ok: 0, failed: 1, usage: 2, actionNeeded: 3 };
 
@@ -52,10 +55,31 @@ Exits 3 if a person has to do something first (e.g. the site name is taken).`,
     },
   },
   deploy: {
-    summary: "Deploy Firestore rules, indexes and the Hosting site",
-    usage: `deployer deploy --project <id> [--rules <file>] [--indexes <file>]
+    summary:
+      "Deploy a CafeMenu release to a cafe, or rules, indexes and a site",
+    usage: `deployer deploy --project <id> --site <name> --version <x.y.z>
+                --settings <cafe-settings.json> [--logo <png>]
+                [--package <archive>] [--sha256 <hex>] [--log <file>]
+
+  A release: fetch and verify the package, check the data's schema,
+  migrate, rules, indexes, config/site, Hosting (the package's site with the
+  cafe's site.json, manifest, logo and icons), smoke test, then record it.
+
+  --version <x.y.z>  The release to deploy (x.y.z, x.y.z-beta.N, x.y.z-rc.N)
+  --settings <file>  The cafe's settings (CafeSettings JSON, as the console
+                     keeps them)
+  --logo <png>       The cafe's logo; without one, icons use its monogram
+  --package <file>   A local cafemenu-cafe-<version>.tar.gz, with SHA256SUMS
+                     next to it, instead of downloading it from GitHub
+  --sha256 <hex>     The archive's expected SHA-256, from somewhere you trust
+                     more than the release itself
+  --log <file>       The deploy log (default: ${DEFAULT_LOG_FILE})
+
+deployer deploy --project <id> [--rules <file>] [--indexes <file>]
                 [--site <name> --dir <folder> [--config <firebase.json> [--target <name>]]]
                 [--only rules,indexes,hosting] [--message <text>]
+
+  Files from a folder, as they are; nothing is recorded.
 
   --rules <file>     firestore.rules
   --indexes <file>   firestore.indexes.json
@@ -76,16 +100,49 @@ Exits 3 if a person has to do something first (e.g. the site name is taken).`,
       target: { type: "string" },
       only: { type: "string" },
       message: { type: "string" },
+      version: { type: "string" },
+      settings: { type: "string" },
+      logo: { type: "string" },
+      package: { type: "string" },
+      sha256: { type: "string" },
+      log: { type: "string" },
     },
   },
   rollback: {
-    summary: "Serve the previous Hosting version again",
-    usage: `deployer rollback --project <id> --site <name> [--to <version-id>]
+    summary: "Go back to the previous release (rules and Hosting)",
+    usage: `deployer rollback --project <id> --site <name> [--log <file>] [--to <version-id>]
 
   --site <name>      Hosting site
-  --to <version>     Release this version instead of the previous one; does
-                     nothing if it's already live, so it is safe to retry`,
-    options: { site: { type: "string" }, to: { type: "string" } },
+  --log <file>       The deploy log (default: ${DEFAULT_LOG_FILE}). With a
+                     release recorded there, rolls back its rules and Hosting
+                     files, unless the data has been migrated past them;
+                     without one, Hosting only
+  --to <version>     Hosting only: release this version instead of the
+                     previous one; does nothing if it's already live, so it
+                     is safe to retry`,
+    options: {
+      site: { type: "string" },
+      to: { type: "string" },
+      log: { type: "string" },
+    },
+  },
+  "sync-branding": {
+    summary: "Write a cafe's settings and redeploy only its own files",
+    usage: `deployer sync-branding --project <id> --site <name> --settings <file>
+                       [--logo <png>] [--log <file>]
+
+  Writes config/site, then serves the live Hosting version's files with the
+  cafe's site.json, manifest, logo and icons made afresh. The release stays.
+
+  --settings <file>  The cafe's settings (CafeSettings JSON)
+  --logo <png>       The cafe's logo; without one, icons use its monogram
+  --log <file>       The deploy log (default: ${DEFAULT_LOG_FILE})`,
+    options: {
+      site: { type: "string" },
+      settings: { type: "string" },
+      logo: { type: "string" },
+      log: { type: "string" },
+    },
   },
   owner: {
     summary: "Create the owner's account and send the set-password email",
@@ -112,7 +169,7 @@ Sets up a cafe owner's Firebase project and deploys CafeMenu to it.
 
 Commands:
 ${Object.entries(COMMANDS)
-  .map(([name, c]) => `  ${name.padEnd(10)} ${c.summary}`)
+  .map(([name, c]) => `  ${name.padEnd(14)} ${c.summary}`)
   .join("\n")}
 
 ${GLOBAL_USAGE}
@@ -158,6 +215,37 @@ function list(text, allowed, flag) {
   return [...new Set(items)];
 }
 
+/** `deploy --version`: a release, so none of the folder options. */
+function releaseOptions(values) {
+  const folderOnly = [
+    "rules",
+    "indexes",
+    "dir",
+    "config",
+    "target",
+    "only",
+    "message",
+  ];
+  const stray = folderOnly.find((name) => values[name] !== undefined);
+  if (stray)
+    throw new UsageError(
+      `--${stray} can't be used with --version: a release brings its own.`,
+    );
+  const sha256 = values.sha256?.trim().toLowerCase() || undefined;
+  if (sha256 && !/^[0-9a-f]{64}$/.test(sha256))
+    throw new UsageError("--sha256 takes 64 hex digits.");
+  return {
+    release: true,
+    site: siteName(values),
+    version: releaseVersion(required(values, "version")),
+    settings: required(values, "settings"),
+    logo: values.logo?.trim() || undefined,
+    package: values.package?.trim() || undefined,
+    sha256,
+    log: values.log?.trim() || DEFAULT_LOG_FILE,
+  };
+}
+
 /** Checks and normalises one command's options. Throws UsageError. */
 export function commandOptions(command, values) {
   switch (command) {
@@ -178,6 +266,10 @@ export function commandOptions(command, values) {
       };
     }
     case "deploy": {
+      if (values.version !== undefined) return releaseOptions(values);
+      const releaseOnly = ["settings", "logo", "package", "sha256", "log"];
+      const stray = releaseOnly.find((name) => values[name] !== undefined);
+      if (stray) throw new UsageError(`--${stray} goes with --version.`);
       const given = {
         rules: values.rules,
         indexes: values.indexes,
@@ -188,7 +280,7 @@ export function commandOptions(command, values) {
         : PARTS.filter((part) => given[part]);
       if (parts.length === 0) {
         throw new UsageError(
-          "Nothing to deploy: give --rules, --indexes and/or --site with --dir.",
+          "Nothing to deploy: give --version for a release, or --rules, --indexes and/or --site with --dir.",
         );
       }
       if (parts.includes("rules") && !values.rules)
@@ -211,7 +303,18 @@ export function commandOptions(command, values) {
       };
     }
     case "rollback":
-      return { site: siteName(values), to: values.to?.trim() || undefined };
+      return {
+        site: siteName(values),
+        to: values.to?.trim() || undefined,
+        log: values.log?.trim() || DEFAULT_LOG_FILE,
+      };
+    case "sync-branding":
+      return {
+        site: siteName(values),
+        settings: required(values, "settings"),
+        logo: values.logo?.trim() || undefined,
+        log: values.log?.trim() || DEFAULT_LOG_FILE,
+      };
     case "owner": {
       const email = required(values, "email").toLowerCase();
       if (!EMAIL.test(email)) throw new UsageError(`Not an email: ${email}`);
@@ -271,11 +374,19 @@ export function parseCommandLine(argv) {
   };
 }
 
-const RUN = { check, provision, deploy, rollback, owner };
+const RUN = {
+  check,
+  provision,
+  deploy: (ctx, options) =>
+    options.release ? deployRelease(ctx, options) : deploy(ctx, options),
+  rollback,
+  "sync-branding": syncBranding,
+  owner,
+};
 
 /**
  * Runs the CLI and returns the exit code. `deps` replaces the outside world:
- * {env, fetchImpl, readFile, out, err, sleep, now}.
+ * {env, fetchImpl, readFile, out, err, sleep, now, loadShared}.
  */
 export async function main(argv, deps = {}) {
   const out = deps.out ?? ((line) => process.stdout.write(`${line}\n`));
@@ -320,6 +431,10 @@ export async function main(argv, deps = {}) {
       dryRun: parsed.dryRun,
       clientEmail: key.clientEmail,
       readFile: deps.readFile,
+      fetchImpl: deps.fetchImpl ?? fetch,
+      loadShared: deps.loadShared,
+      now: deps.now && (() => new Date(deps.now())),
+      deployLog: parsed.options.log && createJsonDeployLog(parsed.options.log),
       sleep:
         deps.sleep ??
         ((ms) => new Promise((resolve) => setTimeout(resolve, ms))),

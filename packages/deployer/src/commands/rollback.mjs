@@ -168,7 +168,9 @@ async function rollbackRelease(ctx, site, record) {
       if (previous.schemaVersion < floor) {
         throw new ActionNeededError(
           `${previous.version} runs on schema ${previous.schemaVersion}, but this cafe's data (schema ${data}) has been migrated past it: its releases need schema ${floor} or later.`,
-          { hint: "Rolling back would break the cafe. Deploy a fixed release instead." },
+          {
+            hint: "Rolling back would break the cafe. Deploy a fixed release instead.",
+          },
         );
       }
       log.same(
@@ -190,7 +192,9 @@ async function rollbackRelease(ctx, site, record) {
       if (!ruleset) {
         throw new ActionNeededError(
           `${previous.version}'s rules (ruleset ${id}) no longer exist in ${project}.`,
-          { hint: `Deploy it instead: deployer deploy --version ${previous.version}.` },
+          {
+            hint: `Deploy it instead: deployer deploy --version ${previous.version}.`,
+          },
         );
       }
       await act(
@@ -199,7 +203,8 @@ async function rollbackRelease(ctx, site, record) {
           would: `would make ${previous.version}'s rules (ruleset ${id}) live again`,
           done: `${previous.version}'s rules (ruleset ${id}) are live again`,
         },
-        () => updateRelease(api, project, FIRESTORE_RELEASE, previous.rulesetName),
+        () =>
+          updateRelease(api, project, FIRESTORE_RELEASE, previous.rulesetName),
       );
     });
 
@@ -213,7 +218,9 @@ async function rollbackRelease(ctx, site, record) {
           deployment: { ...deployment, status: "failed", error: error.message },
         });
       } catch (logError) {
-        log.warn(`couldn't record the failure in the deploy log: ${logError.message}`);
+        log.warn(
+          `couldn't record the failure in the deploy log: ${logError.message}`,
+        );
       }
     }
     throw error;
@@ -262,10 +269,15 @@ async function rollbackHostingFiles(ctx, site, { current, previous }) {
   const target = previous.hostingVersion;
   const live = await getLiveRelease(api, site);
   const liveName = live?.version?.name;
-  const own = new Set([...(current.cafePaths ?? []), ...(previous.cafePaths ?? [])]);
+  const own = new Set([
+    ...(current.cafePaths ?? []),
+    ...(previous.cafePaths ?? []),
+  ]);
   const files = (list) => list.map(({ path, hash }) => ({ path, hash }));
   const old = files(await listVersionFiles(api, target));
-  const liveFiles = liveName ? files(await listVersionFiles(api, liveName)) : [];
+  const liveFiles = liveName
+    ? files(await listVersionFiles(api, liveName))
+    : [];
   const wanted = [
     ...old.filter((f) => !own.has(f.path)),
     ...liveFiles.filter((f) => own.has(f.path)),
@@ -297,7 +309,13 @@ async function rollbackHostingFiles(ctx, site, { current, previous }) {
       would: `would make version ${id} (${previous.version}) live again`,
       done: `version ${id} (${previous.version}) is live again`,
     },
-    () => createRelease(api, site, target, `Rollback to CafeMenu ${previous.version}`),
+    () =>
+      createRelease(
+        api,
+        site,
+        target,
+        `Rollback to CafeMenu ${previous.version}`,
+      ),
   );
   return { changed: true, versionName: target };
 }

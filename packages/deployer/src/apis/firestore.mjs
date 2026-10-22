@@ -112,13 +112,17 @@ export function encodeValue(value, key = "value") {
         : {},
     };
   }
-  if (typeof value === "object") return { mapValue: { fields: encodeFields(value) } };
+  if (typeof value === "object")
+    return { mapValue: { fields: encodeFields(value) } };
   throw new Error(`Can't encode ${key}: ${typeof value}`);
 }
 
 export function encodeFields(object) {
   return Object.fromEntries(
-    Object.entries(object).map(([key, value]) => [key, encodeValue(value, key)]),
+    Object.entries(object).map(([key, value]) => [
+      key,
+      encodeValue(value, key),
+    ]),
   );
 }
 
@@ -129,7 +133,8 @@ export function decodeValue(value) {
   if ("integerValue" in value) return Number(value.integerValue);
   if ("doubleValue" in value) return value.doubleValue;
   if ("nullValue" in value) return null;
-  if ("arrayValue" in value) return (value.arrayValue.values ?? []).map(decodeValue);
+  if ("arrayValue" in value)
+    return (value.arrayValue.values ?? []).map(decodeValue);
   if ("mapValue" in value) return decodeFields(value.mapValue.fields);
   return undefined;
 }

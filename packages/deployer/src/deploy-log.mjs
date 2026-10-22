@@ -51,7 +51,8 @@ export function createJsonDeployLog(path, { now = () => new Date() } = {}) {
   async function load() {
     try {
       const data = JSON.parse(await readFile(path, "utf8"));
-      if (data?.format !== 1) throw new Error(`${path} isn't a deploy log (format 1).`);
+      if (data?.format !== 1)
+        throw new Error(`${path} isn't a deploy log (format 1).`);
       return data;
     } catch (error) {
       if (error.code === "ENOENT") return empty();

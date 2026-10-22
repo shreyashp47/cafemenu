@@ -15,7 +15,9 @@ export async function readDataSchema(ctx) {
   const doc = await getDocument(ctx.api, ctx.project, META_DOC);
   const version = doc ? decodeFields(doc.fields).schemaVersion : undefined;
   if (version === undefined) {
-    ctx.log.info(`data schema 1 (${META_DOC} has no schemaVersion: TOE's data as it is)`);
+    ctx.log.info(
+      `data schema 1 (${META_DOC} has no schemaVersion: TOE's data as it is)`,
+    );
     return 1;
   }
   if (!Number.isSafeInteger(version) || version < 1) {
@@ -47,6 +49,8 @@ export async function runMigrations(ctx, { manifest, from }) {
   }
   throw new ActionNeededError(
     `${manifest.version} needs data at schema ${manifest.schemaVersion}, but this cafe's is at ${from}, and the deployer can't run migrations yet.`,
-    { hint: "Migrations come with #21; until then deploy a release at the cafe's schema." },
+    {
+      hint: "Migrations come with #21; until then deploy a release at the cafe's schema.",
+    },
   );
 }
