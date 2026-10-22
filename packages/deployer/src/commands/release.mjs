@@ -33,13 +33,13 @@ import {
 } from "../cafe-files.mjs";
 import { stepTracker } from "../deploy-log.mjs";
 import { ActionNeededError, UsageError } from "../errors.mjs";
-import { hostingFile, isIgnored, readHostingConfig } from "../hosting-files.mjs";
-import { readDataSchema, runMigrations } from "../migrations.mjs";
 import {
-  VerifyError,
-  getPackage,
-  packageText,
-} from "../release-package.mjs";
+  hostingFile,
+  isIgnored,
+  readHostingConfig,
+} from "../hosting-files.mjs";
+import { readDataSchema, runMigrations } from "../migrations.mjs";
+import { VerifyError, getPackage, packageText } from "../release-package.mjs";
 import { smokeTest } from "../smoke-test.mjs";
 import { act, shortName } from "./act.mjs";
 import {
@@ -91,7 +91,9 @@ async function recordFailure(ctx, args) {
   try {
     await ctx.deployLog.record(args);
   } catch (error) {
-    ctx.log.warn(`couldn't record the failure in the deploy log: ${error.message}`);
+    ctx.log.warn(
+      `couldn't record the failure in the deploy log: ${error.message}`,
+    );
   }
 }
 
@@ -118,7 +120,8 @@ export async function writeCafeSettings(ctx, shared, settings) {
         would: `would update ${changed.join(", ")}`,
         done: `updated ${changed.join(", ")}`,
       },
-      () => patchDocument(api, project, SETTINGS_DOC, encodeFields(settings), keys),
+      () =>
+        patchDocument(api, project, SETTINGS_DOC, encodeFields(settings), keys),
     );
   } else {
     await act(
@@ -127,7 +130,8 @@ export async function writeCafeSettings(ctx, shared, settings) {
         would: `would write the settings ("${settings.name}")`,
         done: `wrote the settings ("${settings.name}")`,
       },
-      () => patchDocument(api, project, SETTINGS_DOC, encodeFields(settings), keys),
+      () =>
+        patchDocument(api, project, SETTINGS_DOC, encodeFields(settings), keys),
     );
   }
   return { changed: true };
@@ -145,9 +149,13 @@ function withCafeFiles(files, paths, own) {
 
 /** The package's site/ as Hosting files, honouring its firebase.json's ignore list. */
 async function packageSite(verified) {
-  const { config, ignore } = await readHostingConfig("firebase.json", undefined, {
-    read: async () => packageText(verified, "firebase.json"),
-  });
+  const { config, ignore } = await readHostingConfig(
+    "firebase.json",
+    undefined,
+    {
+      read: async () => packageText(verified, "firebase.json"),
+    },
+  );
   const files = [];
   for (const [path, bytes] of verified.files) {
     if (!path.startsWith("site/")) continue;
@@ -225,7 +233,9 @@ export async function deployRelease(ctx, options) {
       if (manifest.minSchemaVersion > data) {
         throw new ActionNeededError(
           `${version} needs the release live during its upgrade to run on schema ${manifest.minSchemaVersion} or later, but this cafe's data is at schema ${data}.`,
-          { hint: "Deploy a release in between first, so the data reaches that schema." },
+          {
+            hint: "Deploy a release in between first, so the data reaches that schema.",
+          },
         );
       }
       if (manifest.schemaVersion < floor) {
@@ -241,7 +251,11 @@ export async function deployRelease(ctx, options) {
     });
 
     const rules = await steps.run("rules", () =>
-      deployRulesSource(ctx, "firestore.rules", packageText(verified, "firestore.rules")),
+      deployRulesSource(
+        ctx,
+        "firestore.rules",
+        packageText(verified, "firestore.rules"),
+      ),
     );
     await steps.run("indexes", () =>
       deployIndexesText(
@@ -372,7 +386,10 @@ export async function syncBranding(ctx, options) {
         });
       }
       const liveId = shortName(live.version.name);
-      if (before?.current && before.current.hostingVersion !== live.version.name) {
+      if (
+        before?.current &&
+        before.current.hostingVersion !== live.version.name
+      ) {
         log.warn(
           `live version ${liveId} isn't the one recorded for ${version} (${shortName(before.current.hostingVersion)}); branding the live one`,
         );

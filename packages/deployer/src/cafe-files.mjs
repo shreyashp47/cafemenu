@@ -30,20 +30,31 @@ export async function loadShared() {
     if (error.code !== "ERR_UNKNOWN_FILE_EXTENSION") throw error;
     throw new ActionNeededError(
       `Making a cafe's files needs Node 22.18 or later, which reads @cafemenu/shared's TypeScript directly; this is Node ${process.versions.node}.`,
-      { hint: "Run the deployer with a newer Node (e.g. `npx -y node@24 bin/deployer.mjs …`)." },
+      {
+        hint: "Run the deployer with a newer Node (e.g. `npx -y node@24 bin/deployer.mjs …`).",
+      },
     );
   }
 }
 
 /** The paths a deploy treats as the cafe's: replaced on every deploy and by sync-branding. */
 export const cafePaths = (shared) =>
-  new Set([SITE_FILE, MANIFEST_FILE, LOGO_FILE, ...Object.values(shared.ICON_PATHS)]);
+  new Set([
+    SITE_FILE,
+    MANIFEST_FILE,
+    LOGO_FILE,
+    ...Object.values(shared.ICON_PATHS),
+  ]);
 
 /**
  * Reads and checks the settings file (validateCafeSettings: every field, the
  * current schema) and the logo. Returns {settings, logo}. Throws UsageError.
  */
-export async function readCafeInput(shared, { settingsPath, logoPath }, read = fsReadFile) {
+export async function readCafeInput(
+  shared,
+  { settingsPath, logoPath },
+  read = fsReadFile,
+) {
   let raw;
   try {
     raw = JSON.parse(await read(settingsPath, "utf8"));
@@ -55,19 +66,26 @@ export async function readCafeInput(shared, { settingsPath, logoPath }, read = f
   const check = shared.validateCafeSettings(raw);
   if (!check.ok) {
     throw new UsageError(
-      [`${settingsPath} isn't valid cafe settings:`, ...check.problems.map((p) => `  - ${p}`)].join("\n"),
+      [
+        `${settingsPath} isn't valid cafe settings:`,
+        ...check.problems.map((p) => `  - ${p}`),
+      ].join("\n"),
     );
   }
   const { settings } = check;
   if (settings.logo === LOGO_FILE && !logoPath) {
-    throw new UsageError(`The settings' logo is ${LOGO_FILE}: give the file with --logo <png>.`);
+    throw new UsageError(
+      `The settings' logo is ${LOGO_FILE}: give the file with --logo <png>.`,
+    );
   }
   let logo = null;
   if (logoPath) {
     try {
       logo = await read(logoPath);
     } catch (error) {
-      throw new UsageError(`Can't read ${logoPath} (${error.code ?? error.message}).`);
+      throw new UsageError(
+        `Can't read ${logoPath} (${error.code ?? error.message}).`,
+      );
     }
     if (!shared.isPng(logo)) throw new UsageError(`${logoPath} isn't a PNG.`);
   }

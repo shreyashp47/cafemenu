@@ -53,9 +53,10 @@ export async function writeTree(dir, files) {
 
 /**
  * A fake Google plus `run(...args)`, which runs the CLI against it with
- * --project and --key filled in, and returns {code, out, err}.
+ * --project and --key filled in, and returns {code, out, err}. `deps` adds
+ * to or replaces what main() is given.
  */
-export async function cli({ state } = {}) {
+export async function cli({ state, deps = {} } = {}) {
   const dir = await tempDir();
   const keyPath = await writeKeyFile(dir);
   const google = createFakeGoogle({ publicKeyPem: PUBLIC_KEY_PEM, state });
@@ -68,6 +69,7 @@ export async function cli({ state } = {}) {
       out: (line) => out.push(line),
       err: (line) => err.push(line),
       sleep: async () => {},
+      ...deps,
     });
     return { code, out: out.join("\n"), err: err.join("\n") };
   }

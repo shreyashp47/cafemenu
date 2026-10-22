@@ -10,13 +10,20 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { SUMS } from "../../../scripts/release/lib/layout.mjs";
-import { packageFileName, parseVersion } from "../../../scripts/release/lib/version.mjs";
-import { VerifyError, verifyPackage } from "../../../scripts/release/verify.mjs";
+import {
+  packageFileName,
+  parseVersion,
+} from "../../../scripts/release/lib/version.mjs";
+import {
+  VerifyError,
+  verifyPackage,
+} from "../../../scripts/release/verify.mjs";
 import { ActionNeededError, UsageError } from "./errors.mjs";
 
 export { VerifyError };
 
-export const RELEASES = "https://github.com/shreyashp47/cafemenu/releases/download";
+export const RELEASES =
+  "https://github.com/shreyashp47/cafemenu/releases/download";
 
 /** "1.4.2" from "v1.4.2"; throws UsageError for anything that isn't a release version. */
 export function releaseVersion(text) {
@@ -91,4 +98,5 @@ export async function getPackage(ctx, { version, packagePath, sha256 }) {
 }
 
 /** A file of the package as text. */
-export const packageText = (verified, path) => verified.files.get(path).toString("utf8");
+export const packageText = (verified, path) =>
+  verified.files.get(path).toString("utf8");
