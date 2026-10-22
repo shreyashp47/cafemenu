@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { tablesWithoutKey, type TableKeys } from "@/lib/table-keys";
 import { formatTableList } from "@/lib/tables";
+import { t } from "@/lib/i18n";
+import { rich } from "@/lib/i18n-rich";
 
 /**
  * The "Table codes" panel on /admin/qr: whether the tables are protected, and
@@ -44,8 +46,10 @@ export function TableCodes({
   if (loading) {
     return (
       <Card className="p-4 print:hidden">
-        <h2 className="text-lg">Table codes</h2>
-        <p className="text-muted mt-0.5 text-sm">Checking your tables…</p>
+        <h2 className="text-lg">{t("tableCodes.tableCodes")}</h2>
+        <p className="text-muted mt-0.5 text-sm">
+          {t("tableCodes.checkingTables")}
+        </p>
       </Card>
     );
   }
@@ -53,13 +57,12 @@ export function TableCodes({
   if (error) {
     return (
       <Card className="p-4 print:hidden">
-        <h2 className="text-lg">Table codes</h2>
+        <h2 className="text-lg">{t("tableCodes.tableCodes")}</h2>
         <p
           role="alert"
           className="text-berry-deep mt-0.5 text-sm font-semibold"
         >
-          Couldn&apos;t load your table codes. Check your connection and reload
-          this page.
+          {t("tableCodes.couldntLoadTable")}
         </p>
       </Card>
     );
@@ -72,41 +75,40 @@ export function TableCodes({
         missing.length > 0 ? "border-secondary" : "",
       ].join(" ")}
     >
-      <h2 className="text-lg">Table codes</h2>
+      <h2 className="text-lg">{t("tableCodes.tableCodes")}</h2>
       {missing.length === 0 ? (
         <p
           role="status"
           className="text-sage-deep mt-0.5 text-sm font-semibold"
         >
-          ✓ Every table has a code. Only someone who scanned the card on a table
-          can order for it.
+          {t("tableCodes.everyTableHas")}
         </p>
       ) : (
         <>
           <p className="text-body mt-0.5 text-sm">
             {none
-              ? "Right now anyone who knows your web address can order for any table without being in the cafe."
-              : `Table${missing.length === 1 ? "" : "s"} ${formatTableList(missing)} ${missing.length === 1 ? "has" : "have"} no code yet, so anyone who knows the address can order for ${missing.length === 1 ? "it" : "them"} from anywhere.`}
+              ? t("tableCodes.noneHave")
+              : t("tableCodes.someMissing", {
+                  count: missing.length,
+                  list: formatTableList(missing),
+                })}
           </p>
           <p className="text-muted mt-1.5 text-sm">
-            A code is a secret part of the table&apos;s QR code. Orders without
-            it are turned away. After creating codes,{" "}
-            <strong className="text-ink">
-              print the cards below and replace the old ones
-            </strong>{" "}
-            — the old cards stop working.
+            {rich("tableCodes.explain", {
+              b: (c) => <strong className="text-ink">{c}</strong>,
+            })}
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <Button onClick={() => void create()} disabled={state === "busy"}>
               {state === "busy"
-                ? "Creating…"
+                ? t("tableCodes.creating")
                 : none
-                  ? "Create codes for all tables"
-                  : `Create codes for ${missing.length} table${missing.length === 1 ? "" : "s"}`}
+                  ? t("tableCodes.createAll")
+                  : t("tableCodes.createSome", { count: missing.length })}
             </Button>
             {state === "error" ? (
               <p role="alert" className="text-berry-deep text-sm font-semibold">
-                That didn&apos;t save. Check your connection and try again.
+                {t("tableCodes.didntSaveCheck")}
               </p>
             ) : null}
           </div>
@@ -114,7 +116,7 @@ export function TableCodes({
       )}
       {state === "done" && missing.length === 0 ? (
         <p className="text-muted mt-1.5 text-sm">
-          Now print the cards below and put them out.
+          {t("tableCodes.nowPrintCards")}
         </p>
       ) : null}
     </Card>

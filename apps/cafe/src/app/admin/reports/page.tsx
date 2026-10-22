@@ -38,6 +38,7 @@ import {
   shiftMonth,
 } from "@/lib/reports";
 import type { Order } from "@/lib/types";
+import { t } from "@/lib/i18n";
 
 type Mode = "month" | "range";
 
@@ -89,7 +90,7 @@ export default function ReportsPage() {
       // Bounded range query keeps Firestore reads inside the free tier (§2, §5.4)
       setOrders(await repo.listRange(range.from, range.to));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load orders.");
+      setError(err instanceof Error ? err.message : t("reports.loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -129,7 +130,7 @@ export default function ReportsPage() {
     URL.revokeObjectURL(url);
   }
 
-  if (loading && !report) return <Loading label="Adding up the month…" />;
+  if (loading && !report) return <Loading label={t("reports.addingUpMonth")} />;
 
   return (
     <div className="flex flex-col gap-4 pb-8">
@@ -139,7 +140,7 @@ export default function ReportsPage() {
             <div className="flex items-end gap-2">
               <Button
                 variant="ghost"
-                aria-label="Previous month"
+                aria-label={t("reports.previousMonth")}
                 onClick={() =>
                   setCursor(shiftMonth(cursor.year, cursor.month0, -1))
                 }
@@ -148,13 +149,13 @@ export default function ReportsPage() {
               </Button>
               <div className="border-line bg-cream-soft font-round text-ink min-w-[10rem] rounded-sm border-2 px-3.5 py-2.5 text-center text-lg">
                 {new Date(cursor.year, cursor.month0, 1).toLocaleDateString(
-                  "en-IN",
+                  settings.locale,
                   { month: "long", year: "numeric" },
                 )}
               </div>
               <Button
                 variant="ghost"
-                aria-label="Next month"
+                aria-label={t("reports.nextMonth")}
                 onClick={() =>
                   setCursor(shiftMonth(cursor.year, cursor.month0, 1))
                 }
@@ -164,7 +165,7 @@ export default function ReportsPage() {
             </div>
           ) : (
             <div className="grid flex-1 gap-3 sm:grid-cols-2">
-              <Field label="From" htmlFor="from">
+              <Field label={t("reports.from")} htmlFor="from">
                 <Input
                   id="from"
                   type="date"
@@ -173,7 +174,11 @@ export default function ReportsPage() {
                   onChange={(e) => setFrom(e.target.value)}
                 />
               </Field>
-              <Field label="To" htmlFor="to" hint="Inclusive.">
+              <Field
+                label={t("reports.to")}
+                htmlFor="to"
+                hint={t("reports.inclusive")}
+              >
                 <Input
                   id="to"
                   type="date"
@@ -199,7 +204,9 @@ export default function ReportsPage() {
                     : "border-line bg-paper text-ink",
                 ].join(" ")}
               >
-                {m === "month" ? "This month" : "Custom dates"}
+                {m === "month"
+                  ? t("reports.thisMonth")
+                  : t("reports.customDates")}
               </button>
             ))}
           </div>
@@ -218,8 +225,8 @@ export default function ReportsPage() {
       {report && report.orderCount === 0 ? (
         <Card className="px-6 py-10 text-center">
           <EmptyState
-            title="No orders in this period"
-            body="Orders placed on the customer side show up here the moment they are completed."
+            title={t("reports.noOrdersPeriod")}
+            body={t("reports.ordersPlacedCustomer")}
             action={
               isDemo ? (
                 <Button
@@ -228,7 +235,7 @@ export default function ReportsPage() {
                   onClick={() => void seedSampleMonth()}
                 >
                   <Icon name="sparkle" size={18} />
-                  {seeding ? "Adding…" : "Add a sample month"}
+                  {seeding ? t("reports.adding") : t("reports.addSampleMonth")}
                 </Button>
               ) : null
             }
@@ -238,17 +245,17 @@ export default function ReportsPage() {
         <>
           <ul className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
             <Stat
-              label="Revenue"
+              label={t("reports.revenue")}
               value={formatMoney(report.revenue, settings)}
               icon="chart"
             />
             <Stat
-              label="Orders"
+              label={t("reports.orders")}
               value={String(report.orderCount)}
               icon="cart"
             />
             <Stat
-              label="Average order"
+              label={t("reports.averageOrder")}
               value={formatMoney(report.averageOrderValue, settings)}
               icon="sparkle"
             />
@@ -258,36 +265,26 @@ export default function ReportsPage() {
 
           {report.rejectedCount > 0 ? (
             <p className="border-line bg-paper text-muted rounded-md border-2 border-dashed px-3 py-2 text-sm">
-              {report.rejectedCount} rejected order
-              {report.rejectedCount === 1 ? " is" : "s are"} left out of these
-              figures.
-              {csvExport ? (
-                <> They are in the CSV, marked &ldquo;rejected&rdquo;.</>
-              ) : null}
+              {t("reports.rejectedLeftOut", { count: report.rejectedCount })}
+              {csvExport ? ` ${t("reports.rejectedInCsv")}` : null}
             </p>
           ) : null}
 
           {report.pendingCount > 0 ? (
             <p className="border-line bg-paper text-muted rounded-md border-2 border-dashed px-3 py-2 text-sm">
-              {report.pendingCount} order
-              {report.pendingCount === 1 ? " is" : "s are"} still waiting for
-              the counter to confirm the table, and not counted yet.
-              {csvExport ? (
-                <> They are in the CSV, marked &ldquo;pending&rdquo;.</>
-              ) : null}
+              {t("reports.pendingWaiting", { count: report.pendingCount })}
+              {csvExport ? ` ${t("reports.pendingInCsv")}` : null}
             </p>
           ) : null}
 
           <Card className="p-4">
-            <h2 className="text-lg">Revenue by day</h2>
+            <h2 className="text-lg">{t("reports.revenueDay")}</h2>
             <RevenueChart report={report} />
           </Card>
 
           {isDemo ? (
             <Card className="flex flex-wrap items-center justify-between gap-3 p-3">
-              <p className="text-muted text-sm">
-                Demo data. Add another sample month to compare periods.
-              </p>
+              <p className="text-muted text-sm">{t("reports.demoDataAdd")}</p>
               <Button
                 size="sm"
                 variant="ghost"
@@ -295,18 +292,18 @@ export default function ReportsPage() {
                 onClick={() => void seedSampleMonth()}
               >
                 <Icon name="sparkle" size={16} />
-                {seeding ? "Adding…" : "Add another month"}
+                {seeding ? t("reports.adding") : t("reports.addAnotherMonth")}
               </Button>
             </Card>
           ) : null}
 
           <Card className="overflow-hidden">
             <div className="border-line-soft flex items-center justify-between gap-3 border-b-2 px-4 py-3">
-              <h2 className="text-lg">Best sellers</h2>
+              <h2 className="text-lg">{t("reports.bestSellers")}</h2>
               {csvExport ? (
                 <Button size="sm" variant="secondary" onClick={downloadCsv}>
                   <Icon name="chart" size={16} />
-                  CSV
+                  {t("reports.csv")}
                 </Button>
               ) : null}
             </div>
@@ -315,22 +312,22 @@ export default function ReportsPage() {
                 <thead>
                   <tr className="border-line-soft text-2xs text-muted border-b-2 tracking-wide uppercase">
                     <th scope="col" className="px-4 py-2 font-semibold">
-                      Item
+                      {t("reports.item")}
                     </th>
                     <th
                       scope="col"
                       className="px-2 py-2 text-right font-semibold"
                     >
-                      Sold
+                      {t("reports.sold")}
                     </th>
                     <th
                       scope="col"
                       className="px-2 py-2 text-right font-semibold"
                     >
-                      Revenue
+                      {t("reports.revenue")}
                     </th>
                     <th scope="col" className="px-4 py-2 font-semibold">
-                      Share
+                      {t("reports.share")}
                     </th>
                   </tr>
                 </thead>
@@ -356,7 +353,9 @@ export default function ReportsPage() {
                         <span
                           className="rounded-pill bg-tan flex h-2.5 w-full overflow-hidden"
                           role="img"
-                          aria-label={`${Math.round(item.share * 100)}% of revenue`}
+                          aria-label={t("reports.shareOfRevenue", {
+                            percent: Math.round(item.share * 100),
+                          })}
                         >
                           <span
                             className="rounded-pill bg-secondary h-full"
@@ -374,9 +373,7 @@ export default function ReportsPage() {
           </Card>
 
           <p className="border-line bg-tan/50 text-body rounded-md border-2 border-dashed px-4 py-3 text-sm">
-            Orders are never deleted automatically — six months of history is
-            the target, and every figure above is recomputed from the full order
-            list.
+            {t("reports.ordersNeverDeleted")}
           </p>
         </>
       ) : null}
@@ -416,7 +413,9 @@ function RevenueChart({
   const AREA = 112;
 
   if (report.byDay.length === 0) {
-    return <p className="text-muted mt-2 text-sm">Nothing to chart yet.</p>;
+    return (
+      <p className="text-muted mt-2 text-sm">{t("reports.nothingChartYet")}</p>
+    );
   }
 
   // With a full month of days every label would collide, so show the first, the
@@ -437,9 +436,11 @@ function RevenueChart({
             <li
               key={day.date}
               className="flex min-w-0 flex-1 flex-col items-center gap-1.5"
-              title={`${day.label}: ${formatMoney(day.revenue, settings)} from ${
-                day.orders
-              } order${day.orders === 1 ? "" : "s"}`}
+              title={t("reports.dayTitle", {
+                day: day.label,
+                revenue: formatMoney(day.revenue, settings),
+                count: day.orders,
+              })}
             >
               <span className="flex h-28 w-full items-end">
                 <span
@@ -455,12 +456,14 @@ function RevenueChart({
         })}
       </ol>
       <p className="text-muted mt-2 text-sm">
-        Best day:{" "}
+        {t("reports.bestDay")}{" "}
         <span className="tnum text-ink font-semibold">
           {best
-            ? `${best.label} · ${formatMoney(best.revenue, settings)} from ${best.orders} order${
-                best.orders === 1 ? "" : "s"
-              }`
+            ? t("reports.bestDayValue", {
+                day: best.label,
+                revenue: formatMoney(best.revenue, settings),
+                count: best.orders,
+              })
             : "—"}
         </span>
       </p>
@@ -471,7 +474,9 @@ function RevenueChart({
 function orderNumbers(orders: Order[]): string {
   const shown = orders.slice(0, 12).map(orderLabel);
   const more = orders.length - shown.length;
-  return more > 0 ? `${shown.join(", ")} and ${more} more` : shown.join(", ");
+  return more > 0
+    ? t("reports.andMore", { list: shown.join(", "), count: more })
+    : shown.join(", ");
 }
 
 function IntegrityNotice({
@@ -484,23 +489,19 @@ function IntegrityNotice({
       {totalMismatch.length > 0 ? (
         <p role="alert" className="text-berry-deep">
           <span className="font-semibold">
-            {totalMismatch.length === 1
-              ? "1 order has a total that doesn't match its items"
-              : `${totalMismatch.length} orders have a total that doesn't match their items`}
+            {t("reports.totalMismatchTitle", { count: totalMismatch.length })}
           </span>{" "}
-          ({orderNumbers(totalMismatch)}). The revenue above is added up from
-          the items, not those totals — check these against what the till
-          actually took.
+          {t("reports.totalMismatchBody", {
+            numbers: orderNumbers(totalMismatch),
+          })}
         </p>
       ) : null}
       {differsFromMenu.length > 0 ? (
         <p className="text-muted">
-          {differsFromMenu.length === 1
-            ? "1 order has items"
-            : `${differsFromMenu.length} orders have items`}{" "}
-          priced or named differently from today&apos;s menu (
-          {orderNumbers(differsFromMenu)}). Usually that is a menu change since
-          they were placed; if the menu has not changed, look at them.
+          {t("reports.differsFromMenu", {
+            count: differsFromMenu.length,
+            numbers: orderNumbers(differsFromMenu),
+          })}
         </p>
       ) : null}
     </Card>

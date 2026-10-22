@@ -52,7 +52,7 @@ import {
 } from "@/lib/order-history";
 import { buildReport, ordersToCsv } from "@/lib/reports";
 import type { MenuItem, Order } from "@/lib/types";
-import { t } from "@/lib/i18n";
+import { formatNumber, t } from "@/lib/i18n";
 
 /** Rows rendered at a time; the rest are one tap away. */
 const PAGE_SIZE = 50;
@@ -62,9 +62,9 @@ const PAGE_SIZE = 50;
  * device's: the history is filtered by the cafe's days, so a row has to say
  * the cafe's date too, even for an owner looking from abroad.
  */
-function cafeClock(timeZone: string) {
+function cafeClock(timeZone: string, locale: string) {
   const format = (options: Intl.DateTimeFormatOptions) =>
-    new Intl.DateTimeFormat("en-IN", { ...options, timeZone });
+    new Intl.DateTimeFormat(locale, { ...options, timeZone });
   const date = format({ day: "numeric", month: "short" });
   const time = format({ hour: "numeric", minute: "2-digit", hour12: true });
   const full = format({
@@ -76,24 +76,21 @@ function cafeClock(timeZone: string) {
     hour12: true,
   });
   return {
-    short: (ms: number) => `${date.format(ms)}, ${time.format(ms)}`,
+    short: (ms: number) =>
+      t("history.dateTime", { date: date.format(ms), time: time.format(ms) }),
     full: (ms: number) => full.format(ms),
   };
 }
 
 type CafeClock = ReturnType<typeof cafeClock>;
 
-function plural(n: number, one: string, many = `${one}s`): string {
-  return `${n} ${n === 1 ? one : many}`;
-}
-
 export default function OrderHistoryPage() {
   const repo = useOrderRepo();
   const isDemo = useIsDemo();
   const { items: menu } = useMenu();
   const { settings } = useCafeSettings();
-  const { timeZone } = settings;
-  const clock = useMemo(() => cafeClock(timeZone), [timeZone]);
+  const { timeZone, locale } = settings;
+  const clock = useMemo(() => cafeClock(timeZone, locale), [timeZone, locale]);
 
   const [from, setFrom] = useState(() => {
     const r = presetRange("today", timeZone);
@@ -203,15 +200,13 @@ export default function OrderHistoryPage() {
     <div className="flex flex-col gap-4 pb-8">
       <Card className="flex flex-col gap-3 p-4">
         <div>
-          <h2 className="text-xl">Order history</h2>
-          <p className="text-muted text-sm">
-            Look up any past order. The live board is on the Orders screen.
-          </p>
+          <h2 className="text-xl">{t("history.orderHistory")}</h2>
+          <p className="text-muted text-sm">{t("history.lookUpAny")}</p>
         </div>
 
         <div
           role="group"
-          aria-label="Date range"
+          aria-label={t("history.dateRange")}
           className="flex flex-wrap gap-2"
         >
           {PRESETS.map((p) => (
@@ -233,7 +228,7 @@ export default function OrderHistoryPage() {
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          <Field label="From" htmlFor="history-from">
+          <Field label={t("history.from")} htmlFor="history-from">
             <Input
               id="history-from"
               type="date"
@@ -242,7 +237,11 @@ export default function OrderHistoryPage() {
               onChange={(e) => setFrom(e.target.value)}
             />
           </Field>
-          <Field label="To" htmlFor="history-to" hint="Inclusive.">
+          <Field
+            label={t("history.to")}
+            htmlFor="history-to"
+            hint={t("history.inclusive")}
+          >
             <Input
               id="history-to"
               type="date"
@@ -270,13 +269,13 @@ export default function OrderHistoryPage() {
         >
           <p className="min-w-0 flex-1">{error}</p>
           <Button size="sm" variant="ghost" onClick={() => void load()}>
-            Try again
+            {t("history.tryAgain")}
           </Button>
         </Card>
       ) : null}
 
       {check.ok && !loadedOnce && loading ? (
-        <Loading label="Finding past orders…" />
+        <Loading label={t("history.findingPastOrders")} />
       ) : check.ok && report && !error ? (
         <>
           <Card className="flex flex-col gap-3 p-4">
@@ -286,18 +285,23 @@ export default function OrderHistoryPage() {
                   className="tnum font-round text-primary text-2xl"
                   data-testid="history-summary"
                 >
-                  {plural(report.orderCount, "order")} ·{" "}
+                  {t("count.orders", { count: report.orderCount })} ·{" "}
                   {formatMoney(report.revenue, settings)}
                 </p>
                 <p className="text-muted text-sm">
                   {notCounted > 0
-                    ? `Plus ${plural(notCounted, "rejected order")}, not counted. `
+                    ? `${t("history.plusRejected", {
+                        orders: t("count.rejectedOrders", {
+                          count: notCounted,
+                        }),
+                      })} `
                     : ""}
                   {waiting > 0
-                    ? `${plural(waiting, "order")} waiting for the counter, not counted yet. `
+                    ? `${t("history.ordersWaiting", {
+                        orders: t("count.orders", { count: waiting }),
+                      })} `
                     : ""}
-                  Sales are added up from each order&apos;s items, including
-                  orders still being made — the same figures as Reports.
+                  {t("history.salesNote")}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -312,7 +316,7 @@ export default function OrderHistoryPage() {
                     size={16}
                     className={loading ? "animate-spin-slow" : undefined}
                   />
-                  {loading ? "Refreshing…" : "Refresh"}
+                  {loading ? t("history.refreshing") : t("history.refresh")}
                 </Button>
                 <Button
                   size="sm"
@@ -321,16 +325,13 @@ export default function OrderHistoryPage() {
                   onClick={downloadCsv}
                 >
                   <Icon name="chart" size={16} />
-                  Export CSV
+                  {t("history.exportCsv")}
                 </Button>
               </div>
             </div>
             {capped ? (
               <p className="border-highlight bg-highlight-soft text-ink rounded-md border-2 px-3 py-2 text-sm">
-                This range has more than {HISTORY_LIMIT.toLocaleString("en-IN")}{" "}
-                orders, so only the newest{" "}
-                {HISTORY_LIMIT.toLocaleString("en-IN")} were loaded. Pick a
-                shorter range to see the rest.
+                {t("history.capped", { limit: formatNumber(HISTORY_LIMIT) })}
               </p>
             ) : null}
           </Card>
@@ -349,8 +350,8 @@ export default function OrderHistoryPage() {
           {orders.length === 0 ? (
             <Card className="px-6 py-4 text-center">
               <EmptyState
-                title="No orders in this range"
-                body="Try another day, or a longer range."
+                title={t("history.noOrdersRange")}
+                body={t("history.tryAnotherDay")}
                 action={
                   isDemo ? (
                     <Button
@@ -359,7 +360,9 @@ export default function OrderHistoryPage() {
                       onClick={() => void seedSampleMonth()}
                     >
                       <Icon name="sparkle" size={18} />
-                      {seeding ? "Adding…" : "Add a sample month"}
+                      {seeding
+                        ? t("history.adding")
+                        : t("history.addSampleMonth")}
                     </Button>
                   ) : null
                 }
@@ -368,23 +371,25 @@ export default function OrderHistoryPage() {
           ) : filtered.length === 0 ? (
             <Card className="flex flex-col items-center gap-3 px-6 py-10 text-center">
               <p className="text-ink font-semibold">
-                No orders match these filters.
+                {t("history.noOrdersMatch")}
               </p>
               <Button
                 size="sm"
                 variant="ghost"
                 onClick={() => setFilters(NO_FILTERS)}
               >
-                Clear filters
+                {t("history.clearFilters")}
               </Button>
             </Card>
           ) : (
             <Card className="overflow-hidden">
               {filtering && filteredReport ? (
                 <p className="border-line-soft text-muted tnum border-b-2 px-4 py-2.5 text-sm">
-                  Showing {plural(filtered.length, "order")} of {orders.length}
-                  {" · "}
-                  {formatMoney(filteredReport.revenue, settings)} in sales
+                  {t("history.showing", {
+                    shown: t("count.orders", { count: filtered.length }),
+                    total: orders.length,
+                    sales: formatMoney(filteredReport.revenue, settings),
+                  })}
                 </p>
               ) : null}
               <ul className="divide-line-soft divide-y-2">
@@ -404,14 +409,16 @@ export default function OrderHistoryPage() {
               {filtered.length > shown ? (
                 <div className="border-line-soft flex flex-wrap items-center justify-between gap-2 border-t-2 px-4 py-3">
                   <p className="text-muted tnum text-sm">
-                    {shown} of {filtered.length} shown
+                    {t("history.shownOf", { shown, total: filtered.length })}
                   </p>
                   <Button
                     size="sm"
                     variant="ghost"
                     onClick={() => setShown((n) => n + PAGE_SIZE)}
                   >
-                    Show {Math.min(PAGE_SIZE, filtered.length - shown)} more
+                    {t("history.showMore", {
+                      count: Math.min(PAGE_SIZE, filtered.length - shown),
+                    })}
                   </Button>
                 </div>
               ) : null}
@@ -434,14 +441,14 @@ function Filters({
 }) {
   return (
     <Card className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-[1fr_1fr_2fr]">
-      <Field label="Status" htmlFor="history-status">
+      <Field label={t("history.status")} htmlFor="history-status">
         <Select
           id="history-status"
           value={filters.status}
           onChange={(e) => onChange({ ...filters, status: e.target.value })}
         >
-          <option value="all">All</option>
-          <option value="active">Active</option>
+          <option value="all">{t("history.all")}</option>
+          <option value="active">{t("history.active")}</option>
           {TERMINAL_STATUSES.map((s) => (
             <option key={s} value={s}>
               {statusLabel(s)}
@@ -449,7 +456,7 @@ function Filters({
           ))}
         </Select>
       </Field>
-      <Field label="Table" htmlFor="history-table">
+      <Field label={t("history.table")} htmlFor="history-table">
         <Select
           id="history-table"
           value={filters.table === null ? "" : String(filters.table)}
@@ -460,19 +467,19 @@ function Filters({
             })
           }
         >
-          <option value="">All tables</option>
-          {tables.map((t) => (
-            <option key={t} value={t}>
-              Table {t}
+          <option value="">{t("history.allTables")}</option>
+          {tables.map((n) => (
+            <option key={n} value={n}>
+              {t("history.tableNumber", { table: n })}
             </option>
           ))}
         </Select>
       </Field>
       <div className="col-span-2 sm:col-span-1">
         <Field
-          label="Search"
+          label={t("history.search")}
           htmlFor="history-search"
-          hint="An order number like 0007, or an item like chai."
+          hint={t("history.orderNumberLike")}
         >
           <Input
             id="history-search"
@@ -527,11 +534,11 @@ function HistoryRow({
               {orderLabel(order)}
             </span>
             <span className="text-body text-sm font-semibold">
-              Table {order.tableNumber}
+              {t("history.tableNumber", { table: order.tableNumber })}
             </span>
           </span>
           <span className="tnum text-muted block text-sm">
-            {clock.short(order.createdAt)} · {plural(count, "item")}
+            {clock.short(order.createdAt)} · {t("count.items", { count })}
           </span>
         </span>
         <span className="flex shrink-0 flex-col items-end gap-1">
@@ -544,7 +551,7 @@ function HistoryRow({
             {mismatch ? (
               <>
                 <span aria-hidden="true">⚠</span>
-                <span className="sr-only">Total doesn&apos;t match items:</span>
+                <span className="sr-only">{t("history.totalDoesntMatch")}</span>
               </>
             ) : null}
             {formatMoney(order.total, settings)}
@@ -616,7 +623,7 @@ function OrderDetails({
           </li>
         ))}
         <li className="flex items-baseline justify-between gap-2 px-3 py-2">
-          <span className="text-ink font-semibold">Total</span>
+          <span className="text-ink font-semibold">{t("history.total")}</span>
           <span className="tnum font-round text-primary text-base">
             {formatMoney(order.total, settings)}
           </span>
@@ -630,48 +637,54 @@ function OrderDetails({
           className="border-berry bg-paper text-berry-deep rounded-md border-2 px-3 py-2"
         >
           <span className="font-semibold">
-            Total doesn&apos;t match its items.
+            {t("history.totalDoesntMatch2")}
           </span>{" "}
-          {mismatch.message} Reports count{" "}
-          {formatMoney(orderTotal(order.items), settings)}.
+          {t("history.mismatchNote", {
+            message: mismatch.message,
+            total: formatMoney(orderTotal(order.items), settings),
+          })}
         </p>
       ) : null}
 
       {reason ? (
         <p className="border-line bg-paper text-ink rounded-md border-2 px-3 py-2">
-          <span className="font-semibold">Reason given:</span> {reason}
+          <span className="font-semibold">{t("history.reasonGiven")}</span>{" "}
+          {reason}
         </p>
       ) : null}
 
       {order.notes ? (
         <p className="border-line bg-tan/60 text-body rounded-md border-2 border-dashed px-3 py-2">
-          <span className="font-semibold">Note:</span> {order.notes}
+          <span className="font-semibold">{t("history.note")}</span>{" "}
+          {order.notes}
         </p>
       ) : null}
 
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5">
-        <dt className="text-muted">Number</dt>
+        <dt className="text-muted">{t("history.number")}</dt>
         <dd className="tnum text-ink">
           {orderLabel(order)}
           {order.dayNumber === undefined ? (
-            <span className="text-muted"> (no daily number)</span>
+            <span className="text-muted"> {t("history.noDailyNumber")}</span>
           ) : null}
         </dd>
-        <dt className="text-muted">Placed</dt>
+        <dt className="text-muted">{t("history.placed")}</dt>
         <dd className="tnum text-ink">{clock.full(order.createdAt)}</dd>
         {order.completedAt ? (
           <>
-            <dt className="text-muted">Completed</dt>
+            <dt className="text-muted">{t("history.completed")}</dt>
             <dd className="tnum text-ink">{clock.full(order.completedAt)}</dd>
           </>
         ) : null}
-        <dt className="text-muted">Status</dt>
+        <dt className="text-muted">{t("history.status")}</dt>
         <dd className="text-ink">{statusLabel(order.status)}</dd>
-        <dt className="text-muted">Payment</dt>
+        <dt className="text-muted">{t("history.payment")}</dt>
         <dd className="text-ink">
-          {order.paymentMethod === "upi" ? "UPI" : "At the counter"}
+          {order.paymentMethod === "upi"
+            ? t("history.payUpi")
+            : t("history.payCounter")}
         </dd>
-        <dt className="text-muted self-center">Order ID</dt>
+        <dt className="text-muted self-center">{t("history.orderId")}</dt>
         <dd className="flex min-w-0 flex-wrap items-center gap-2">
           <code className="text-ink bg-paper border-line-soft rounded-sm border px-1.5 py-0.5 text-xs break-all">
             {order.id}
@@ -680,18 +693,18 @@ function OrderDetails({
             size="sm"
             variant="ghost"
             onClick={() => void copyId()}
-            aria-label={`Copy order ID ${order.id}`}
+            aria-label={t("history.copyOrderId", { id: order.id })}
           >
-            {copied ? "Copied" : "Copy"}
+            {copied ? t("history.copied") : t("history.copy")}
           </Button>
         </dd>
       </dl>
 
       {menuNotes.length > 0 ? (
         <p className="text-muted">
-          Differs from today&apos;s menu:{" "}
-          {menuNotes.map((i) => i.message).join(" ")} Usually that is a menu
-          change since the order was placed.
+          {t("history.menuDiffers", {
+            notes: menuNotes.map((i) => i.message).join(" "),
+          })}
         </p>
       ) : null}
     </div>

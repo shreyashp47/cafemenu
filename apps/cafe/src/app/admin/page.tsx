@@ -42,6 +42,7 @@ import { useCafeSettings } from "@/hooks/useCafeSettings";
 import { formatMoney } from "@/lib/money";
 import { SEED_MENU } from "@/lib/data/seed";
 import type { MenuItem } from "@/lib/types";
+import { t } from "@/lib/i18n";
 
 type Patch = Partial<Omit<MenuItem, "id">>;
 
@@ -86,7 +87,7 @@ export default function AdminMenuPage() {
         return true;
       } catch (err) {
         setError(
-          err instanceof Error ? err.message : "That change didn't save.",
+          err instanceof Error ? err.message : t("dashboard.changeNotSaved"),
         );
         return false;
       } finally {
@@ -96,7 +97,7 @@ export default function AdminMenuPage() {
     [],
   );
 
-  if (loading || !repo) return <Loading label="Reading the menu…" />;
+  if (loading || !repo) return <Loading label={t("dashboard.readingMenu")} />;
 
   return (
     <div className="flex flex-col gap-5 pb-8">
@@ -122,11 +123,13 @@ export default function AdminMenuPage() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0">
               <h2 id="menu-heading" className="text-xl">
-                Menu
+                {t("dashboard.menu")}
               </h2>
               <p className="tnum text-muted text-sm">
-                {plural(items.length, "item")} ·{" "}
-                {soldOut === 0 ? "all available" : `${soldOut} sold out`}
+                {t("count.items", { count: items.length })} ·{" "}
+                {soldOut === 0
+                  ? t("dashboard.allAvailable")
+                  : t("dashboard.soldOutCount", { count: soldOut })}
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -141,7 +144,7 @@ export default function AdminMenuPage() {
                 variant="ghost"
               >
                 <Icon name={importing ? "close" : "plus"} size={18} />
-                {importing ? "Close import" : "Import"}
+                {importing ? t("dashboard.closeImport") : t("dashboard.import")}
               </Button>
               <Button
                 onClick={() => setAdding((open) => !open)}
@@ -150,7 +153,7 @@ export default function AdminMenuPage() {
                 variant={adding ? "ghost" : "primary"}
               >
                 <Icon name={adding ? "close" : "plus"} size={18} />
-                {adding ? "Close" : "Add item"}
+                {adding ? t("dashboard.close") : t("dashboard.addItemButton")}
               </Button>
             </div>
           </div>
@@ -179,11 +182,11 @@ export default function AdminMenuPage() {
             importing ? null : (
               <>
                 <EmptyState
-                  title="No items yet"
+                  title={t("dashboard.noItemsYet")}
                   body={
                     isDemo
-                      ? "Tap Add item to add your first drink, start from a starter menu, or restore the sample menu below."
-                      : "Tap Add item to add your first drink, or start from a starter menu."
+                      ? t("dashboard.emptyDemoBody")
+                      : t("dashboard.emptyBody")
                   }
                 />
                 <StarterMenuPicker
@@ -236,7 +239,7 @@ export default function AdminMenuPage() {
                         void run(item.id, async () => {
                           if (
                             !window.confirm(
-                              `Remove "${item.name}" from the menu? Past orders keep it.`,
+                              t("dashboard.confirmRemove", { name: item.name }),
                             )
                           ) {
                             return;
@@ -255,21 +258,16 @@ export default function AdminMenuPage() {
           {isDemo ? (
             <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
               <div>
-                <h3 className="text-base">Reset the sample menu</h3>
+                <h3 className="text-base">{t("dashboard.resetSampleMenu")}</h3>
                 <p className="text-muted text-sm">
-                  Demo data only. This replaces the current menu with{" "}
-                  {SEED_MENU.length} sample items.
+                  {t("dashboard.demoReplaces", { count: SEED_MENU.length })}
                 </p>
               </div>
               <Button
                 variant="ghost"
                 onClick={() =>
                   void run("reset", async () => {
-                    if (
-                      !window.confirm(
-                        "Replace the whole menu with the samples?",
-                      )
-                    ) {
+                    if (!window.confirm(t("dashboard.confirmReplaceSamples"))) {
                       return;
                     }
                     await repo.replaceAll(SEED_MENU.map((i) => ({ ...i })));
@@ -278,7 +276,7 @@ export default function AdminMenuPage() {
                 }
               >
                 <Icon name="trash" size={18} />
-                Reset samples
+                {t("dashboard.resetSamples")}
               </Button>
             </Card>
           ) : null}
@@ -288,10 +286,6 @@ export default function AdminMenuPage() {
   );
 }
 
-function plural(n: number, word: string): string {
-  return `${n} ${word}${n === 1 ? "" : "s"}`;
-}
-
 function slug(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 }
@@ -299,7 +293,7 @@ function slug(value: string): string {
 /** Shortcut chips to each category, for menus longer than one screen. */
 function CategoryJump({ groups }: { groups: [string, MenuItem[]][] }) {
   return (
-    <nav aria-label="Jump to category">
+    <nav aria-label={t("dashboard.jumpCategory")}>
       <ul className="flex gap-2 overflow-x-auto pb-1">
         {groups.map(([category, list]) => (
           <li key={category} className="shrink-0">
@@ -348,23 +342,21 @@ function SpecialOfferCard() {
 
   return (
     <Card className="p-4">
-      <h2 className="text-lg">Today&apos;s special</h2>
-      <p className="text-muted text-sm">
-        One short line pinned to the top of the customer menu.
-      </p>
+      <h2 className="text-lg">{t("dashboard.todaysSpecial")}</h2>
+      <p className="text-muted text-sm">{t("dashboard.oneShortLine")}</p>
 
       <div className="mt-3">
         <Field
-          label="Message"
+          label={t("dashboard.message")}
           htmlFor="special-text"
-          hint="Up to 140 characters."
+          hint={t("dashboard.up140Characters")}
         >
           <Input
             id="special-text"
             value={text}
             maxLength={140}
             onChange={(e) => setText(e.target.value)}
-            placeholder="Free refills before 11am"
+            placeholder={t("dashboard.freeRefillsBefore")}
           />
         </Field>
       </div>
@@ -374,27 +366,25 @@ function SpecialOfferCard() {
           tone="plain"
           checked={enabled}
           onChange={setEnabled}
-          label="Show to customers"
+          label={t("dashboard.showCustomers")}
         />
         <Button
           onClick={() => void save()}
           disabled={state === "saving" || !text.trim()}
         >
           {state === "saving"
-            ? "Saving…"
+            ? t("dashboard.saving")
             : state === "saved"
-              ? "Saved ✓"
-              : "Save"}
+              ? t("dashboard.saved")
+              : t("dashboard.save")}
         </Button>
       </div>
       {state === "error" ? (
         <p role="alert" className="text-berry-deep mt-2 text-sm font-semibold">
-          That didn&apos;t save. Try again.
+          {t("dashboard.didntSaveTry")}
         </p>
       ) : dirty && state === "idle" ? (
-        <p className="text-muted mt-2 text-sm">
-          Not live yet. Tap Save to show customers.
-        </p>
+        <p className="text-muted mt-2 text-sm">{t("dashboard.notLiveYet")}</p>
       ) : null}
     </Card>
   );
@@ -408,12 +398,12 @@ function SpecialOfferCard() {
 function priceField(settings: MoneySettings) {
   const digits = moneyDigits(settings);
   return {
-    label: `Price (${currencySymbol(settings)})`,
+    label: t("dashboard.priceLabel", { symbol: currencySymbol(settings) }),
     inputMode: digits > 0 ? ("decimal" as const) : ("numeric" as const),
     error:
       digits > 0
-        ? `Enter a price above 0, with up to ${digits} decimals.`
-        : "Enter a whole price above 0.",
+        ? t("dashboard.priceDecimals", { digits })
+        : t("dashboard.priceWhole"),
   };
 }
 
@@ -469,11 +459,11 @@ function AddItemCard({
     e.preventDefault();
     if (!repo) return;
     if (!name.trim() || priceValue === null) {
-      onError("Give the item a name and a valid price.");
+      onError(t("dashboard.needNamePrice"));
       return;
     }
     if (!category.trim()) {
-      onError("Give the new category a name.");
+      onError(t("dashboard.needCategory"));
       return;
     }
     onError(null);
@@ -485,7 +475,12 @@ function AddItemCard({
         price: priceValue,
         category: category.trim(),
       });
-      setAdded(`Added “${name.trim()}” to ${category.trim()}.`);
+      setAdded(
+        t("dashboard.addedTo", {
+          name: name.trim(),
+          category: category.trim(),
+        }),
+      );
       setName("");
       setDescription("");
       setPrice("");
@@ -493,7 +488,7 @@ function AddItemCard({
       setFormKey((k) => k + 1);
       nameRef.current?.focus();
     } catch (err) {
-      onError(err instanceof Error ? err.message : "Could not add that item.");
+      onError(err instanceof Error ? err.message : t("dashboard.couldNotAdd"));
     } finally {
       setBusy(false);
     }
@@ -501,7 +496,7 @@ function AddItemCard({
 
   return (
     <Card id="add-item" className="border-highlight! p-4">
-      <h3 className="text-lg">Add an item</h3>
+      <h3 className="text-lg">{t("dashboard.addItem")}</h3>
       <p
         role="status"
         className={cn(
@@ -512,18 +507,18 @@ function AddItemCard({
         {added ? (
           <>
             <Icon name="check" size={18} />
-            {added} Add another, or tap Done.
+            {t("dashboard.addAnother", { added })}
           </>
         ) : null}
       </p>
       <form onSubmit={submit} className="mt-3 grid gap-3 sm:grid-cols-2">
-        <Field label="Name" htmlFor="new-name">
+        <Field label={t("dashboard.name")} htmlFor="new-name">
           <Input
             ref={nameRef}
             id="new-name"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Cardamom Bun"
+            placeholder={t("dashboard.cardamomBun")}
             required
           />
         </Field>
@@ -537,7 +532,7 @@ function AddItemCard({
             required
           />
         </Field>
-        <Field label="Category" htmlFor="new-category">
+        <Field label={t("dashboard.category")} htmlFor="new-category">
           <CategoryPicker
             key={formKey}
             id="new-category"
@@ -546,22 +541,26 @@ function AddItemCard({
             onChange={(name, isNew) => setPicked({ name, isNew })}
           />
         </Field>
-        <Field label="Short description" htmlFor="new-desc" hint="Optional.">
+        <Field
+          label={t("dashboard.shortDescription")}
+          htmlFor="new-desc"
+          hint={t("dashboard.optional")}
+        >
           <Textarea
             id="new-desc"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Warm, sugary, cardamom-heavy."
+            placeholder={t("dashboard.warmSugaryCardamom")}
             rows={2}
           />
         </Field>
         <div className="flex flex-wrap gap-2 sm:col-span-2">
           <Button type="submit" disabled={busy}>
             <Icon name="plus" size={18} />
-            {busy ? "Adding…" : "Add to menu"}
+            {busy ? t("dashboard.adding") : t("dashboard.addToMenu")}
           </Button>
           <Button variant="ghost" onClick={onDone}>
-            {added ? "Done" : "Cancel"}
+            {added ? t("dashboard.done") : t("dashboard.cancel")}
           </Button>
         </div>
       </form>
@@ -620,7 +619,7 @@ function MenuRow({
             <Icon name={itemArtIcon(item.art)} size={22} />
           </span>
           <span className="min-w-0 flex-1">
-            <span className="sr-only">Edit </span>
+            <span className="sr-only">{t("dashboard.edit")} </span>
             <span
               className={cn(
                 "font-round line-clamp-2 text-[0.95rem] leading-snug font-semibold sm:line-clamp-1",
@@ -653,7 +652,9 @@ function MenuRow({
           checked={item.available}
           onChange={onToggle}
           disabled={busy}
-          label={item.available ? "Available" : "Sold out"}
+          label={
+            item.available ? t("dashboard.available") : t("dashboard.soldOut")
+          }
           srContext={`: ${item.name}`}
           className="min-w-[8.25rem]"
         />
@@ -715,18 +716,18 @@ function MenuItemEditor({
       name: draft.name.trim(),
       description: draft.description.trim(),
       price,
-      category: draft.category.trim() || "Drinks",
+      category: draft.category.trim() || t("dashboard.defaultCategory"),
     });
   }
 
   return (
     <form
       id={`edit-${item.id}`}
-      aria-label={`Edit ${item.name}`}
+      aria-label={t("dashboard.editItem", { name: item.name })}
       onSubmit={submit}
       className="border-line-soft grid gap-3 border-t-2 p-3 sm:grid-cols-[1fr_8rem]"
     >
-      <Field label="Name" htmlFor={`name-${item.id}`}>
+      <Field label={t("dashboard.name")} htmlFor={`name-${item.id}`}>
         <Input
           id={`name-${item.id}`}
           value={draft.name}
@@ -746,7 +747,7 @@ function MenuItemEditor({
         />
       </Field>
       <div className="sm:col-span-2">
-        <Field label="Description" htmlFor={`desc-${item.id}`}>
+        <Field label={t("dashboard.description")} htmlFor={`desc-${item.id}`}>
           <Textarea
             id={`desc-${item.id}`}
             rows={2}
@@ -758,7 +759,7 @@ function MenuItemEditor({
         </Field>
       </div>
       <div className="sm:col-span-2">
-        <Field label="Category" htmlFor={`cat-${item.id}`}>
+        <Field label={t("dashboard.category")} htmlFor={`cat-${item.id}`}>
           <Select
             id={`cat-${item.id}`}
             value={draft.category}
@@ -779,10 +780,10 @@ function MenuItemEditor({
           disabled={busy || !dirty || Boolean(priceError) || !draft.name.trim()}
         >
           <Icon name="check" size={18} />
-          {busy ? "Saving…" : "Save"}
+          {busy ? t("dashboard.saving") : t("dashboard.save")}
         </Button>
         <Button variant="ghost" onClick={onCancel} disabled={busy}>
-          Cancel
+          {t("dashboard.cancel")}
         </Button>
         <button
           type="button"
@@ -791,7 +792,7 @@ function MenuItemEditor({
           className="rounded-pill border-line bg-paper font-round text-berry-deep hover:border-berry ml-auto inline-flex min-h-11 items-center gap-1.5 border-2 px-3.5 text-sm font-semibold transition-colors disabled:opacity-45"
         >
           <Icon name="trash" size={18} />
-          Delete
+          {t("dashboard.delete")}
         </button>
       </div>
     </form>

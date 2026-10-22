@@ -9,6 +9,7 @@ import {
 import { Card } from "@/components/ui/Card";
 import { Switch } from "@/components/ui/Switch";
 import { TABLE_OPEN_HOURS } from "@/lib/table-open";
+import { t } from "@/lib/i18n";
 
 /**
  * "Approve new tables": the owner's switch for staff confirming new guests
@@ -38,27 +39,25 @@ export function NewGuestsSetting() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1 basis-60">
           <h2 className="text-lg" id="approve-new-tables">
-            Approve new tables
+            {t("newGuests.approveNewTables")}
           </h2>
           <p className="text-muted mt-0.5 text-sm">
-            Off: every order goes straight to the kitchen. On: a table&apos;s
-            first order waits for staff to tap Accept, and then its orders go
-            straight through for {TABLE_OPEN_HOURS} hours.
+            {t("newGuests.explain", { hours: TABLE_OPEN_HOURS })}
           </p>
         </div>
         <Switch
           checked={on}
           onChange={(next) => void toggle(next)}
           disabled={loading || state === "busy"}
-          label={on ? "On" : "Off"}
-          srContext="Approve new tables"
+          label={on ? t("newGuests.on") : t("newGuests.off")}
+          srContext={t("newGuests.approveNewTables")}
           // A setting, not an alarm: off is the normal state now.
           tone="plain"
         />
       </div>
       {state === "error" ? (
         <p role="alert" className="text-berry-deep mt-2 text-sm font-semibold">
-          That didn&apos;t save. Try again.
+          {t("newGuests.didntSaveTry")}
         </p>
       ) : null}
     </Card>

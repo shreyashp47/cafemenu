@@ -35,6 +35,8 @@ import {
   type Invite,
   type InviteRole,
 } from "@/lib/invites";
+import { t } from "@/lib/i18n";
+import { rich } from "@/lib/i18n-rich";
 
 export default function JoinPage() {
   return (
@@ -90,19 +92,18 @@ function JoinScreen() {
   if (joined) return <Joined {...joined} />;
   if (id === null) {
     return (
-      <Message title="This link is incomplete">
-        Copy the whole invite link from the message the owner sent, or ask them
-        for a new one.
+      <Message title={t("join.linkIncomplete")}>
+        {t("join.copyWholeInvite")}
       </Message>
     );
   }
   const loaded = invite !== null && invite.id === id ? invite : null;
   if (id === undefined || loading || !loaded) {
-    return <Loading label="Opening your invite…" />;
+    return <Loading label={t("join.openingInvite")} />;
   }
   if (loaded.error) {
     return (
-      <Message title="Can't open the invite">
+      <Message title={t("join.cantOpenInvite")}>
         {friendlyJoinError(loaded.error)}
       </Message>
     );
@@ -114,11 +115,8 @@ function JoinScreen() {
   const state = found ? inviteState(found, now) : null;
   if (!found || state !== "open") {
     return (
-      <Message title="This invite doesn't work any more">
-        {state === "expired"
-          ? "It has expired: invites work for seven days."
-          : "It has been used or cancelled."}{" "}
-        Ask the owner for a new link.
+      <Message title={t("join.inviteDoesntWork")}>
+        {state === "expired" ? t("join.expiredBody") : t("join.usedBody")}
       </Message>
     );
   }
@@ -154,7 +152,7 @@ function JoinForm({
     if (!repo) return;
     const clean = cleanStaffName(name);
     if (!clean) {
-      setError("Enter your name, as the team will see it.");
+      setError(t("join.enterName"));
       return;
     }
     setBusy(true);
@@ -185,9 +183,7 @@ function JoinForm({
       try {
         await signIn(email, password);
       } catch {
-        throw new Error(
-          "That email already has an account, and that isn't its password.",
-        );
+        throw new Error(t("join.wrongPassword"));
       }
     }
   }
@@ -196,10 +192,16 @@ function JoinForm({
     <main className="shell flex min-h-svh flex-col items-center justify-center gap-4 py-10">
       <Mascot size={120} />
       <div className="text-center">
-        <h1 className="font-hand text-primary text-4xl">Join the team</h1>
+        <h1 className="font-hand text-primary text-4xl">
+          {t("join.joinTeam")}
+        </h1>
         <p className="text-muted text-sm">
-          {cafeName ? `${cafeName} invited you` : "You're invited"} as{" "}
-          {invite.role === "owner" ? "an owner" : "staff"}.
+          {cafeName
+            ? t("join.invitedNamed", {
+                name: cafeName,
+                role: roleName(invite.role),
+              })
+            : t("join.invited", { role: roleName(invite.role) })}
         </p>
       </div>
 
@@ -207,7 +209,11 @@ function JoinForm({
         onSubmit={submit}
         className="border-line bg-paper shadow-card flex w-full max-w-sm flex-col gap-3 rounded-lg border-2 p-4"
       >
-        <Field label="Your name" htmlFor="join-name" hint="As the team sees it">
+        <Field
+          label={t("join.name")}
+          htmlFor="join-name"
+          hint={t("join.teamSees")}
+        >
           <Input
             id="join-name"
             autoComplete="name"
@@ -220,19 +226,22 @@ function JoinForm({
 
         {signedIn ? (
           <p className="text-muted text-sm">
-            Joining as{" "}
-            <span className="text-ink font-semibold">{signedIn.email}</span>.{" "}
+            {rich(
+              "join.joiningAs",
+              { b: (c) => <span className="text-ink font-semibold">{c}</span> },
+              { email: signedIn.email },
+            )}{" "}
             <button
               type="button"
               className="text-primary font-semibold underline"
               onClick={() => void signOut()}
             >
-              Not you?
+              {t("join.not")}
             </button>
           </p>
         ) : (
           <>
-            <Field label="Email" htmlFor="join-email">
+            <Field label={t("join.email")} htmlFor="join-email">
               <Input
                 id="join-email"
                 type="email"
@@ -243,9 +252,9 @@ function JoinForm({
               />
             </Field>
             <Field
-              label="Password"
+              label={t("join.password")}
               htmlFor="join-password"
-              hint="At least 6 characters. Already have an account? Use its password."
+              hint={t("join.least6Characters")}
             >
               <Input
                 id="join-password"
@@ -267,22 +276,28 @@ function JoinForm({
         ) : null}
 
         <Button type="submit" size="lg" fullWidth disabled={busy || !repo}>
-          {busy ? "Joining…" : "Join"}
+          {busy ? t("join.joining") : t("join.join")}
         </Button>
       </form>
     </main>
   );
 }
 
+/** "an owner" or "staff", as it reads after "…as". */
+function roleName(role: InviteRole): string {
+  return role === "owner" ? t("join.asOwner") : t("join.asStaff");
+}
+
 function Joined({ role, name }: { role: InviteRole; name: string }) {
   return (
-    <Message title={`Welcome, ${name}!`} mood="happy">
-      You&apos;re on the team as {role === "owner" ? "an owner" : "staff"}. Sign
-      in with this email and password on any device.
+    <Message title={t("join.welcome", { name })} mood="happy">
+      {t("join.onTheTeam", { role: roleName(role) })}
       <span className="mt-4 block">
         <Link href={role === "owner" ? "/admin" : "/staff"}>
           <Button size="lg">
-            {role === "owner" ? "Open the dashboard" : "Open the order board"}
+            {role === "owner"
+              ? t("join.openDashboard")
+              : t("join.openOrderBoard")}
           </Button>
         </Link>
       </span>
@@ -293,15 +308,14 @@ function Joined({ role, name }: { role: InviteRole; name: string }) {
 function AlreadyOnTeam({ email }: { email: string }) {
   const { signOut } = useStaffSession();
   return (
-    <Message title="You're already on the team">
-      This device is signed in as {email || "a team member"}. To join as someone
-      else with this invite, sign out first.
+    <Message title={t("join.youreAlreadyTeam")}>
+      {t("join.signedInAs", { who: email || t("join.aTeamMember") })}
       <span className="mt-4 flex flex-wrap justify-center gap-2">
         <Link href="/staff">
-          <Button>Open the order board</Button>
+          <Button>{t("join.openOrderBoard")}</Button>
         </Link>
         <Button variant="ghost" onClick={() => void signOut()}>
-          Sign out
+          {t("join.signOut")}
         </Button>
       </span>
     </Message>

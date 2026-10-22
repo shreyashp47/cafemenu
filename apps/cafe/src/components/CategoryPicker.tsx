@@ -15,6 +15,7 @@
 import { useState } from "react";
 
 import { Input, Select } from "@/components/ui/Input";
+import { t } from "@/lib/i18n";
 
 const NEW = "__new__";
 
@@ -37,10 +38,14 @@ export function CategoryPicker({
   const nameInput = (
     <Input
       id={categories.length === 0 ? id : `${id}-new`}
-      aria-label={categories.length === 0 ? undefined : "New category name"}
+      aria-label={
+        categories.length === 0
+          ? undefined
+          : t("categoryPicker.newCategoryName")
+      }
       value={value}
       onChange={(e) => onChange(e.target.value, true)}
-      placeholder="Bakes"
+      placeholder={t("categoryPicker.bakes")}
       autoFocus={adding}
       required
     />
@@ -68,7 +73,7 @@ export function CategoryPicker({
             {c}
           </option>
         ))}
-        <option value={NEW}>New category…</option>
+        <option value={NEW}>{t("categoryPicker.newCategory")}</option>
       </Select>
       {typing ? nameInput : null}
     </>
