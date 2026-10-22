@@ -1,5 +1,5 @@
 /**
- * Corner decoration (docs/anime-theme.md §4: "a few small plant leaves / coffee bean
+ * Corner decoration, Cozy only (docs/anime-theme.md §1, §4: "a few small plant leaves / coffee bean
  * doodles in corners, kept subtle and low-opacity"). Purely decorative, so it
  * is aria-hidden and never intercepts taps.
  */
@@ -106,7 +106,7 @@ export function Doodles({ className }: { className?: string }) {
   return (
     <div
       aria-hidden="true"
-      className={`doodle pointer-events-none absolute inset-0 overflow-hidden ${className ?? ""}`}
+      className={`doodle plain:hidden pointer-events-none absolute inset-0 overflow-hidden ${className ?? ""}`}
     >
       <Bean
         className="absolute top-24 -left-1 size-9"
@@ -149,7 +149,7 @@ export function SparkleBurst({
   return (
     <div
       aria-hidden="true"
-      className={`pointer-events-none absolute inset-0 z-10 overflow-hidden ${className ?? ""}`}
+      className={`plain:hidden pointer-events-none absolute inset-0 z-10 overflow-hidden ${className ?? ""}`}
     >
       {Array.from({ length: count }, (_, i) => {
         // deterministic scatter so SSR and client markup match

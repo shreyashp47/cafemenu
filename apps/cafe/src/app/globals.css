@@ -2,12 +2,20 @@
 @import "./print.css";
 
 /* ==========================================================================
-   Design tokens
-   Palette is LOCKED by docs/anime-theme.md §2 ("warm cream cafe + chibi").
-   Never hardcode a hex in a component — add a token here instead.
+   Design tokens, one set per theme preset (docs/anime-theme.md §1).
+   The page's <html data-theme="…"> picks the set; no attribute is Cozy.
+   Cozy is TOE's palette, LOCKED by docs/anime-theme.md §2 ("warm cream cafe
+   + chibi"). Never hardcode a hex in a component — add a token here instead.
+   The colours are also in @cafemenu/shared (themes.ts), which the manifest,
+   the accent guard and the console read; a test keeps the two the same.
    ========================================================================== */
 
-:root {
+/* Mochi, the doodles and the sparkles are Cozy's alone: `plain:hidden`
+   hides an element on every other preset, `hidden plain:block` the reverse. */
+@custom-variant plain (&:where([data-theme]:not([data-theme="cozy"]) *));
+
+:root,
+[data-theme="cozy"] {
   /* -- surfaces (light, paper-like: theme doc §2 "usage") ------------------ */
   --cream: #f2e4d3;
   --cream-soft: #f8efe3;
@@ -61,6 +69,165 @@
   --tap: 2.75rem; /* 44px minimum touch target */
   --shell: 34rem; /* comfortable one-handed reading column */
   --shell-wide: 60rem;
+
+  /* -- type (theme doc §3): each written exactly as TOE had it ------------ */
+  --face-display: var(--font-caveat);
+  --face-hand: var(--font-caveat), cursive;
+  --face-round: var(--font-fredoka);
+  --face-heading: var(--font-fredoka), var(--font-nunito), sans-serif;
+  --face-sans: var(--font-nunito);
+  --face-body: var(--font-nunito), ui-rounded, system-ui, sans-serif;
+
+  /* faint paper grain: two very low-opacity radial washes, no image request */
+  --page-wash:
+    radial-gradient(
+      circle at 12% 8%,
+      color-mix(in srgb, var(--highlight) 12%, transparent),
+      transparent 45%
+    ),
+    radial-gradient(
+      circle at 88% 4%,
+      color-mix(in srgb, var(--secondary) 10%, transparent),
+      transparent 40%
+    );
+}
+
+/* Minimal: white cards on a quiet grey, one deep slate accent, Inter. */
+[data-theme="minimal"] {
+  --cream: #f3f4f2;
+  --cream-soft: #f8f9f7;
+  --tan: #e6e8e5;
+  --tan-deep: #d5d8d4;
+  --paper: #ffffff;
+  --primary: #1f3b4d;
+  --primary-soft: #2e5268;
+  --primary-dark: #132733;
+  --secondary: #7a6b5d;
+  --secondary-deep: #66584b;
+  --highlight: #f2c14e;
+  --highlight-soft: #fbefcc;
+  --sage: #3e8a62;
+  --sage-deep: #256243;
+  --sage-soft: #e1f0e7;
+  --berry: #c2383a;
+  --berry-deep: #9c2629;
+  --ink: #15191c;
+  --body: #2f3539;
+  --muted: #5b6368;
+  --on-dark: #ffffff;
+  --line: #d6d9d5;
+  --line-soft: #e4e6e3;
+  --ring: #3a6ea0;
+
+  --shadow-soft: 0 1px 3px rgb(21 25 28 / 0.06);
+  --shadow-card: 0 1px 4px rgb(21 25 28 / 0.08);
+  --shadow-lift: 0 8px 24px rgb(21 25 28 / 0.12);
+  --shadow-sheet: 0 -6px 24px rgb(21 25 28 / 0.14);
+  --scrim: rgb(21 25 28 / 0.4);
+
+  --r-sm: 0.375rem;
+  --r-md: 0.625rem;
+  --r-lg: 0.875rem;
+  --r-xl: 1.125rem;
+
+  --face-display: var(--font-inter);
+  --face-hand: var(--font-inter), system-ui, sans-serif;
+  --face-round: var(--font-inter);
+  --face-heading: var(--font-inter), system-ui, sans-serif;
+  --face-sans: var(--font-inter);
+  --face-body: var(--font-inter), system-ui, sans-serif;
+  --page-wash: none;
+}
+
+/* Dark: a late espresso bar. Light text on dark roast, a caramel accent.
+   The "-deep" twins are the stronger ones here too, so they are lighter. */
+[data-theme="dark"] {
+  color-scheme: dark;
+  --cream: #16110e;
+  --cream-soft: #1c1612;
+  --tan: #2b231d;
+  --tan-deep: #3a3027;
+  --paper: #221b16;
+  --primary: #e8b872;
+  --primary-soft: #f0ca93;
+  --primary-dark: #f6ddb6;
+  --secondary: #cc8d5c;
+  --secondary-deep: #e0aa7f;
+  --highlight: #6d4a1b;
+  --highlight-soft: #3a2b17;
+  --sage: #7fae73;
+  --sage-deep: #a8d19b;
+  --sage-soft: #1f2b1d;
+  --berry: #ee7f7f;
+  --berry-deep: #f6a9a9;
+  --ink: #f5ecdf;
+  --body: #e3d7c8;
+  --muted: #b3a595;
+  --on-dark: #1a120d;
+  --line: #40352c;
+  --line-soft: #30271f;
+  --ring: #e8b872;
+
+  --shadow-soft: 0 2px 8px rgb(0 0 0 / 0.3);
+  --shadow-card: 0 3px 12px rgb(0 0 0 / 0.35);
+  --shadow-lift: 0 10px 28px rgb(0 0 0 / 0.5);
+  --shadow-sheet: 0 -8px 32px rgb(0 0 0 / 0.55);
+  --scrim: rgb(0 0 0 / 0.6);
+
+  --face-display: var(--font-outfit);
+  --face-hand: var(--font-outfit), system-ui, sans-serif;
+  --face-round: var(--font-outfit);
+  --face-heading: var(--font-outfit), var(--font-inter), sans-serif;
+  --face-sans: var(--font-inter);
+  --face-body: var(--font-inter), system-ui, sans-serif;
+  --page-wash: none;
+}
+
+/* Bistro: ivory paper, oxblood and brass, serif headings like a printed menu. */
+[data-theme="bistro"] {
+  --cream: #f5f0e8;
+  --cream-soft: #faf6f0;
+  --tan: #ebe2d4;
+  --tan-deep: #dccfbb;
+  --paper: #fffdf9;
+  --primary: #6b1f2a;
+  --primary-soft: #883343;
+  --primary-dark: #4d131c;
+  --secondary: #726d3a;
+  --secondary-deep: #615d2c;
+  --highlight: #d8b25a;
+  --highlight-soft: #f2e5c2;
+  --sage: #5f805a;
+  --sage-deep: #3d5a39;
+  --sage-soft: #e3ebde;
+  --berry: #b23838;
+  --berry-deep: #8c2424;
+  --ink: #2b1b17;
+  --body: #40332d;
+  --muted: #6d6057;
+  --on-dark: #fbf6ee;
+  --line: #dcd1c1;
+  --line-soft: #e8dfd2;
+  --ring: #883343;
+
+  --shadow-soft: 0 1px 4px rgb(43 27 23 / 0.07);
+  --shadow-card: 0 2px 8px rgb(43 27 23 / 0.08);
+  --shadow-lift: 0 8px 24px rgb(43 27 23 / 0.14);
+  --shadow-sheet: 0 -6px 26px rgb(43 27 23 / 0.18);
+  --scrim: rgb(43 27 23 / 0.44);
+
+  --r-sm: 0.375rem;
+  --r-md: 0.5rem;
+  --r-lg: 0.75rem;
+  --r-xl: 1rem;
+
+  --face-display: var(--font-dm-serif);
+  --face-hand: var(--font-dm-serif), Georgia, serif;
+  --face-round: var(--font-dm-sans);
+  --face-heading: var(--font-dm-serif), Georgia, serif;
+  --face-sans: var(--font-dm-sans);
+  --face-body: var(--font-dm-sans), system-ui, sans-serif;
+  --page-wash: none;
 }
 
 @theme inline {
@@ -92,9 +259,9 @@
   --color-line-soft: var(--line-soft);
   --color-ring: var(--ring);
 
-  --font-display: var(--font-caveat);
-  --font-round: var(--font-fredoka);
-  --font-sans: var(--font-nunito);
+  --font-display: var(--face-display);
+  --font-round: var(--face-round);
+  --font-sans: var(--face-sans);
 
   --radius-sm: var(--r-sm);
   --radius-md: var(--r-md);
@@ -239,22 +406,11 @@
   body {
     background-color: var(--cream);
     color: var(--body);
-    font-family: var(--font-nunito), ui-rounded, system-ui, sans-serif;
+    font-family: var(--face-body);
     font-size: 1rem;
     line-height: 1.55;
     overscroll-behavior-y: none;
-    /* faint paper grain: two very low-opacity radial washes, no image request */
-    background-image:
-      radial-gradient(
-        circle at 12% 8%,
-        color-mix(in srgb, var(--highlight) 12%, transparent),
-        transparent 45%
-      ),
-      radial-gradient(
-        circle at 88% 4%,
-        color-mix(in srgb, var(--secondary) 10%, transparent),
-        transparent 40%
-      );
+    background-image: var(--page-wash);
     background-attachment: fixed;
   }
 
@@ -263,7 +419,7 @@
   h3,
   h4 {
     color: var(--ink);
-    font-family: var(--font-fredoka), var(--font-nunito), sans-serif;
+    font-family: var(--face-heading);
     font-weight: 600;
     line-height: 1.15;
     text-wrap: balance;
@@ -316,7 +472,15 @@
 
   /* theme doc §3: handwritten fonts stay decorative only */
   .font-hand {
-    font-family: var(--font-caveat), cursive;
+    font-family: var(--face-hand);
+  }
+  /* Caveat is a light script; the faces standing in for it need the weight */
+  [data-theme="minimal"] .font-hand,
+  [data-theme="dark"] .font-hand {
+    font-weight: 600;
+  }
+  [data-theme="bistro"] .font-hand {
+    font-style: italic;
   }
 }
 

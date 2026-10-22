@@ -56,8 +56,9 @@
     break-inside: avoid;
   }
 
-  /* QR must stay crisp: never let the printer resample it */
-  svg {
+  /* QR must stay crisp: never let the printer resample it (the cafe's
+     monogram above it keeps its own size) */
+  svg:not(.cafe-mark) {
     width: 42mm !important;
     height: 42mm !important;
     shape-rendering: crispEdges;
@@ -65,5 +66,27 @@
 
   a[href]::after {
     content: "";
+  }
+
+  /* The Dark theme prints as ink on paper, accent included: light text with
+     its dark backgrounds left off (as browsers do) would not show. */
+  [data-theme="dark"] {
+    color-scheme: light;
+    --cream: #fff !important;
+    --cream-soft: #fff !important;
+    --paper: #fff !important;
+    --tan: #eee !important;
+    --highlight-soft: #fff !important;
+    --ink: #111 !important;
+    --body: #222 !important;
+    --muted: #555 !important;
+    --primary: #111 !important;
+    --primary-soft: #333 !important;
+    --primary-dark: #111 !important;
+    --secondary-deep: #444 !important;
+    --berry-deep: #900 !important;
+    --on-dark: #fff !important;
+    --line: #999 !important;
+    --line-soft: #ccc !important;
   }
 }
