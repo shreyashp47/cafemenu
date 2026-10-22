@@ -31,6 +31,7 @@ import {
 } from "@cafemenu/shared";
 
 import { boot, peekBoot } from "./boot";
+import { setLocale } from "./i18n";
 
 export const SETTINGS_KEY = "cafemenu.settings.v1";
 
@@ -166,6 +167,7 @@ export function getSettingsSnapshot(): SettingsSnapshot {
   if (key !== snapshotKey) {
     snapshot = next;
     snapshotKey = key;
+    setLocale(next.settings.locale);
     if (fresh) keep(next.settings);
   }
   return snapshot;
@@ -200,5 +202,6 @@ export function resetSettings(): void {
   kept = undefined;
   snapshot = UNKNOWN_SETTINGS;
   snapshotKey = "";
+  setLocale(UNKNOWN_SETTINGS.settings.locale);
   emit();
 }

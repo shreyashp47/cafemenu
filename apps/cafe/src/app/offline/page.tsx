@@ -1,9 +1,10 @@
 import { CafeName } from "@/components/CafeIdentity";
 import { Mascot } from "@/components/Mascot";
 import Link from "next/link";
+import { t } from "@/lib/i18n";
 
 export const metadata = {
-  title: "No connection",
+  title: t("offline.metaTitle"),
   robots: { index: false, follow: false },
 };
 
@@ -16,23 +17,22 @@ export default function OfflinePage() {
   return (
     <main className="relative flex min-h-svh flex-col items-center justify-center gap-4 px-6 py-12 text-center">
       <Mascot mood="sleepy" size={136} />
-      <h1 className="font-hand text-primary text-4xl">Signal lost</h1>
-      <p className="text-muted max-w-sm">
-        This page needs the cafe&apos;s wifi. Reconnect and it will load by
-        itself — your basket and your order are safe on this phone.
-      </p>
+      <h1 className="font-hand text-primary text-4xl">
+        {t("offline.signalLost")}
+      </h1>
+      <p className="text-muted max-w-sm">{t("offline.pageNeedsCafes")}</p>
       <div className="flex flex-col gap-2 sm:flex-row">
         <Link
           href="/order"
           className="rounded-pill bg-primary font-round text-on-dark inline-flex min-h-11 items-center justify-center px-5 font-semibold"
         >
-          Try again
+          {t("offline.tryAgain")}
         </Link>
         <Link
           href="/staff"
           className="rounded-pill border-line bg-paper font-round text-ink inline-flex min-h-11 items-center justify-center border-2 px-5 font-semibold"
         >
-          Order board
+          {t("offline.orderBoard")}
         </Link>
       </div>
       <p className="text-2xs text-muted">

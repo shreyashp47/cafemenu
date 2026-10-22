@@ -5,6 +5,7 @@ import { useCafeSettings } from "@/hooks/useCafeSettings";
 import { formatMoney, lineSubtotal } from "@/lib/money";
 import { padDayNumber } from "@/lib/order-number";
 import type { Order } from "@/lib/types";
+import { t } from "@/lib/i18n";
 
 /**
  * The customer's screen while their order is `pending`: the first order from
@@ -23,13 +24,15 @@ export function WaitingForCounter({ order }: { order: Order }) {
       <header className="safe-t border-line-soft bg-cream/85 relative z-10 border-b-2 px-4 py-3 backdrop-blur-sm">
         <div className="shell text-muted flex items-center gap-2 text-sm font-semibold">
           <Icon name="pin" size={16} />
-          Table {order.tableNumber}
+          {t("waiting.table", { table: order.tableNumber })}
           {/* No number yet: the board numbers an order once staff accept it,
               and a stand-in here would only change under the customer. */}
           <span className="tnum rounded-pill bg-paper text-primary ml-auto px-2.5 py-0.5">
             {order.dayNumber !== undefined
-              ? `Order #${padDayNumber(order.dayNumber)}`
-              : "Order received"}
+              ? t("waiting.orderNumber", {
+                  number: padDayNumber(order.dayNumber),
+                })
+              : t("waiting.orderReceived")}
           </span>
         </div>
       </header>
@@ -38,12 +41,10 @@ export function WaitingForCounter({ order }: { order: Order }) {
         <Mascot mood="happy" size={132} />
         <div role="status" aria-live="polite">
           <h1 className="font-hand text-primary text-4xl leading-tight">
-            Waiting for the counter to confirm your table
+            {t("waiting.waitingCounterConfirm")}
           </h1>
           <p className="text-body mt-2">
-            Someone at the counter will glance over at table {order.tableNumber}{" "}
-            — it usually takes a moment. Your order goes to the kitchen as soon
-            as they confirm.
+            {t("waiting.glanceOver", { table: order.tableNumber })}
           </p>
         </div>
 
@@ -53,13 +54,12 @@ export function WaitingForCounter({ order }: { order: Order }) {
             size={16}
             className="mr-1 inline-block align-[-2px]"
           />
-          Nothing to do here. This page updates by itself. Only the first order
-          from your table waits like this.
+          {t("waiting.nothingDoHere")}
         </p>
 
         <Card className="w-full overflow-hidden text-left">
           <h2 className="border-line-soft border-b-2 px-4 py-2.5 text-lg">
-            What you ordered
+            {t("waiting.whatOrdered")}
           </h2>
           <ul className="divide-line-soft divide-y-2">
             {order.items.map((line) => (
@@ -79,7 +79,9 @@ export function WaitingForCounter({ order }: { order: Order }) {
               </li>
             ))}
             <li className="bg-highlight-soft/40 flex items-center justify-between gap-3 px-4 py-3">
-              <span className="font-round text-ink text-lg">Total</span>
+              <span className="font-round text-ink text-lg">
+                {t("waiting.total")}
+              </span>
               <span className="tnum font-round text-primary text-xl">
                 {formatMoney(order.total, settings)}
               </span>

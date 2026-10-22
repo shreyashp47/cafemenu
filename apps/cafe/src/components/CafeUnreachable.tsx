@@ -12,6 +12,7 @@
 import { Mascot } from "@/components/Mascot";
 import { Button } from "@/components/ui/Button";
 import { useCafeSettings } from "@/hooks/useCafeSettings";
+import { t } from "@/lib/i18n";
 
 export function CafeUnreachable({
   reason,
@@ -25,15 +26,17 @@ export function CafeUnreachable({
     <main className="relative flex min-h-svh flex-col items-center justify-center gap-4 px-6 py-12 text-center">
       <Mascot mood="sleepy" size={136} />
       <h1 className="font-hand text-primary text-4xl">
-        {reason === "offline" ? "Can't reach the cafe" : "Not open yet"}
+        {reason === "offline"
+          ? t("unreachable.cantReach")
+          : t("unreachable.notOpen")}
       </h1>
       <p className="text-muted max-w-sm">
         {reason === "offline"
-          ? "This page needs a connection to load the menu and orders. Check the wifi or mobile data and try again."
-          : "This cafe's site is still being set up. Try again in a minute, or order at the counter."}
+          ? t("unreachable.offlineBody")
+          : t("unreachable.setupBody")}
       </p>
       <Button size="lg" onClick={onRetry}>
-        Try again
+        {t("unreachable.tryAgain")}
       </Button>
       {settings.name ? (
         <p className="text-2xs text-muted">{settings.name}</p>
