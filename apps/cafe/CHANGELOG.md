@@ -46,6 +46,18 @@ Work that is built but not yet merged is tracked in
   order); without one, TOE's 10,000. The demo's saved state moves to a new key
   (`cafe-qr-order.demo.v2`), since it is now in paise.
 
+- **Every word on screen comes from `messages/en.json`** (#14), through a
+  small typed `t()` with `{name}` placeholders and plural forms
+  (`Intl.PluralRules`); no i18n library. English is the only language, output
+  unchanged, and a new one is a pair of files and a line. The words the staff
+  board, owner dashboard and join page show are in `messages/en.staff.json`,
+  so a customer's phone does not download them. The history, reports and
+  import dates and numbers format in the cafe's locale instead of `en-IN`
+  (and the time of day follows the locale's own 12- or 24-hour habit, which
+  for `en-IN` is what it was). Tests fail on words typed into JSX and on
+  messages that are missing, unused or filled in wrongly. See
+  docs/decisions.md, "Words in a catalogue".
+
 ### Added
 
 - **Theme presets** (#10): Cozy (TOE's look, unchanged), Minimal, Dark and

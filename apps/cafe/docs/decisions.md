@@ -914,3 +914,52 @@ than an exchange-rate guess that is off by a factor of two.
 the import writes the same documents the add form does. Firestore takes 500
 writes a batch: an import is at most 200 items, so only replacing a menu of
 over 300 takes a second batch, and the new items go first.
+
+### Words in a catalogue: one `t()`, two files, no library
+
+Every word the app shows moved out of the components into
+`messages/en.json` (#14), so another language is files, not a rewrite.
+English stays byte for byte what it was; the existing component tests, which
+find buttons and headings by their English, are what held it.
+
+**Decision: a 100-line `t()`, not an i18n library.** [`src/lib/i18n.ts`](../src/lib/i18n.ts)
+looks a dotted key up in the catalogue and fills `{name}` placeholders. Keys
+are checked by the compiler against the JSON (`MessageKey`), and by a test
+that reads the source for the ones the compiler cannot see (a key in a table,
+picked by a ternary). A message that varies with a count is an object keyed by
+plural category (`one`, `other`, and `zero`, `two`, `few`, `many` for the
+languages that have them), picked with `Intl.PluralRules`; `rich()` handles
+the few sentences with a bold lead or a code snippet in them, as
+`<b>…</b>` in the message, so a translator can reorder them. A library would
+have cost 10 to 30 kB of the ~103 kB first load for a feature this size.
+
+**The language is the catalogue's, the formats are the cafe's.** The words
+come from `settings.locale`'s language, English until another exists, and
+plural rules follow the catalogue (a Japanese cafe reading English still
+gets "1 item"). Dates and numbers format with the whole tag, `ja-JP`,
+`en-IN`, through `getLocale()`; the `en-IN` formatters in the reports, the
+history and `formatTime` are gone. The one behaviour change: the time of day
+is no longer forced to 12 hours, so a 24-hour locale shows 24 hours. For
+`en-IN`, the default, it is unchanged.
+
+**Two files, because one cost every customer 11 kB.** All the words in one
+JSON is ~10 kB gzipped, and webpack puts one module in one chunk, so every
+route downloaded the staff board's and the dashboard's words. Customers' phones
+are the ones on mobile data. `messages/en.json` is what the customer's routes
+can reach (their screens, and the shared code under them: errors, prices,
+statuses); `messages/en.staff.json` is the rest, added to the language by
+`src/lib/staff-messages.ts`, which only the staff board, the owner dashboard
+and the join page import. A test walks the imports from the customer's routes
+and fails if they reach a staff message, or if `en.json` holds a group they
+cannot reach. First load, before and after: shared by all unchanged at
+103 kB; `/order` 133 to 137 kB, `/order/confirmation` 135 to 138 kB,
+`/offline` 114 to 118 kB; `/staff` 139 to 150 kB (the staff board carries
+both files, once, and is an installed app on a counter tablet).
+
+**What is not moved.** Words that are data, not interface: the demo menu and
+its sample orders (`src/lib/data/seed.ts`), the default category "Drinks" an
+item gets when none is typed (that one is a message). Developer text: console
+output, the demo store's rule-refusal reasons, thrown errors nobody sees.
+`packages/shared` keeps its own English for now: the menu import's per-row
+problems ("Name is missing") and the starter menus' names and blurbs reach the
+screen through the cafe app, and need the same treatment in that package.
