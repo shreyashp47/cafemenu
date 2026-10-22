@@ -17,18 +17,26 @@ this package does the rest.
 > [list is below](#what-the-spikes-need-to-check). Don't point it at a real
 > cafe until the spikes are done.
 
-Node 20.9 or later. No dependencies: built-in `fetch`, `node:crypto` to sign
-the service-account JWT, `node:zlib` to gzip Hosting files, `node:util`
-`parseArgs`.
+Node 20.9 or later. No third-party dependencies: built-in `fetch`,
+`node:crypto` to sign the service-account JWT, `node:zlib` to gzip Hosting
+files, `node:util` `parseArgs`. From the repository it uses
+[`@cafemenu/shared`](../shared/README.md) for a cafe's own files and
+`scripts/release/verify.mjs` to check release packages, so it runs from a
+checkout of the repository. `@cafemenu/shared` is TypeScript, which only a
+Node that strips types can import, so **`deploy --version` and
+`sync-branding` need Node 22.18 or later**; on Node 20 they stop with a
+message saying so. The other commands, and every test, run on Node 20.
 
 ## Commands
 
 ```bash
 deployer check     --project <id>
 deployer provision --project <id> --region <location> --site <name>
+deployer deploy    --project <id> --site <name> --version <x.y.z> --settings <cafe-settings.json> [--logo <png>]
 deployer deploy    --project <id> --rules firestore.rules --indexes firestore.indexes.json \
                    --site <name> --dir out --config firebase.json --target app
 deployer rollback  --project <id> --site <name>
+deployer sync-branding --project <id> --site <name> --settings <cafe-settings.json> [--logo <png>]
 deployer owner     --project <id> --email <email> --name <name>
 ```
 
@@ -103,10 +111,58 @@ deployer provision --project lantern-cafe-1a2b --region eur3 --site lantern-cafe
 deployer provision --project lantern-cafe-1a2b --region eur3 --site lantern-cafe
 ```
 
-### `deploy`
+### `deploy --version`: a release
+
+Deploys one CafeMenu release to one cafe, in the order PLAN.md gives. Each
+step compares with what is live and skips itself when nothing would change, so
+a run that failed part way is finished by running it again.
+
+1. **Package.** Downloads `cafemenu-cafe-<version>.tar.gz` and `SHA256SUMS`
+   from the GitHub Release (public, no token), or takes `--package <archive>`
+   with `SHA256SUMS` next to it, and runs every check of
+   `scripts/release/verify.mjs` ([docs/releases.md](../../docs/releases.md#checking-a-package)).
+   `--sha256 <hex>` adds a hash from somewhere trusted more than the release.
+   A package that fails is refused before anything in the project is touched
+   (exit 3).
+2. **Schema.** Reads the data's schema version from `config/meta` (1 without
+   it: TOE's data as it is). Refuses a package whose `minSchemaVersion` is
+   above it (the release live during the upgrade couldn't run on the migrated
+   data: deploy one in between first), or whose `schemaVersion` is below the
+   cafe's schema floor (see [the deploy log](#the-deploy-log)).
+3. **Migrations.** `runMigrations` in `src/migrations.mjs`, the hook
+   [#21](https://github.com/shreyashp47/cafemenu/issues/21) fills in. It runs
+   nothing yet: a package whose schema is above the data's is refused.
+4. **Rules and indexes** from the package, as below.
+5. **Settings.** Writes the cafe's settings to `config/site`, which the rules
+   read (the order cap, the time zone) and which the app lets win over
+   `site.json` field by field, so the two must agree.
+6. **Hosting.** The package's `site/` with its `firebase.json` headers, the
+   build's demo files replaced by the cafe's own, made by `@cafemenu/shared`
+   from `--settings` and `--logo`: `site.json`, `manifest.webmanifest`,
+   `logo.png` (only with a logo) and every app icon. Only files Hosting
+   doesn't have are uploaded.
+7. **Smoke test.** `smokeTest` in `src/smoke-test.mjs`, the hook
+   [#22](https://github.com/shreyashp47/cafemenu/issues/22) fills in; skipped
+   for now.
+8. **Record.** The release becomes current in the deploy log and the one it
+   replaced becomes previous. A failed run is recorded as failed, with the
+   step it stopped at. Once Hosting is live, the release counts as current even if
+   a later step fails, so `rollback` goes back to the one before it.
+
+```bash
+deployer deploy --project lantern-cafe-1a2b --site lantern-cafe \
+  --version 1.4.2 --settings lantern.json --logo lantern.png
+```
+
+`--settings` is the cafe's `CafeSettings` as JSON (what the console keeps in
+`cafes/{id}.settings`), checked with `validateCafeSettings`: every field, the
+current schema. A logo must be a PNG; if the settings' `logo` is `/logo.png`,
+`--logo` is required.
+
+### `deploy`: rules, indexes and a folder
 
 Deploys any of three parts, in this order (rules and indexes before the
-bundle that needs them):
+bundle that needs them). Nothing is recorded in the deploy log.
 
 - **Rules** (`--rules firestore.rules`): uploads the file as a new ruleset
   and points the `cloud.firestore` release at it. Skipped when the live rules
@@ -141,8 +197,36 @@ files already uploaded aren't uploaded again.
 
 ### `rollback`
 
-Makes the site serve the version it served before the current one, by
-releasing that version again. Hosting keeps old versions, so this takes effect
+With a release recorded in the deploy log, goes back to the previous
+release:
+
+1. **Schema.** Refuses if the cafe's data has been migrated past what the
+   previous release can read: its `schemaVersion` is below the cafe's schema
+   floor (the `minSchemaVersion` of the releases deployed so far). Going back
+   over an "expand" migration is fine; over a "contract" one it isn't
+   ([migrations/README.md](../../migrations/README.md)).
+2. **Rules.** Points `cloud.firestore` at the previous release's ruleset
+   again. If that ruleset has been deleted, it says to deploy that version
+   instead.
+3. **Hosting.** Releases the previous release's version again. If the cafe's
+   own files (`site.json`, manifest, logo, icons) have changed since then, it
+   makes a version of the previous release's files with today's instead, so a
+   rollback never brings back old branding. Hosting already has every one of
+   those files, so nothing is uploaded.
+4. **Record.** The previous release becomes current, with no previous: a
+   second rollback refuses rather than going forward again. Deploy a version
+   to move on.
+
+```bash
+deployer rollback --project lantern-cafe-1a2b --site lantern-cafe
+```
+
+Re-running a rollback that stopped part way is safe: the steps already done
+are skipped.
+
+With no release recorded for the project, or with `--to`, only Hosting rolls
+back, and the deploy log is left as it is. Hosting-only rollback makes the site serve the
+version it served before the current one, by releasing that version again. Hosting keeps old versions, so this takes effect
 at once. "Before the current one" means before the live version _first_ went
 live, so a second rollback steps back again instead of flipping between two
 versions. Only the releases Hosting still keeps for the live channel
@@ -155,8 +239,71 @@ deployer rollback --project lantern-cafe-1a2b --site lantern-cafe --to 3f9a2c1d
 
 `--to <version>` releases that version instead and does nothing if it's
 already live, so retrying it is safe. The command prints the `--to` for the
-rollback it just did. Rules are not rolled back: in Phase 2 that comes from
-the previous release package.
+rollback it just did.
+
+### `sync-branding`
+
+What the console runs when an owner edits their branding: writes the settings
+to `config/site`, then serves the live Hosting version's files with the cafe's
+own (`site.json`, manifest, `logo.png`, icons) made again from `--settings`
+and `--logo`. Every other file keeps its hash, so only the cafe's files are
+uploaded, and the release doesn't change. Without a logo, `/logo.png` is
+dropped. Running it again with the same settings changes nothing.
+
+```bash
+deployer sync-branding --project lantern-cafe-1a2b --site lantern-cafe \
+  --settings lantern.json --logo lantern.png
+```
+
+### The deploy log
+
+`deploy --version`, `rollback` and `sync-branding` remember what each cafe
+runs in a deploy log, `--log <file>` (default `cafemenu-deploys.json` in the
+current folder). It is the record `rollback` relies on, so keep it.
+`src/deploy-log.mjs` defines the `DeployLog` interface (`get(project)`,
+`record({deployment, cafe})`). The CLI's implementation is that JSON file:
+
+```jsonc
+{
+  "format": 1,
+  "cafes": {
+    "lantern-cafe-1a2b": {
+      "site": "lantern-cafe",
+      "current": {
+        "version": "1.4.2",
+        "schemaVersion": 1,
+        "minSchemaVersion": 1,
+        "sha256": "…", // the package's
+        "hostingVersion": "sites/lantern-cafe/versions/…",
+        "rulesetName": "projects/lantern-cafe-1a2b/rulesets/…",
+        "cafePaths": ["/apple-touch-icon.png", "…"], // the cafe's own files
+        "deployedAt": "…",
+      },
+      "previous": { "version": "1.4.1", "…": "…" },
+      "schemaFloor": 1,
+    },
+  },
+  "deployments": [
+    {
+      "id": "…",
+      "project": "…",
+      "site": "…",
+      "kind": "deploy",
+      "version": "1.4.2",
+      "fromVersion": "1.4.1",
+      "status": "succeeded",
+      "steps": [{ "id": "package", "label": "…", "status": "done" }],
+      "error": null,
+      "createdAt": "…",
+      "finishedAt": "…",
+    },
+  ],
+}
+```
+
+A platform-Firestore implementation for the console comes later (TODO in
+`src/deploy-log.mjs`): it writes `cafes/{id}.release.{current,previous}` and
+`deployments/{id}`, the shapes in `apps/console/src/lib/platform/model.ts`.
 
 ### `owner`
 
@@ -226,40 +373,52 @@ What `deployer check` tests, from Google's IAM reference for each API
 [Service Usage](https://docs.cloud.google.com/iam/docs/roles-permissions/serviceusage)).
 The source of truth is [`src/permissions.mjs`](src/permissions.mjs).
 
-| Command     | Permission                        | For                                            |
-| ----------- | --------------------------------- | ---------------------------------------------- |
-| `provision` | `firebase.projects.get`           | look up the project and its number             |
-|             | `serviceusage.services.get`       | see which APIs are on                          |
-|             | `serviceusage.services.enable`    | turn on the missing APIs                       |
-|             | `serviceusage.operations.get`     | wait for that to finish                        |
-|             | `datastore.databases.getMetadata` | see whether the database exists                |
-|             | `datastore.databases.create`      | create it                                      |
-|             | `datastore.operations.get`        | wait for that to finish                        |
-|             | `firebaseauth.configs.get`        | read the sign-in settings                      |
-|             | `firebaseauth.configs.update`     | turn on Email/Password and Anonymous           |
-|             | `firebase.clients.list`           | find the web app                               |
-|             | `firebase.clients.create`         | register it                                    |
-|             | `firebase.clients.get`            | read its config                                |
-|             | `firebasehosting.sites.get`       | see whether the site exists                    |
-|             | `firebasehosting.sites.create`    | create it                                      |
-|             | `firebasehosting.sites.update`    | link it to the web app                         |
-| `deploy`    | `firebaserules.releases.get`      | read which rules are live                      |
-|             | `firebaserules.rulesets.get`      | compare them with the release's                |
-|             | `firebaserules.rulesets.create`   | upload new rules                               |
-|             | `firebaserules.releases.create`   | make rules live the first time                 |
-|             | `firebaserules.releases.update`   | make new rules live                            |
-|             | `datastore.indexes.list`          | see which indexes exist                        |
-|             | `datastore.indexes.create`        | create the missing ones                        |
-|             | `firebasehosting.sites.get`       | read the live version                          |
-|             | `firebasehosting.sites.update`    | create, upload, finalize and release a version |
-| `rollback`  | `firebasehosting.sites.get`       | list past releases                             |
-|             | `firebasehosting.sites.update`    | release an earlier version again               |
-| `owner`     | `firebaseauth.users.get`          | find the owner's account                       |
-|             | `firebaseauth.users.create`       | create it                                      |
-|             | `firebaseauth.users.sendEmail`    | send the set-password email                    |
-|             | `datastore.entities.get`          | read `/staff/{uid}`                            |
-|             | `datastore.entities.create`       | create it                                      |
-|             | `datastore.entities.update`       | update it                                      |
+| Command         | Permission                        | For                                            |
+| --------------- | --------------------------------- | ---------------------------------------------- |
+| `provision`     | `firebase.projects.get`           | look up the project and its number             |
+|                 | `serviceusage.services.get`       | see which APIs are on                          |
+|                 | `serviceusage.services.enable`    | turn on the missing APIs                       |
+|                 | `serviceusage.operations.get`     | wait for that to finish                        |
+|                 | `datastore.databases.getMetadata` | see whether the database exists                |
+|                 | `datastore.databases.create`      | create it                                      |
+|                 | `datastore.operations.get`        | wait for that to finish                        |
+|                 | `firebaseauth.configs.get`        | read the sign-in settings                      |
+|                 | `firebaseauth.configs.update`     | turn on Email/Password and Anonymous           |
+|                 | `firebase.clients.list`           | find the web app                               |
+|                 | `firebase.clients.create`         | register it                                    |
+|                 | `firebase.clients.get`            | read its config                                |
+|                 | `firebasehosting.sites.get`       | see whether the site exists                    |
+|                 | `firebasehosting.sites.create`    | create it                                      |
+|                 | `firebasehosting.sites.update`    | link it to the web app                         |
+| `deploy`        | `firebaserules.releases.get`      | read which rules are live                      |
+|                 | `firebaserules.rulesets.get`      | compare them with the release's                |
+|                 | `firebaserules.rulesets.create`   | upload new rules                               |
+|                 | `firebaserules.releases.create`   | make rules live the first time                 |
+|                 | `firebaserules.releases.update`   | make new rules live                            |
+|                 | `datastore.indexes.list`          | see which indexes exist                        |
+|                 | `datastore.indexes.create`        | create the missing ones                        |
+|                 | `firebasehosting.sites.get`       | read the live version                          |
+|                 | `firebasehosting.sites.update`    | create, upload, finalize and release a version |
+|                 | `datastore.entities.get`          | read `config/meta` and `config/site`           |
+|                 | `datastore.entities.create`       | write `config/site` the first time             |
+|                 | `datastore.entities.update`       | write `config/site`                            |
+| `rollback`      | `firebasehosting.sites.get`       | list past releases                             |
+|                 | `firebasehosting.sites.update`    | release an earlier version again               |
+|                 | `datastore.entities.get`          | read `config/meta`'s schema version            |
+|                 | `firebaserules.releases.get`      | read which rules are live                      |
+|                 | `firebaserules.rulesets.get`      | check the earlier rules still exist            |
+|                 | `firebaserules.releases.update`   | make them live again                           |
+| `sync-branding` | `datastore.entities.get`          | read `config/site`                             |
+|                 | `datastore.entities.create`       | write it the first time                        |
+|                 | `datastore.entities.update`       | write it                                       |
+|                 | `firebasehosting.sites.get`       | read the live version's files                  |
+|                 | `firebasehosting.sites.update`    | create and release a version                   |
+| `owner`         | `firebaseauth.users.get`          | find the owner's account                       |
+|                 | `firebaseauth.users.create`       | create it                                      |
+|                 | `firebaseauth.users.sendEmail`    | send the set-password email                    |
+|                 | `datastore.entities.get`          | read `/staff/{uid}`                            |
+|                 | `datastore.entities.create`       | create it                                      |
+|                 | `datastore.entities.update`       | update it                                      |
 
 ### Toward the smallest role set (#3)
 
@@ -338,19 +497,33 @@ Each item is a `// UNVERIFIED: run in spike #N` comment above the call in
   come back the way it was sent.
 - Confirm `/__/firebase/init.json` on the new site serves the linked web
   app's config.
+- Hosting `versions.get` (a rollback reads the old version's `config`).
+- `sync-branding` and `rollback` make a version from another version's file
+  list, uploading only the cafe's files or nothing at all: check that
+  `populateFiles` doesn't ask again for content an earlier version uploaded.
+- `rulesets.get` on a deleted ruleset answers 404 (rollback then says to
+  redeploy).
+- Not Google, but still unrun: downloading a real GitHub Release's assets
+  (the URL redirects to GitHub's storage, which `fetch` follows).
 
 **#6 (owner account and email)**
 
 - Identity Toolkit `accounts:lookup`, `accounts` (create **without a
   password**), `accounts:sendOobCode` with `PASSWORD_RESET`.
-- Firestore `documents.get` and `documents.patch` for `/staff/{uid}`.
+- Firestore `documents.get` and `documents.patch` for `/staff/{uid}`, and
+  for `config/meta` and `config/site` (maps, arrays and nulls in the
+  settings).
 - Whether `--continue-url` on the cafe's own site needs that domain added to
   Auth's authorized domains.
 
 ## Not in this draft
 
-- **Rules rollback, migrations, smoke tests, `site.json`:** Phase 2
-  ([#19](https://github.com/shreyashp47/cafemenu/issues/19)–[#22](https://github.com/shreyashp47/cafemenu/issues/22)).
+- **Migrations and the smoke test:** hooks only, filled in by
+  [#21](https://github.com/shreyashp47/cafemenu/issues/21) and
+  [#22](https://github.com/shreyashp47/cafemenu/issues/22).
+- **The platform-Firestore deploy log** for the console (Phase 3).
+- **Choosing a version** by channel and minor line from the releases API:
+  `deploy --version` takes an exact version.
 - **Index `fieldOverrides`:** reported and skipped.
 - **Rewrites to Cloud Functions or Cloud Run:** a cafe site is static, so
   only rewrites to a path are supported.
@@ -373,7 +546,13 @@ a stateful model of the documented API behaviour: a second run sees what the
 first one did, and every request is recorded. They cover the token exchange,
 idempotent re-runs, a taken site name, Hosting uploading only the hashes it
 asks for, dry runs making no write calls, and `check` reporting a missing
-permission.
+permission. `tests/release.test.mjs` covers the release commands with packages
+built by `scripts/release/package.mjs`: a deploy end to end, a tampered
+package, the schema guards, rollback, `sync-branding` touching only the
+cafe's files, and dry runs writing neither Google nor the deploy log. Under
+Node 20 they use a stand-in for `@cafemenu/shared`
+(`tests/helpers/release.mjs`); on a Node that strips types, one more test
+runs the real one.
 
 ```
 bin/deployer.mjs        the CLI entry point
@@ -381,7 +560,13 @@ src/cli.mjs             argument parsing, exit codes
 src/auth.mjs            service-account key → JWT → access token
 src/http.mjs            the one place requests are made (token, dry run, errors, retries, operations)
 src/apis/*.mjs          one file per Google API, one function per call, each with its reference URL
-src/commands/*.mjs      check, provision, deploy, rollback, owner
+src/commands/*.mjs      check, provision, deploy, rollback, owner, and release.mjs:
+                        deploy --version and sync-branding
+src/release-package.mjs fetch a release package and verify it (scripts/release/verify.mjs)
+src/cafe-files.mjs      a cafe's site.json, manifest, logo and icons (@cafemenu/shared)
+src/deploy-log.mjs      the DeployLog interface and its JSON-file implementation
+src/migrations.mjs      config/meta's schema version, and the migrations hook (#21)
+src/smoke-test.mjs      the smoke-test hook (#22)
 src/hosting-files.mjs   gzip + SHA-256 of the build, firebase.json → ServingConfig
 src/permissions.mjs     what each command needs, and why
 ```
