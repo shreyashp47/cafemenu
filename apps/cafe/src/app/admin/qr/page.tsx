@@ -29,6 +29,7 @@ import {
   useTableKeys,
   useTables,
 } from "@/components/providers/DataProvider";
+import { CafeMark } from "@/components/CafeMark";
 import { TableCodes } from "@/components/TableCodes";
 import { TableListEditor } from "@/components/TableListEditor";
 import { Button } from "@/components/ui/Button";
@@ -210,6 +211,9 @@ function TableCard({
   return (
     <li className="print:break-inside-avoid">
       <Card className="flex flex-col items-center gap-3 p-5 text-center">
+        {/* The logo sits above the code, never on it: the QR keeps its whole
+            quiet zone and error budget, so the card scans as it always did. */}
+        <CafeMark size={56} mascot={false} />
         <p className="font-hand text-primary text-3xl leading-none">
           {settings.name}
         </p>
