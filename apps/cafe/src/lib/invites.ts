@@ -13,6 +13,7 @@
  */
 
 import { generateTableKey } from "./table-keys";
+import { t } from "./i18n";
 
 export type InviteRole = "staff" | "owner";
 
@@ -122,7 +123,7 @@ export function parseStaffMember(uid: string, data: unknown): StaffMember {
   const name =
     typeof d.name === "string" && d.name.trim()
       ? d.name.trim()
-      : (email?.split("@")[0] ?? "No name");
+      : (email?.split("@")[0] ?? t("invites.noName"));
   return { uid, name, email, role: d.role === "owner" ? "owner" : "staff" };
 }
 

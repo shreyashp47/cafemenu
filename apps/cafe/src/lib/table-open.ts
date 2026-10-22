@@ -32,6 +32,7 @@
  */
 
 import type { NewOrderStatus } from "./order-status";
+import { t } from "./i18n";
 
 /** How long Accept opens a table for. */
 export const TABLE_OPEN_HOURS = 3;
@@ -108,8 +109,8 @@ export function openTables(
   now: number,
 ): Array<{ table: number; openUntil: number; msLeft: number }> {
   return Object.entries(sessions)
-    .map(([t, openUntil]) => ({
-      table: Number(t),
+    .map(([key, openUntil]) => ({
+      table: Number(key),
       openUntil,
       msLeft: openUntil - now,
     }))
@@ -120,11 +121,13 @@ export function openTables(
 /** "2h 41m left", "12m left", "under a minute left". */
 export function formatTimeLeft(ms: number): string {
   const minutes = Math.floor(ms / 60_000);
-  if (minutes < 1) return "under a minute left";
+  if (minutes < 1) return t("time.underMinuteLeft");
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
-  if (h === 0) return `${m}m left`;
-  return m === 0 ? `${h}h left` : `${h}h ${m}m left`;
+  if (h === 0) return t("time.minutesLeft", { minutes: m });
+  return m === 0
+    ? t("time.hoursLeft", { hours: h })
+    : t("time.hoursMinutesLeft", { hours: h, minutes: m });
 }
 
 /**

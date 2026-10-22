@@ -22,6 +22,7 @@ import {
 import { orderTotal } from "./money";
 import { orderLabel } from "./order-number";
 import type { Order } from "./types";
+import { t } from "./i18n";
 
 export interface Range {
   /** inclusive */
@@ -255,22 +256,22 @@ export function ordersToCsv(
 ): string {
   const amount = (n: number) => moneyToDecimal(n, money, { padded: true });
   const header = [
-    "Order #",
-    "Order ID",
-    "Table",
-    "Placed at",
-    `Placed (${csvZoneName(timeZone)})`,
-    "Status",
-    "Completed at",
-    "Item",
-    "Qty",
-    "Unit price",
-    "Line total",
-    "Order total",
-    "Payment",
-    "Notes",
-    "Reject reason",
-    "Currency",
+    t("csv.orderNumber"),
+    t("csv.orderId"),
+    t("csv.table"),
+    t("csv.placedAt"),
+    t("csv.placedZone", { zone: csvZoneName(timeZone) }),
+    t("csv.status"),
+    t("csv.completedAt"),
+    t("csv.item"),
+    t("csv.qty"),
+    t("csv.unitPrice"),
+    t("csv.lineTotal"),
+    t("csv.orderTotal"),
+    t("csv.payment"),
+    t("csv.notes"),
+    t("csv.rejectReason"),
+    t("csv.currency"),
   ];
 
   const rows: string[] = [];

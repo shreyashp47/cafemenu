@@ -21,6 +21,7 @@
 import { dayKeyIn } from "@cafemenu/shared";
 
 import { DAY_NUMBER_MAX, isDayNumber } from "./order-number";
+import { t } from "./i18n";
 
 /** What a numbering transaction needs from the store it runs against. */
 export interface DayNumberTx {
@@ -57,7 +58,7 @@ export interface Assigned {
 /** The day already has 9,999 orders: the four digits have run out. */
 export class DayNumbersExhausted extends Error {
   constructor(dayKey: string) {
-    super(`Every number for ${dayKey} is used up (${DAY_NUMBER_MAX} orders).`);
+    super(t("dayNumber.exhausted", { day: dayKey, max: DAY_NUMBER_MAX }));
     this.name = "DayNumbersExhausted";
   }
 }

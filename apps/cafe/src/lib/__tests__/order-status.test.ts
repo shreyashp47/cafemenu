@@ -7,11 +7,11 @@ import {
   ACTIVE_STATUSES,
   CUSTOMER_STEPS,
   ORDER_STATUSES,
-  REJECT_REASONS,
+  rejectReasons,
   MAX_REJECT_REASON,
   actionsFor,
   canAdvance,
-  PENDING_REJECT_REASON,
+  pendingRejectReason,
   canReject,
   isAwaitingCounter,
   isClosedStatus,
@@ -156,8 +156,8 @@ describe("rejecting an order", () => {
   });
 
   it("offers quick reasons that fit the rules' 80-character limit", () => {
-    expect(REJECT_REASONS.length).toBeGreaterThan(0);
-    for (const r of REJECT_REASONS) {
+    expect(rejectReasons().length).toBeGreaterThan(0);
+    for (const r of rejectReasons()) {
       expect(r.length).toBeLessThanOrEqual(MAX_REJECT_REASON);
     }
   });
@@ -206,8 +206,8 @@ describe("waiting for the counter (pending)", () => {
   });
 
   it("suggests 'No one at this table' first when turning a guest away", () => {
-    expect(PENDING_REJECT_REASON).toBe("No one at this table");
-    expect(REJECT_REASONS).toContain(PENDING_REJECT_REASON);
+    expect(pendingRejectReason()).toBe("No one at this table");
+    expect(rejectReasons()).toContain(pendingRejectReason());
   });
 
   it("matches the transitions firestore.rules spells out", () => {

@@ -19,6 +19,7 @@ import {
 import type { NewOrderStatus } from "./order-status";
 import { chooseOrderStatus } from "./table-open";
 import type { CartLine, MenuItem, Order } from "./types";
+import { t } from "./i18n";
 
 export interface PlaceOrderArgs {
   tableNumber: number;
@@ -39,11 +40,7 @@ export interface PlaceOrderArgs {
 export class TableCodeRefused extends Error {
   readonly hadCode: boolean;
   constructor(hadCode: boolean) {
-    super(
-      hadCode
-        ? "This link has expired — please scan the QR code on your table."
-        : "To order, please scan the QR code on your table.",
-    );
+    super(hadCode ? t("placeOrder.linkExpired") : t("placeOrder.scanToOrder"));
     this.name = "TableCodeRefused";
     this.hadCode = hadCode;
   }
@@ -68,10 +65,10 @@ export async function placeOrder({
   settings,
 }: PlaceOrderArgs): Promise<Order> {
   if (!Number.isInteger(tableNumber) || tableNumber < 1) {
-    throw new Error("We lost track of your table. Please scan again.");
+    throw new Error(t("placeOrder.lostTable"));
   }
   if (cartLines.length === 0) {
-    throw new Error("Your order is empty.");
+    throw new Error(t("placeOrder.emptyOrder"));
   }
 
   // Re-price from the freshest menu we have. In demo mode `menu` is the live
@@ -198,21 +195,16 @@ export function friendlyError(err: unknown): string {
 
   if (code.startsWith("auth/")) {
     if (code.includes("configuration-not-found"))
-      return "Ordering is not switched on yet. Please tell the counter.";
-    if (code.includes("network"))
-      return "No connection right now. Check the wifi and try again.";
-    if (code.includes("blocked"))
-      return "This device is not allowed to order. Please scan the code again.";
+      return t("placeOrder.notSwitchedOn");
+    if (code.includes("network")) return t("placeOrder.noConnection");
+    if (code.includes("blocked")) return t("placeOrder.deviceBlocked");
     if (code.includes("unauthorized-domain"))
-      return "Ordering is not switched on for this address. Please tell the counter.";
-    return "We couldn't confirm who you are. Please tell the counter.";
+      return t("placeOrder.addressNotAllowed");
+    return t("placeOrder.whoAreYou");
   }
-  if (code.startsWith("permission-denied"))
-    return "We couldn't send that order. Please tell the counter.";
-  if (code.startsWith("unavailable"))
-    return "The kitchen system is busy. Please try again in a moment.";
-  if (code.startsWith("deadline-exceeded"))
-    return "That took too long. Please try again.";
+  if (code.startsWith("permission-denied")) return t("placeOrder.orderRefused");
+  if (code.startsWith("unavailable")) return t("placeOrder.kitchenBusy");
+  if (code.startsWith("deadline-exceeded")) return t("placeOrder.tookTooLong");
   if (raw.trim()) return raw;
-  return "We couldn't send that. Please try again.";
+  return t("placeOrder.sendFailed");
 }

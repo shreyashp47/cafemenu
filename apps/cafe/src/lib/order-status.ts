@@ -28,6 +28,8 @@
  * It is not a sale until then, and a rejected one never becomes one.
  */
 
+import { t, type MessageKey } from "./i18n";
+
 export const ORDER_STATUSES = [
   "pending",
   "received",
@@ -82,12 +84,20 @@ export const REJECTABLE_STATUSES = [
 /** Longest reject reason firestore.rules accepts. */
 export const MAX_REJECT_REASON = 80;
 
-/** One-tap reasons on the staff board. Free text is not offered on purpose. */
-export const REJECT_REASONS = [
-  "No one at this table",
-  "Item unavailable",
-  "Duplicate order",
-] as const;
+/**
+ * One-tap reasons on the staff board. Free text is not offered on purpose.
+ * The reason is stored as the words staff tapped, so it reads back to the
+ * customer in the cafe's language; each must fit MAX_REJECT_REASON.
+ */
+export const REJECT_REASON_KEYS = [
+  "orderStatus.rejectNoOne",
+  "orderStatus.rejectUnavailable",
+  "orderStatus.rejectDuplicate",
+] as const satisfies readonly MessageKey[];
+
+export function rejectReasons(): string[] {
+  return REJECT_REASON_KEYS.map((key) => t(key));
+}
 
 export function canReject(from: OrderStatus): boolean {
   return (REJECTABLE_STATUSES as readonly OrderStatus[]).includes(from);
@@ -113,7 +123,9 @@ export function isAwaitingCounter(status: OrderStatus): boolean {
 }
 
 /** The reason the board suggests first when turning a new guest away. */
-export const PENDING_REJECT_REASON = REJECT_REASONS[0];
+export function pendingRejectReason(): string {
+  return t(REJECT_REASON_KEYS[0]);
+}
 
 export function isOrderStatus(value: unknown): value is OrderStatus {
   return (
@@ -164,20 +176,30 @@ export function actionsFor(status: OrderStatus): StatusAction[] {
     case "pending":
       // Accept only. Reject is its own two-step action on the ticket.
       return [
-        { to: "preparing", label: "Accept", variant: "primary", primary: true },
+        {
+          to: "preparing",
+          label: t("orderStatus.accept"),
+          variant: "primary",
+          primary: true,
+        },
       ];
     case "received":
       return [
         {
           to: "preparing",
-          label: "Start preparing",
+          label: t("orderStatus.startPreparing"),
           variant: "primary",
           primary: true,
         },
       ];
     case "preparing":
       return [
-        { to: "ready", label: "Mark ready", variant: "primary", primary: true },
+        {
+          to: "ready",
+          label: t("orderStatus.markReady"),
+          variant: "primary",
+          primary: true,
+        },
       ];
     case "ready":
       // No "Complete" shortcut here. There used to be one, but ready ->
@@ -187,7 +209,7 @@ export function actionsFor(status: OrderStatus): StatusAction[] {
       return [
         {
           to: "served",
-          label: "Mark served",
+          label: t("orderStatus.markServed"),
           variant: "primary",
           primary: true,
         },
@@ -196,7 +218,7 @@ export function actionsFor(status: OrderStatus): StatusAction[] {
       return [
         {
           to: "completed",
-          label: "Complete",
+          label: t("orderStatus.complete"),
           variant: "primary",
           primary: true,
         },

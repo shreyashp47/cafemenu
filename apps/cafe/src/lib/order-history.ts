@@ -9,6 +9,7 @@
 
 import { addDays, addMonths, dayKeyIn, dayStartIn } from "@cafemenu/shared";
 
+import { t, type MessageKey } from "./i18n";
 import { ACTIVE_STATUSES, ORDER_STATUSES } from "./order-status";
 import type { Range } from "./reports";
 import type { Order } from "./types";
@@ -31,11 +32,11 @@ export const HISTORY_LIMIT = 1000;
 
 export type PresetId = "today" | "yesterday" | "last7" | "month";
 
-export const PRESETS: ReadonlyArray<{ id: PresetId; label: string }> = [
-  { id: "today", label: "Today" },
-  { id: "yesterday", label: "Yesterday" },
-  { id: "last7", label: "Last 7 days" },
-  { id: "month", label: "This month" },
+export const PRESETS: ReadonlyArray<{ id: PresetId; label: MessageKey }> = [
+  { id: "today", label: "history.today" },
+  { id: "yesterday", label: "history.yesterday" },
+  { id: "last7", label: "history.last7" },
+  { id: "month", label: "history.month" },
 ];
 
 /*
@@ -94,10 +95,10 @@ export function inputRange(
   const start = fromInputDate(from, timeZone);
   const end = fromInputDate(to, timeZone);
   if (start === null || end === null) {
-    return { ok: false, reason: "Pick both a start and an end date." };
+    return { ok: false, reason: t("history.pickBoth") };
   }
   if (end < start) {
-    return { ok: false, reason: "The end date is before the start date." };
+    return { ok: false, reason: t("history.endBeforeStart") };
   }
   const range = { from: start, to: dayStartIn(timeZone, addDays(to, 1)) };
   // Rounded: a range with a daylight-saving change in it is an hour off.
@@ -105,7 +106,7 @@ export function inputRange(
   if (days > MAX_RANGE_DAYS) {
     return {
       ok: false,
-      reason: `That's ${days} days. History looks back at most ${MAX_RANGE_DAYS} days at a time, so each look stays inside the free database allowance — pick a shorter range, or use Reports for monthly totals.`,
+      reason: t("history.rangeTooLong", { days, max: MAX_RANGE_DAYS }),
     };
   }
   return { ok: true, range, days };

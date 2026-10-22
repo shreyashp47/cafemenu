@@ -34,8 +34,8 @@ import { formatMoney, formatWait, lineSubtotal } from "@/lib/money";
 import { checkOrderIntegrity } from "@/lib/order-integrity";
 import { orderLabel, padDayNumber } from "@/lib/order-number";
 import {
-  PENDING_REJECT_REASON,
-  REJECT_REASONS,
+  pendingRejectReason,
+  rejectReasons,
   actionsFor,
   canReject,
   isAwaitingCounter,
@@ -49,6 +49,7 @@ import {
 } from "@/lib/table-open";
 import type { MenuItem, Order } from "@/lib/types";
 import { DEMO_CREDENTIALS } from "@/lib/data/seed";
+import { t } from "@/lib/i18n";
 
 export default function StaffPage() {
   return (
@@ -184,8 +185,7 @@ function StaffScreen() {
       if (!transition(order.status, to)) {
         setActionError({
           orderId: order.id,
-          message:
-            "That step isn't allowed from here — the order may have already moved on.",
+          message: t("staff.stepNotAllowed"),
         });
         return;
       }
@@ -258,8 +258,7 @@ function StaffScreen() {
       if (!transition(order.status, "rejected")) {
         setActionError({
           orderId: order.id,
-          message:
-            "This order can't be rejected any more — it has already been served.",
+          message: t("staff.cantRejectServed"),
         });
         return;
       }
@@ -288,9 +287,9 @@ function StaffScreen() {
     }
   }, []);
 
-  if (loading) return <Loading label="Checking your badge…" />;
+  if (loading) return <Loading label={t("staff.checkingBadge")} />;
   if (ownerJustSignedIn)
-    return <Loading label="Opening the owner dashboard…" />;
+    return <Loading label={t("staff.openingOwnerDashboard")} />;
 
   if (!user) {
     return (
@@ -313,10 +312,12 @@ function StaffScreen() {
         <div className="shell-wide flex items-center gap-2.5 py-2.5">
           <CafeMark size={40} className="shrink-0" />
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-lg leading-tight">Order board</h1>
+            <h1 className="truncate text-lg leading-tight">
+              {t("staff.orderBoard")}
+            </h1>
             <p className="text-2xs text-muted truncate font-semibold tracking-[0.12em] uppercase">
               {cafeName} · {user.displayName}
-              {user.role === "owner" ? " (owner)" : ""}
+              {user.role === "owner" ? ` ${t("staff.ownerSuffix")}` : ""}
             </p>
           </div>
 
@@ -324,10 +325,8 @@ function StaffScreen() {
             type="button"
             onClick={() => setMuted(!muted)}
             aria-pressed={muted}
-            aria-label={
-              muted ? "Unmute new order sound" : "Mute new order sound"
-            }
-            title={muted ? "Sound off" : "Sound on"}
+            aria-label={muted ? t("staff.unmuteSound") : t("staff.muteSound")}
+            title={muted ? t("staff.soundOff") : t("staff.soundOn")}
             className={[
               "rounded-pill grid size-11 shrink-0 place-items-center border-2 transition-colors",
               muted
@@ -341,7 +340,7 @@ function StaffScreen() {
           <button
             type="button"
             onClick={() => void signOut()}
-            aria-label="Sign out"
+            aria-label={t("staff.signOut")}
             className="rounded-pill border-line bg-paper text-muted grid size-11 shrink-0 place-items-center border-2"
           >
             <Icon name="logout" size={20} />
@@ -370,7 +369,7 @@ function StaffScreen() {
                 armed ? "[grid-area:1/1]" : "invisible [grid-area:1/1]"
               }
             >
-              Order sound on.
+              {t("staff.orderSound")}
             </span>
             <span
               aria-hidden={armed ? true : undefined}
@@ -378,7 +377,7 @@ function StaffScreen() {
                 armed ? "invisible [grid-area:1/1]" : "[grid-area:1/1]"
               }
             >
-              Tap anywhere to switch the order sound on.
+              {t("staff.tapAnywhereSwitch")}
             </span>
           </p>
         ) : null}
@@ -392,7 +391,7 @@ function StaffScreen() {
             role="alert"
             className="border-berry bg-paper text-berry-deep mb-3 rounded-md border-2 px-3 py-2 text-sm"
           >
-            Live updates dropped: {error.message}
+            {t("staff.liveDropped", { message: error.message })}
           </p>
         ) : null}
 
@@ -401,9 +400,7 @@ function StaffScreen() {
             role="status"
             className="border-secondary bg-paper text-body mb-3 rounded-md border-2 px-3 py-2 text-sm"
           >
-            New orders aren&apos;t getting today&apos;s numbers right now, so
-            they show their older short number instead. Orders still come in as
-            normal. ({numbering.message})
+            {t("staff.numberingDown", { message: numbering.message })}
           </p>
         ) : null}
 
@@ -417,7 +414,7 @@ function StaffScreen() {
             role="alert"
             className="border-berry bg-paper text-berry-deep mb-3 rounded-md border-2 px-3 py-2 text-sm"
           >
-            Couldn&apos;t close that table: {tableError}
+            {t("staff.closeTableFailed", { message: tableError })}
           </p>
         ) : null}
 
@@ -426,7 +423,7 @@ function StaffScreen() {
             active={tableFilter === "all"}
             onClick={() => setTableFilter("all")}
           >
-            All ({orders.length})
+            {t("staff.filterAll", { count: orders.length })}
           </FilterChip>
           {tables.map((n) => (
             <FilterChip
@@ -434,7 +431,10 @@ function StaffScreen() {
               active={tableFilter === n}
               onClick={() => setTableFilter(n)}
             >
-              T{n} ({orders.filter((o) => o.tableNumber === n).length})
+              {t("staff.filterTable", {
+                table: n,
+                count: orders.filter((o) => o.tableNumber === n).length,
+              })}
             </FilterChip>
           ))}
         </div>
@@ -445,12 +445,10 @@ function StaffScreen() {
             className="border-secondary bg-highlight-soft/30 mb-4 rounded-lg border-2 border-dashed p-3"
           >
             <h2 id="new-guests" className="text-secondary-deep text-lg">
-              New guests — check the table
+              {t("staff.newGuestsCheck")}
             </h2>
             <p className="text-body mb-2.5 text-sm">
-              First order from a table you haven&apos;t confirmed. If someone is
-              sitting there, Accept: it goes to the kitchen and the table stays
-              open for their next orders.
+              {t("staff.firstOrderTable")}
             </p>
             <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
               {newGuests.map((order) => (
@@ -475,20 +473,18 @@ function StaffScreen() {
         ) : null}
 
         {ordersLoading ? (
-          <Loading label="Listening for orders…" />
+          <Loading label={t("staff.listeningOrders")} />
         ) : kitchen.length === 0 && newGuests.length > 0 ? (
-          <p className="text-muted text-sm">Nothing in the kitchen yet.</p>
+          <p className="text-muted text-sm">{t("staff.nothingKitchenYet")}</p>
         ) : kitchen.length === 0 ? (
           <EmptyState
             mood="sleepy"
             title={
-              orders.length === 0 ? "All caught up" : "Nothing on that table"
-            }
-            body={
               orders.length === 0
-                ? "New orders appear here the moment a customer taps Place order."
-                : undefined
+                ? t("staff.allCaughtUp")
+                : t("staff.nothingOnTable")
             }
+            body={orders.length === 0 ? t("staff.newOrdersAppear") : undefined}
           />
         ) : (
           <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -601,7 +597,7 @@ function OrderTicket({
         <div className="min-w-0 flex-1">
           <p className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
             <span className="text-2xs text-muted font-semibold tracking-[0.12em] uppercase">
-              Table
+              {t("staff.table")}
             </span>
             <span
               className={[
@@ -653,7 +649,7 @@ function OrderTicket({
 
       {order.notes ? (
         <p className="border-line bg-tan/60 text-body mx-3 mb-2 rounded-sm border-2 border-dashed px-2.5 py-1.5 text-sm">
-          <span className="font-semibold">Note:</span> {order.notes}
+          <span className="font-semibold">{t("staff.note")}</span> {order.notes}
         </p>
       ) : null}
 
@@ -686,7 +682,7 @@ function OrderTicket({
         <TicketTotal check={check} />
         <div className="flex flex-wrap justify-end gap-2">
           {actions.length === 0 ? (
-            <span className="text-muted text-sm">Closed</span>
+            <span className="text-muted text-sm">{t("staff.closed")}</span>
           ) : (
             actions
               .slice()
@@ -712,11 +708,13 @@ function OrderTicket({
                 setConfirming(true);
                 // A new guest nobody can see is the usual reason; still one
                 // tap to change or clear.
-                if (newGuest) setReason(PENDING_REJECT_REASON);
+                if (newGuest) setReason(pendingRejectReason());
               }}
-              aria-label={`Reject order ${orderLabel(order)}`}
+              aria-label={t("staff.rejectOrderAria", {
+                order: orderLabel(order),
+              })}
             >
-              Reject
+              {t("staff.reject")}
             </Button>
           ) : null}
         </div>
@@ -747,10 +745,10 @@ function TicketNumber({ order, stalled }: { order: Order; stalled: boolean }) {
     return (
       <span
         className="tnum text-muted ml-1 text-2xl leading-none"
-        title="Gets its number when you accept it"
+        title={t("staff.getsNumberWhen")}
       >
         <span aria-hidden="true">#····</span>
-        <span className="sr-only">Number on Accept</span>
+        <span className="sr-only">{t("staff.numberAccept")}</span>
       </span>
     );
   }
@@ -762,10 +760,10 @@ function TicketNumber({ order, stalled }: { order: Order; stalled: boolean }) {
   return (
     <span
       className="tnum text-muted ml-1 animate-pulse text-2xl leading-none"
-      title="Numbering this order…"
+      title={t("staff.numberingOrder")}
     >
       <span aria-hidden="true">#····</span>
-      <span className="sr-only">Number coming</span>
+      <span className="sr-only">{t("staff.numberComing")}</span>
     </span>
   );
 }
@@ -793,17 +791,19 @@ function RejectConfirm({
       className="border-berry-deep bg-berry/5 mx-3 mb-2 rounded-md border-2 p-3"
     >
       <p id={headingId} className="text-berry-deep font-semibold">
-        Reject order {orderLabel(order)} from table {order.tableNumber}?
+        {t("staff.rejectOrderQuestion", {
+          order: orderLabel(order),
+          table: order.tableNumber,
+        })}
       </p>
       <p className="text-muted mt-0.5 text-sm">
-        It leaves the board and the customer&apos;s phone says the counter
-        couldn&apos;t accept it. This can&apos;t be undone.
+        {t("staff.leavesBoardCustomers")}
       </p>
       <p className="text-2xs text-muted mt-2.5 font-semibold tracking-[0.12em] uppercase">
-        Reason (optional, shown to the customer)
+        {t("staff.reasonOptionalShown")}
       </p>
       <div className="mt-1.5 flex flex-wrap gap-1.5">
-        {REJECT_REASONS.map((r) => (
+        {rejectReasons().map((r) => (
           <button
             key={r}
             type="button"
@@ -822,10 +822,10 @@ function RejectConfirm({
       </div>
       <div className="mt-3 flex flex-wrap justify-end gap-2">
         <Button size="sm" variant="ghost" disabled={busy} onClick={onKeep}>
-          Keep order
+          {t("staff.keepOrder")}
         </Button>
         <Button size="sm" variant="danger" disabled={busy} onClick={onConfirm}>
-          {busy ? "Rejecting…" : "Reject order"}
+          {busy ? t("staff.rejecting") : t("staff.rejectOrder")}
         </Button>
       </div>
     </div>
@@ -880,9 +880,13 @@ function StaffLogin({
     <main className="relative flex min-h-svh flex-col items-center justify-center gap-4 px-5 py-10">
       <Mascot mood="worry" size={120} />
       <div className="text-center">
-        <h1 className="font-hand text-primary text-4xl">Staff only</h1>
+        <h1 className="font-hand text-primary text-4xl">
+          {t("staff.staffOnly")}
+        </h1>
         <p className="text-muted text-sm">
-          {cafeName ? `Counter view for ${cafeName}` : "Counter view"}
+          {cafeName
+            ? t("staff.counterViewFor", { name: cafeName })
+            : t("staff.counterView")}
         </p>
       </div>
 
@@ -908,7 +912,7 @@ function StaffLogin({
                     : "border-line bg-cream text-ink",
                 ].join(" ")}
               >
-                {m === "pin" ? "PIN" : "Email"}
+                {m === "pin" ? t("staff.modePin") : t("staff.modeEmail")}
               </button>
             ))}
           </div>
@@ -917,7 +921,7 @@ function StaffLogin({
         {mode === "pin" ? (
           <label className="flex flex-col gap-1.5">
             <span className="text-ink text-sm font-semibold">
-              Today&apos;s PIN
+              {t("staff.todaysPin")}
             </span>
             <input
               inputMode="numeric"
@@ -933,7 +937,9 @@ function StaffLogin({
         ) : (
           <>
             <label className="flex flex-col gap-1.5">
-              <span className="text-ink text-sm font-semibold">Email</span>
+              <span className="text-ink text-sm font-semibold">
+                {t("staff.email")}
+              </span>
               <input
                 type="email"
                 autoComplete="username"
@@ -941,11 +947,13 @@ function StaffLogin({
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="border-line bg-cream-soft text-ink focus:border-primary min-h-12 rounded-sm border-2 px-3 focus:outline-none"
-                placeholder="staff@cafe.com"
+                placeholder={t("staff.staffCafeCom")}
               />
             </label>
             <label className="flex flex-col gap-1.5">
-              <span className="text-ink text-sm font-semibold">Password</span>
+              <span className="text-ink text-sm font-semibold">
+                {t("staff.password")}
+              </span>
               <input
                 type="password"
                 autoComplete="current-password"
@@ -966,29 +974,27 @@ function StaffLogin({
         ) : null}
 
         <Button type="submit" size="lg" fullWidth disabled={busy}>
-          {busy ? "Signing in…" : "Sign in"}
+          {busy ? t("staff.signingIn") : t("staff.signIn")}
         </Button>
 
         {isDemo ? (
           <div className="border-secondary/50 bg-highlight-soft/40 text-2xs text-primary-dark rounded-sm border-2 border-dashed p-2.5 text-center leading-relaxed">
-            <p className="font-semibold">Demo accounts</p>
-            <p className="tnum">
-              PIN 1122 · staff@demo.cafe / cafe1122 · owner@demo.cafe / cafe1122
-            </p>
+            <p className="font-semibold">{t("staff.demoAccounts")}</p>
+            <p className="tnum">{t("staff.pin1122Staff")}</p>
             <div className="mt-1.5 flex justify-center gap-2">
               <button
                 type="button"
                 onClick={() => fillDemo("staff")}
                 className="rounded-pill border-secondary min-h-9 border-2 px-3 font-semibold"
               >
-                Fill staff
+                {t("staff.fillStaff")}
               </button>
               <button
                 type="button"
                 onClick={() => fillDemo("owner")}
                 className="rounded-pill border-secondary min-h-9 border-2 px-3 font-semibold"
               >
-                Fill owner
+                {t("staff.fillOwner")}
               </button>
             </div>
           </div>

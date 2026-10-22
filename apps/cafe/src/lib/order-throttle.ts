@@ -16,6 +16,8 @@
  * It runs in demo mode too, so the demo behaves the way the real app does.
  */
 
+import { t } from "./i18n";
+
 /** Must match `duration.value(…, 's')` in firestore.rules. A test checks it. */
 export const ORDER_GAP_SECONDS = 30;
 
@@ -94,12 +96,10 @@ export function throttleFromServerStamp(
 }
 
 export function throttleMessage(seconds: number | null): string {
-  const lead = "Your last order has only just gone through.";
   if (seconds === null) {
-    return `${lead} You can send another in under ${ORDER_GAP_SECONDS} seconds.`;
+    return t("throttle.underSeconds", { seconds: ORDER_GAP_SECONDS });
   }
-  const s = Math.max(1, Math.ceil(seconds));
-  return `${lead} You can send another in ${s} second${s === 1 ? "" : "s"}.`;
+  return t("throttle.inSeconds", { count: Math.max(1, Math.ceil(seconds)) });
 }
 
 export function readLastOrderAt(): number | null {

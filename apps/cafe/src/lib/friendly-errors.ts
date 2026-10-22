@@ -8,6 +8,8 @@
  * actually happen, and keep anything already written for people.
  */
 
+import { t, type MessageKey } from "./i18n";
+
 function codeOf(error: unknown): string | null {
   if (typeof error !== "object" || error === null) return null;
   const code = (error as { code?: unknown }).code;
@@ -31,79 +33,70 @@ function humanOrNull(error: unknown): string | null {
   return message;
 }
 
-const SIGN_IN: Record<string, string> = {
-  "auth/invalid-credential": "That email and password don't match.",
-  "auth/wrong-password": "That email and password don't match.",
-  "auth/user-not-found": "That email and password don't match.",
-  "auth/invalid-login-credentials": "That email and password don't match.",
-  "auth/invalid-email": "That doesn't look like an email address.",
-  "auth/missing-password": "Enter your password.",
-  "auth/too-many-requests":
-    "Too many tries. Wait a minute, then try again — or ask the owner to reset your password.",
-  "auth/network-request-failed":
-    "Can't reach the sign-in server. Check the wifi and try again.",
-  "auth/user-disabled": "This account has been switched off. Ask the owner.",
-  "auth/operation-not-allowed":
-    "Email sign-in isn't switched on for this cafe yet. The owner needs to enable it in the Firebase console.",
+const SIGN_IN: Record<string, MessageKey> = {
+  "auth/invalid-credential": "errors.signInMismatch",
+  "auth/wrong-password": "errors.signInMismatch",
+  "auth/user-not-found": "errors.signInMismatch",
+  "auth/invalid-login-credentials": "errors.signInMismatch",
+  "auth/invalid-email": "errors.invalidEmail",
+  "auth/missing-password": "errors.missingPassword",
+  "auth/too-many-requests": "errors.tooManyTries",
+  "auth/network-request-failed": "errors.signInNetwork",
+  "auth/user-disabled": "errors.userDisabled",
+  "auth/operation-not-allowed": "errors.emailSignInOff",
   // Signing up on /join.
-  "auth/weak-password": "Pick a longer password: at least 6 characters.",
-  "auth/email-already-in-use":
-    "That email already has an account. Enter its password to sign in.",
+  "auth/weak-password": "errors.weakPassword",
+  "auth/email-already-in-use": "errors.emailInUse",
 };
 
 export function friendlySignInError(error: unknown): string {
   const code = codeOf(error);
-  if (code && SIGN_IN[code]) return SIGN_IN[code];
-  return humanOrNull(error) ?? "Sign-in didn't work. Try again.";
+  if (code && SIGN_IN[code]) return t(SIGN_IN[code]);
+  return humanOrNull(error) ?? t("errors.signInFailed");
 }
 
-const WRITE: Record<string, string> = {
-  "permission-denied":
-    "The database refused that change. The order may have already moved on — the board will catch up in a moment.",
-  unavailable: "Couldn't save — the connection dropped. Try again.",
-  "deadline-exceeded": "Couldn't save — the connection is slow. Try again.",
-  "not-found": "That order no longer exists.",
-  unauthenticated: "You've been signed out. Sign in again to update orders.",
+const WRITE: Record<string, MessageKey> = {
+  "permission-denied": "errors.writeDenied",
+  unavailable: "errors.saveDropped",
+  "deadline-exceeded": "errors.saveSlow",
+  "not-found": "errors.orderGone",
+  unauthenticated: "errors.signedOutUpdate",
 };
 
 export function friendlyStatusError(error: unknown): string {
   const code = codeOf(error);
-  if (code && WRITE[code]) return WRITE[code];
-  return humanOrNull(error) ?? "Couldn't update that order. Try again.";
+  if (code && WRITE[code]) return t(WRITE[code]);
+  return humanOrNull(error) ?? t("errors.updateFailed");
 }
 
-const READ: Record<string, string> = {
-  "permission-denied":
-    "This account isn't allowed to read past orders. Sign in with the owner account, or check that it has a staff record.",
-  unauthenticated: "You've been signed out. Sign in again to see past orders.",
-  unavailable: "Can't reach the database — the connection dropped. Try again.",
-  "deadline-exceeded":
-    "The database took too long to answer. Try again, or pick a shorter range.",
-  "resource-exhausted":
-    "Today's free database allowance is used up. History will load again tomorrow.",
+const READ: Record<string, MessageKey> = {
+  "permission-denied": "errors.readDenied",
+  unauthenticated: "errors.signedOutHistory",
+  unavailable: "errors.readDropped",
+  "deadline-exceeded": "errors.readSlow",
+  "resource-exhausted": "errors.quotaUsed",
 };
 
 /** Loading a list of orders (the owner's history). */
 export function friendlyLoadError(error: unknown): string {
   const code = codeOf(error);
-  if (code && READ[code]) return READ[code];
-  return humanOrNull(error) ?? "Couldn't load orders. Try again.";
+  if (code && READ[code]) return t(READ[code]);
+  return humanOrNull(error) ?? t("errors.loadFailed");
 }
 
-const TEAM: Record<string, string> = {
-  "permission-denied":
-    "The database refused that change. Only an owner can manage the team.",
-  "not-found": "That person or invite is already gone.",
-  unauthenticated: "You've been signed out. Sign in again.",
-  unavailable: "Couldn't save — the connection dropped. Try again.",
-  "deadline-exceeded": "Couldn't save — the connection is slow. Try again.",
+const TEAM: Record<string, MessageKey> = {
+  "permission-denied": "errors.teamDenied",
+  "not-found": "errors.teamGone",
+  unauthenticated: "errors.signedOut",
+  unavailable: "errors.saveDropped",
+  "deadline-exceeded": "errors.saveSlow",
 };
 
 /** The owner's staff page: invites, roles, removals. */
 export function friendlyTeamError(error: unknown): string {
   const code = codeOf(error);
-  if (code && TEAM[code]) return TEAM[code];
-  return humanOrNull(error) ?? "That didn't work. Try again.";
+  if (code && TEAM[code]) return t(TEAM[code]);
+  return humanOrNull(error) ?? t("errors.teamFailed");
 }
 
 /**
@@ -112,10 +105,8 @@ export function friendlyTeamError(error: unknown): string {
  */
 export function friendlyJoinError(error: unknown): string {
   const code = codeOf(error);
-  if (code && SIGN_IN[code]) return SIGN_IN[code];
-  if (code === "permission-denied") {
-    return "This invite doesn't work any more: it was used, cancelled or has expired. Ask the owner for a new link.";
-  }
-  if (code && TEAM[code]) return TEAM[code];
-  return humanOrNull(error) ?? "Joining didn't work. Try again.";
+  if (code && SIGN_IN[code]) return t(SIGN_IN[code]);
+  if (code === "permission-denied") return t("errors.inviteRefused");
+  if (code && TEAM[code]) return t(TEAM[code]);
+  return humanOrNull(error) ?? t("errors.joinFailed");
 }

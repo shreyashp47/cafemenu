@@ -12,17 +12,18 @@ import Link from "next/link";
 
 import { Icon, type IconName } from "@/components/icons";
 import type { StaffRole } from "@/lib/data/types";
+import { t, type MessageKey } from "@/lib/i18n";
 
 type Side = "orders" | "owner";
 
 const SIDES: Array<{
   side: Side;
   href: string;
-  label: string;
+  label: MessageKey;
   icon: IconName;
 }> = [
-  { side: "orders", href: "/staff", label: "Orders", icon: "cart" },
-  { side: "owner", href: "/admin", label: "Owner", icon: "chart" },
+  { side: "orders", href: "/staff", label: "ownerSwitch.orders", icon: "cart" },
+  { side: "owner", href: "/admin", label: "ownerSwitch.owner", icon: "chart" },
 ];
 
 export function OwnerSwitch({
@@ -37,7 +38,7 @@ export function OwnerSwitch({
   if (role !== "owner") return null;
 
   return (
-    <nav aria-label="Switch screen" className={className}>
+    <nav aria-label={t("ownerSwitch.switchScreen")} className={className}>
       <ul className="rounded-pill border-line bg-paper grid grid-cols-2 gap-1 border-2 p-1 sm:inline-grid sm:min-w-72">
         {SIDES.map((s) => {
           const active = s.side === current;
@@ -54,7 +55,7 @@ export function OwnerSwitch({
                 ].join(" ")}
               >
                 <Icon name={s.icon} size={17} />
-                {s.label}
+                {t(s.label)}
               </Link>
             </li>
           );

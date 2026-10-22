@@ -12,6 +12,7 @@
 import { formatMoney, type MoneySettings } from "@cafemenu/shared";
 
 import type { CartLine, MenuItem, Order, OrderLine } from "./types";
+import { t } from "./i18n";
 
 /** Per-line subtotal, in the cafe's unit. */
 export function lineSubtotal(line: Pick<OrderLine, "price" | "qty">): number {
@@ -79,16 +80,21 @@ export function priceCart(
   for (const line of lines) {
     const item = byId.get(line.menuItemId);
     if (!item) {
-      blocking.push(`${line.name} is no longer on the menu.`);
+      blocking.push(t("cart.noLongerOnMenu", { name: line.name }));
       continue;
     }
     if (!item.available) {
-      blocking.push(`${line.name} just sold out.`);
+      blocking.push(t("cart.justSoldOut", { name: line.name }));
       continue;
     }
     if (item.price !== line.price) {
       stale = true;
-      changes.push(`${line.name} is now ${formatMoney(item.price, money)}.`);
+      changes.push(
+        t("cart.priceNow", {
+          name: line.name,
+          price: formatMoney(item.price, money),
+        }),
+      );
     }
     out.push({
       menuItemId: item.id,
@@ -144,13 +150,15 @@ export function formatDate(epochMs: number): string {
 
 /** "just now" / "4m ago" / "1h 12m ago" — used by the staff board. */
 export function formatElapsed(ms: number): string {
-  if (!Number.isFinite(ms) || ms < 0) return "0m";
+  if (!Number.isFinite(ms) || ms < 0) return t("time.zeroMinutes");
   const totalMinutes = Math.floor(ms / 60_000);
-  if (totalMinutes < 1) return "just now";
-  if (totalMinutes < 60) return `${totalMinutes}m ago`;
+  if (totalMinutes < 1) return t("time.justNow");
+  if (totalMinutes < 60) return t("time.minutesAgo", { minutes: totalMinutes });
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
-  return minutes === 0 ? `${hours}h ago` : `${hours}h ${minutes}m ago`;
+  return minutes === 0
+    ? t("time.hoursAgo", { hours })
+    : t("time.hoursMinutesAgo", { hours, minutes });
 }
 
 /** Compact waiting timer for the staff board: "03:12" = 3m 12s. */
