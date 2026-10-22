@@ -953,8 +953,10 @@ and the join page import. A test walks the imports from the customer's routes
 and fails if they reach a staff message, or if `en.json` holds a group they
 cannot reach. First load, before and after: shared by all unchanged at
 103 kB; `/order` 133 to 137 kB, `/order/confirmation` 135 to 138 kB,
-`/offline` 114 to 118 kB; `/staff` 139 to 150 kB (the staff board carries
-both files, once, and is an installed app on a counter tablet).
+`/offline` 114 to 118 kB; `/staff` 139 to 150 kB (the staff board, the owner
+dashboard and the join page carry both files, once, and the board is an
+installed app on a counter tablet; the build report leaves a layout's own
+chunks out of `/admin/*`, which is where its words are).
 
 **What is not moved.** Words that are data, not interface: the demo menu and
 its sample orders (`src/lib/data/seed.ts`), the default category "Drinks" an
