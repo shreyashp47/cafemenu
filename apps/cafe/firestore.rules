@@ -497,6 +497,84 @@ service cloud.firestore {
       // A signed-in user may read only their own record; owners read all.
       allow read: if isOwner() || (signedIn() && request.auth.uid == userId);
       allow write: if isOwner();
+      // Joining with an invite (see /invites below): a new account makes its
+      // own record, and only that one, in the same batch that marks the invite
+      // used. Only a create: someone already on the team cannot use an invite
+      // to change their role.
+      allow create: if signedIn()
+        && request.auth.uid == userId
+        && joinsWithInvite();
+    }
+
+    // -- invites: how an owner adds staff without a terminal ---------------
+    //
+    // /invites/{id} { role, createdBy, createdAt, usedBy, usedAt }. The owner
+    // makes one on /admin/staff and sends the link, /join#{id}. Whoever opens
+    // it signs up and, in one batch, creates /staff/{their uid} with the
+    // invite's role and sets usedBy to their uid (src/lib/data/firestore.ts,
+    // firestoreStaffRepo.join). An invite works once, for seven days from
+    // createdAt, and grants exactly its role. Cancelling one deletes it.
+    //
+    // The document id is the secret: 24 random letters and digits
+    // (src/lib/invites.ts), over 140 bits, so it cannot be guessed. That is
+    // why anyone may `get` an invite by its id (the join page shows the role
+    // and whether it still works before asking anyone to sign up), but only
+    // the owner may `list` them: a list would hand out every open code.
+    //
+    // Expiry counts from the server's createdAt, not a client-chosen date, so
+    // a phone with a wrong clock cannot make an invite that lasts longer.
+    function inviteOpen(invite) {
+      return invite.usedBy == null
+        && request.time < invite.createdAt + duration.value(7, 'd');
+    }
+
+    // The /staff/{uid} create half of joining. Reads the invite as it was
+    // before the batch, so the role it grants cannot be changed on the way,
+    // and as it is after, so the record exists only if the invite is spent
+    // by this account in the same commit.
+    function joinsWithInvite() {
+      let d = request.resource.data;
+      let invite = /databases/$(database)/documents/invites/$(d.invite);
+      return d.keys().hasOnly(["name", "role", "email", "invite"])
+        && d.name is string
+        && d.name.size() >= 1
+        && d.name.size() <= 60
+        // The account's own email, from its token, so the owner's staff list
+        // shows who really joined. An anonymous customer has no email, so a
+        // customer's session cannot join.
+        && d.email == request.auth.token.email
+        && d.invite is string
+        && inviteOpen(get(invite).data)
+        && get(invite).data.role == d.role
+        && getAfter(invite).data.usedBy == request.auth.uid;
+    }
+
+    match /invites/{inviteId} {
+      allow get: if true;
+      allow list: if isOwner();
+      allow create: if isOwner()
+        && inviteId.matches('[A-Za-z0-9]{20,64}')
+        && request.resource.data.keys().hasOnly(
+          ["role", "createdBy", "createdAt", "usedBy", "usedAt"])
+        && request.resource.data.role in ["staff", "owner"]
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.usedBy == null
+        && request.resource.data.usedAt == null;
+      // Joining: the other half of joinsWithInvite above. Only usedBy and
+      // usedAt change, to the caller and now, on an open invite, and only in
+      // a commit that creates the caller's /staff record from this invite.
+      // `!exists` first: a current member cannot spend an invite at all.
+      allow update: if signedIn()
+        && inviteOpen(resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(["usedBy", "usedAt"])
+        && request.resource.data.usedBy == request.auth.uid
+        && request.resource.data.usedAt == request.time
+        && !exists(/databases/$(database)/documents/staff/$(request.auth.uid))
+        && getAfter(/databases/$(database)/documents/staff/$(request.auth.uid)).data.invite == inviteId;
+      // Cancel an open invite, or clear away a used or expired one.
+      allow delete: if isOwner();
     }
 
     // -- config: the "today's special" board, the table list, the settings --

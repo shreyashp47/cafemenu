@@ -48,6 +48,7 @@ import {
   getDocs,
   getDoc,
   deleteDoc,
+  updateDoc,
   serverTimestamp,
   writeBatch,
   runTransaction,
@@ -2322,6 +2323,317 @@ await t(
   allowed(() => placeAs(publicC, { tableNumber: 10 })),
 );
 
+// Staff invites (issue #15). Runs after the barista has its staff record, so
+// "a barista cannot…" is a staff account being refused, not a stranger.
+console.log("\n invites (the owner adds staff by link)");
+const joinC = app("joiner");
+const join2C = app("second-joiner");
+const joinAcct = await account("join@cafe.test");
+const join2Acct = await account("join2@cafe.test");
+// The emulators keep data between runs: whoever joined last time starts this
+// run as a stranger again.
+for (const acct of [joinAcct, join2Acct]) {
+  await fetch(
+    `http://${HOST}:${FS_PORT}/v1/projects/${PROJECT}/databases/(default)/documents/staff/${acct.localId}`,
+    { method: "DELETE", headers: { Authorization: "Bearer owner" } },
+  );
+}
+await signInWithEmailAndPassword(joinC.auth, "join@cafe.test", "correct-horse");
+await signInWithEmailAndPassword(
+  join2C.auth,
+  "join2@cafe.test",
+  "correct-horse",
+);
+const ID_CHARS =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+// As src/lib/invites.ts makes them: 24 random letters and digits.
+const newInviteId = () =>
+  Array.from(
+    crypto.getRandomValues(new Uint8Array(24)),
+    (b) => ID_CHARS[b % 62],
+  ).join("");
+const invite = (o = {}) => ({
+  role: "staff",
+  createdBy: ownerAcct.localId,
+  createdAt: serverTimestamp(),
+  usedBy: null,
+  usedAt: null,
+  ...o,
+});
+const makeInvite = async (role = "staff") => {
+  const id = newInviteId();
+  await setDoc(doc(ownerC.db, "invites", id), invite({ role }));
+  return id;
+};
+// Mirrors firestoreStaffRepo.join() in src/lib/data/firestore.ts: the
+// caller's /staff record and the invite's usedBy in one batch. `staff` and
+// `spend` override fields of each half; `only` sends just one half.
+const join = (c, id, { staff = {}, spend = {}, uid, only } = {}) => {
+  const me = c.auth.currentUser;
+  const batch = writeBatch(c.db);
+  if (only !== "invite")
+    batch.set(doc(c.db, "staff", uid ?? me.uid), {
+      name: "Asha",
+      role: "staff",
+      email: me.email ?? "anon@cafe.test",
+      invite: id,
+      ...staff,
+    });
+  if (only !== "staff")
+    batch.update(doc(c.db, "invites", id), {
+      usedBy: me.uid,
+      usedAt: serverTimestamp(),
+      ...spend,
+    });
+  return batch.commit();
+};
+
+let staffInvite;
+let ownerInvite;
+await t(
+  "the owner can make a staff invite",
+  allowed(async () => {
+    staffInvite = await makeInvite("staff");
+  }),
+);
+await t(
+  "the owner can make an owner invite",
+  allowed(async () => {
+    ownerInvite = await makeInvite("owner");
+  }),
+);
+await t(
+  "a barista cannot make an invite",
+  denied(() =>
+    setDoc(
+      doc(staffC.db, "invites", newInviteId()),
+      invite({ createdBy: staffAcct.localId }),
+    ),
+  ),
+);
+await t(
+  "a customer cannot make an invite",
+  denied(() =>
+    setDoc(
+      doc(publicC.db, "invites", newInviteId()),
+      invite({ createdBy: publicC.user.uid }),
+    ),
+  ),
+);
+await t(
+  "the owner cannot make an invite with a guessable id",
+  denied(() => setDoc(doc(ownerC.db, "invites", "abc123"), invite())),
+);
+await t(
+  "the owner cannot make an invite that starts out used",
+  denied(() =>
+    setDoc(
+      doc(ownerC.db, "invites", newInviteId()),
+      invite({ usedBy: joinAcct.localId }),
+    ),
+  ),
+);
+await t(
+  "the owner cannot pick an invite's start, to make it last longer",
+  denied(() =>
+    setDoc(
+      doc(ownerC.db, "invites", newInviteId()),
+      invite({ createdAt: Timestamp.fromMillis(Date.now() + 86_400_000) }),
+    ),
+  ),
+);
+await t(
+  "the owner cannot make an invite for a role that does not exist",
+  denied(() =>
+    setDoc(doc(ownerC.db, "invites", newInviteId()), invite({ role: "admin" })),
+  ),
+);
+await t(
+  "anyone with the link can read the invite",
+  allowed(() => getDoc(doc(nobodyC.db, "invites", staffInvite))),
+);
+await t(
+  "a barista cannot list invites (each id is a usable code)",
+  denied(() => getDocs(collection(staffC.db, "invites"))),
+);
+await t(
+  "a customer cannot list invites",
+  denied(() => getDocs(collection(publicC.db, "invites"))),
+);
+await t(
+  "the owner can list invites",
+  allowed(() => getDocs(collection(ownerC.db, "invites"))),
+);
+await t(
+  "a barista cannot cancel an invite",
+  denied(() => deleteDoc(doc(staffC.db, "invites", staffInvite))),
+);
+
+await t(
+  "a staff invite cannot be used to become owner",
+  denied(() => join(joinC, staffInvite, { staff: { role: "owner" } })),
+);
+await t(
+  "nor by rewriting the invite's role on the way",
+  denied(() =>
+    join(joinC, staffInvite, {
+      staff: { role: "owner" },
+      spend: { role: "owner" },
+    }),
+  ),
+);
+await t(
+  "joining needs the invite spent in the same commit",
+  denied(() => join(joinC, staffInvite, { only: "staff" })),
+);
+await t(
+  "an invite cannot be spent without joining",
+  denied(() => join(joinC, staffInvite, { only: "invite" })),
+);
+await t(
+  "a new account cannot join on someone else's behalf",
+  denied(() =>
+    join(joinC, staffInvite, {
+      uid: join2Acct.localId,
+      spend: { usedBy: join2Acct.localId },
+      staff: { email: "join2@cafe.test" },
+    }),
+  ),
+);
+await t(
+  "a new account cannot mark the invite used by someone else",
+  denied(() =>
+    join(joinC, staffInvite, { spend: { usedBy: join2Acct.localId } }),
+  ),
+);
+await t(
+  "a new account cannot claim someone else's email",
+  denied(() =>
+    join(joinC, staffInvite, { staff: { email: "owner@cafe.test" } }),
+  ),
+);
+await t(
+  "a new account cannot join with no name",
+  denied(() => join(joinC, staffInvite, { staff: { name: "" } })),
+);
+await t(
+  "a new account cannot add other fields to its record",
+  denied(() => join(joinC, staffInvite, { staff: { pay: 100 } })),
+);
+await t(
+  "a customer's anonymous session cannot join",
+  denied(() => join(publicC, staffInvite)),
+);
+await t(
+  "a new account can join with a staff invite",
+  allowed(() => join(joinC, staffInvite)),
+);
+await t(
+  "and is then staff: it can read the order board",
+  allowed(() => getDocs(collection(joinC.db, "orders"))),
+);
+await t(
+  "but not the owner's things",
+  denied(() => getDocs(collection(joinC.db, "invites"))),
+);
+await t(
+  "a staff member cannot edit their own role",
+  denied(() =>
+    updateDoc(doc(joinC.db, "staff", joinAcct.localId), { role: "owner" }),
+  ),
+);
+await t(
+  "nor use an owner invite to become owner",
+  denied(() => join(joinC, ownerInvite, { staff: { role: "owner" } })),
+);
+await t(
+  "an invite cannot be used twice",
+  denied(() => join(join2C, staffInvite)),
+);
+await t(
+  "an expired invite is refused",
+  denied(async () => {
+    // Made eight days ago, which only the emulator's admin can do.
+    const id = newInviteId();
+    const r = await fetch(
+      `http://${HOST}:${FS_PORT}/v1/projects/${PROJECT}/databases/(default)/documents/invites/${id}`,
+      {
+        method: "PATCH",
+        headers: {
+          Authorization: "Bearer owner",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          fields: {
+            role: { stringValue: "staff" },
+            createdBy: { stringValue: ownerAcct.localId },
+            createdAt: {
+              timestampValue: new Date(
+                Date.now() - 8 * 86_400_000,
+              ).toISOString(),
+            },
+            usedBy: { nullValue: null },
+            usedAt: { nullValue: null },
+          },
+        }),
+      },
+    );
+    if (!r.ok) throw new Error(`could not seed the invite: ${r.status}`);
+    await join(join2C, id);
+  }),
+);
+await t(
+  "a cancelled invite is refused",
+  denied(async () => {
+    const id = await makeInvite("staff");
+    await deleteDoc(doc(ownerC.db, "invites", id));
+    await join(join2C, id);
+  }),
+);
+await t(
+  "an owner invite makes an owner",
+  allowed(() => join(join2C, ownerInvite, { staff: { role: "owner" } })),
+);
+await t(
+  "who can then edit the menu",
+  allowed(() =>
+    addDoc(collection(join2C.db, "menu"), { name: "Flat white", price: 160 }),
+  ),
+);
+
+await t(
+  "the owner can change someone's role",
+  allowed(() =>
+    updateDoc(doc(ownerC.db, "staff", joinAcct.localId), { role: "owner" }),
+  ),
+);
+await t(
+  "and change it back",
+  allowed(() =>
+    updateDoc(doc(ownerC.db, "staff", joinAcct.localId), { role: "staff" }),
+  ),
+);
+await t(
+  "a barista cannot remove someone",
+  denied(() => deleteDoc(doc(staffC.db, "staff", joinAcct.localId))),
+);
+await t(
+  "the owner can remove someone",
+  allowed(() => deleteDoc(doc(ownerC.db, "staff", joinAcct.localId))),
+);
+await t(
+  "a removed account can no longer read the order board",
+  denied(() => getDocs(collection(joinC.db, "orders"))),
+);
+await t(
+  "nor come back with its old invite",
+  denied(() => join(joinC, staffInvite)),
+);
+await t(
+  "the owner can clear away a used invite",
+  allowed(() => deleteDoc(doc(ownerC.db, "invites", staffInvite))),
+);
+
 console.log(`\n${pass} passed, ${failures.length} failed`);
 for (const f of failures) console.log(`  - ${f}`);
 await Promise.all(
@@ -2334,6 +2646,8 @@ await Promise.all(
     tempC.a,
     staffC.a,
     ownerC.a,
+    joinC.a,
+    join2C.a,
   ].map(deleteApp),
 );
 process.exit(failures.length ? 1 : 0);
