@@ -17,10 +17,15 @@
  * Until something is known the snapshot is UNKNOWN_SETTINGS, whose name is
  * empty: a real cafe's header stays blank for a moment rather than flashing the
  * demo cafe's name.
+ *
+ * The money settings (`moneyUnit`, `maxOrderTotal`) also depend on where the
+ * data is; see moneyFor below and docs/decisions.md, "Any currency".
  */
 
 import {
   DEFAULT_SETTINGS,
+  LEGACY_MAX_ORDER_TOTAL,
+  defaultMaxOrderTotal,
   parseCafeSettings,
   type CafeSettings,
 } from "@cafemenu/shared";
@@ -78,6 +83,34 @@ function keep(settings: CafeSettings) {
 }
 
 /**
+ * The settings' money, made to match the data the page will read:
+ *
+ *   - The demo store keeps minor units whatever the settings say (it seeds
+ *     itself that way). A preview of a cafe still in whole units, TOE before
+ *     #21, shows minor-unit data under its own settings, with its currency's
+ *     default cap: what #21 will leave it with.
+ *   - A real cafe with no config/site document: firestore.rules then cap an
+ *     order at LEGACY_MAX_ORDER_TOTAL, so the page does too. With no site.json
+ *     either, it is a project from before CafeMenu, TOE's whole rupees.
+ */
+function moneyFor(
+  settings: CafeSettings,
+  demo: boolean,
+  noConfigSite: boolean,
+  noSiteJson: boolean,
+): CafeSettings {
+  if (demo) {
+    if (settings.moneyUnit === "minor") return settings;
+    const minor = { ...settings, moneyUnit: "minor" as const };
+    return { ...minor, maxOrderTotal: defaultMaxOrderTotal(minor) };
+  }
+  if (!noConfigSite) return settings;
+  return noSiteJson
+    ? parseCafeSettings({ schemaVersion: 1 }, settings)
+    : { ...settings, maxOrderTotal: LEGACY_MAX_ORDER_TOTAL };
+}
+
+/**
  * The merged settings, and whether they came from the layers themselves (and
  * so are worth keeping on the device) or only from the device's own copy.
  */
@@ -93,6 +126,7 @@ function compute(): { next: SettingsSnapshot; fresh: boolean } {
   if (!started) return fromCopy();
 
   const { site, backend } = started;
+  const demo = backend.kind === "demo";
   // site.json when it came; the device's copy when it could not be fetched;
   // the defaults when it definitely is not there.
   const base =
@@ -103,16 +137,20 @@ function compute(): { next: SettingsSnapshot; fresh: boolean } {
         : DEFAULT_SETTINGS;
 
   if (live) {
-    return {
-      next: { settings: parseCafeSettings(live.raw, base), ready: true },
-      fresh: true,
-    };
+    const settings = moneyFor(
+      parseCafeSettings(live.raw, base),
+      demo,
+      live.raw === null,
+      site.status !== "ok",
+    );
+    return { next: { settings, ready: true }, fresh: true };
   }
   // config/site has not answered yet. With site.json, or in demo mode (where
   // the defaults are the cafe), that is enough to paint. A real cafe without
   // a site.json waits for Firestore, showing the device's copy meanwhile.
-  if (site.status === "ok" || backend.kind === "demo") {
-    return { next: { settings: base, ready: true }, fresh: true };
+  if (site.status === "ok" || demo) {
+    const settings = moneyFor(base, demo, false, false);
+    return { next: { settings, ready: true }, fresh: true };
   }
   return fromCopy();
 }

@@ -8,6 +8,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
+import { LEGACY_MAX_ORDER_TOTAL } from "@cafemenu/shared";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { demoAuthRepo, demoConfigRepo, demoOrderRepo } from "@/lib/data/demo";
@@ -15,13 +16,13 @@ import { loadDemoState, resetDemoStore } from "@/lib/data/demo-store";
 import { DEMO_CREDENTIALS } from "@/lib/data/seed";
 import {
   MAX_ORDER_LINES,
-  MAX_ORDER_TOTAL,
   MAX_QTY_PER_LINE,
   orderCapProblems,
 } from "@/lib/order-caps";
 import { forgetLastOrder } from "@/lib/order-throttle";
 import { OrderRejected, TableCodeRefused, placeOrder } from "@/lib/place-order";
 import { buildReport, ordersToCsv } from "@/lib/reports";
+import { getSettingsSnapshot } from "@/lib/settings";
 import {
   TABLE_KEY_LENGTH,
   forgetTableKeys,
@@ -38,6 +39,7 @@ import {
   type MenuItem,
   type Order,
 } from "@/lib/types";
+import { INR, JPY, TOE_RUPEES, USD } from "@/test/money";
 
 const rules = () =>
   readFileSync(resolve(process.cwd(), "firestore.rules"), "utf8");
@@ -121,21 +123,32 @@ describe("table codes", () => {
 
 describe("order size caps", () => {
   it("allows an ordinary order", () => {
-    expect(orderCapProblems([{ qty: 2 }], 360)).toEqual([]);
+    expect(orderCapProblems([{ qty: 2 }], 36_000, INR)).toEqual([]);
   });
 
   it("explains each limit in words", () => {
     const lines = Array.from({ length: MAX_ORDER_LINES + 1 }, () => ({
       qty: 1,
     }));
-    expect(orderCapProblems(lines, 100)[0]).toMatch(/split it into two/);
-    expect(orderCapProblems([{ qty: MAX_QTY_PER_LINE + 1 }], 100)[0]).toMatch(
-      /Up to 20 of each/,
-    );
-    expect(orderCapProblems([{ qty: 1 }], MAX_ORDER_TOTAL + 1)[0]).toMatch(
-      /₹10,000/,
-    );
-    expect(orderCapProblems([{ qty: 1 }], MAX_ORDER_TOTAL)).toEqual([]);
+    expect(orderCapProblems(lines, 100, INR)[0]).toMatch(/split it into two/);
+    expect(
+      orderCapProblems([{ qty: MAX_QTY_PER_LINE + 1 }], 100, INR)[0],
+    ).toMatch(/Up to 20 of each/);
+  });
+
+  // The cafe's own cap, in its own unit: what config/site says, which is what
+  // the rules read.
+  it.each([
+    ["INR (paise)", INR, 1_000_000, "₹10,000"],
+    ["USD (cents)", USD, 15_000, "$150"],
+    ["JPY", JPY, 20_000, "￥20,000"],
+    ["TOE's whole rupees", TOE_RUPEES, 10_000, "₹10,000"],
+  ])("caps the total in %s", (_, settings, cap, shown) => {
+    expect(settings.maxOrderTotal).toBe(cap);
+    expect(orderCapProblems([{ qty: 1 }], cap, settings)).toEqual([]);
+    expect(orderCapProblems([{ qty: 1 }], cap + 1, settings)).toEqual([
+      `One order can be up to ${shown} — please split it, or order at the counter.`,
+    ]);
   });
 
   it("uses the same numbers as firestore.rules", () => {
@@ -143,10 +156,14 @@ describe("order size caps", () => {
     expect(r).toContain(
       `request.resource.data.items.size() <= ${MAX_ORDER_LINES}`,
     );
-    expect(r).toContain(`request.resource.data.total <= ${MAX_ORDER_TOTAL}`);
     expect(r).toContain(
       `request.resource.data.items[0].qty <= ${MAX_QTY_PER_LINE}`,
     );
+    // The total's cap is config/site's, TOE's old one when it has none.
+    expect(r).toContain(`.get("maxOrderTotal", ${LEGACY_MAX_ORDER_TOTAL})`);
+    expect(r).toContain("data.total <= cap");
+    expect(r).toContain("data.items[0].price <= cap");
+    expect(r).not.toMatch(/total <= \d/);
   });
 });
 
@@ -156,7 +173,7 @@ describe("placing an order with table codes (demo store mirrors the rules)", () 
       id: "m1",
       name: "Cappuccino",
       description: "",
-      price: 180,
+      price: 18_000,
       category: "Drinks",
       available: true,
       sortOrder: 10,
@@ -166,13 +183,19 @@ describe("placing an order with table codes (demo store mirrors the rules)", () 
     {
       menuItemId: "m1",
       name: "Cappuccino",
-      price: 180,
+      price: 18_000,
       qty: 1,
       category: "Drinks",
     },
   ];
   const order = (tableKey?: string | null) =>
-    placeOrder({ tableNumber: 3, cartLines: cart, menu, tableKey });
+    placeOrder({
+      tableNumber: 3,
+      cartLines: cart,
+      menu,
+      tableKey,
+      settings: getSettingsSnapshot().settings,
+    });
 
   it("a table with no code takes an order without one (the transition)", async () => {
     await expect(order()).resolves.toMatchObject({ tableNumber: 3 });
@@ -208,7 +231,7 @@ describe("placing an order with table codes (demo store mirrors the rules)", () 
     const big: CartLine[] = Array.from({ length: 12 }, (_, i) => ({
       menuItemId: `b${i}`,
       name: `Cake ${i}`,
-      price: 1000,
+      price: 100_000, // ₹1,000
       qty: 1,
       category: "Cakes",
     }));
@@ -222,9 +245,48 @@ describe("placing an order with table codes (demo store mirrors the rules)", () 
       sortOrder: 1,
     }));
     await expect(
-      placeOrder({ tableNumber: 3, cartLines: big, menu: bigMenu }),
+      placeOrder({
+        tableNumber: 3,
+        cartLines: big,
+        menu: bigMenu,
+        settings: getSettingsSnapshot().settings,
+      }),
     ).rejects.toBeInstanceOf(OrderRejected);
     expect(loadDemoState().orders).toHaveLength(0);
+  });
+
+  it("refuses over the cafe's own cap, in its own currency", async () => {
+    const dear = { ...cart[0], price: 8_000 }; // $80
+    const dearMenu = [{ ...menu[0], price: 8_000 }];
+    const err = await placeOrder({
+      tableNumber: 3,
+      cartLines: [{ ...dear, qty: 2 }],
+      menu: dearMenu,
+      settings: USD,
+    }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(OrderRejected);
+    expect((err as OrderRejected).problems).toEqual([
+      "One order can be up to $150 — please split it, or order at the counter.",
+    ]);
+  });
+
+  it("the demo store refuses what the rules would, at the page's cap", async () => {
+    // ₹10,000 in paise is the demo's cap, whatever cafe it is previewing.
+    const over = [
+      {
+        menuItemId: "m1",
+        name: "Cappuccino",
+        qty: 1,
+        price: getSettingsSnapshot().settings.maxOrderTotal + 1,
+      },
+    ];
+    await expect(
+      demoOrderRepo.create({
+        tableNumber: 3,
+        items: over,
+        total: over[0].price,
+      }),
+    ).rejects.toThrow(/order over the size limits/);
   });
 });
 
@@ -352,7 +414,7 @@ describe("reports leave rejected orders out", () => {
   });
 
   it("and keeps them in the CSV, marked, with the reason", () => {
-    const csv = ordersToCsv(orders, "Asia/Kolkata").split("\n");
+    const csv = ordersToCsv(orders, "Asia/Kolkata", INR).split("\n");
     expect(csv[0]).toContain("Status");
     expect(csv[0]).toContain("Reject reason");
     const row = csv.find((l) => l.includes("Item b"));

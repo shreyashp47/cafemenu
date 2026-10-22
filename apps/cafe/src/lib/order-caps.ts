@@ -8,22 +8,31 @@
  * prank order is only useful to a prankster if it is big.
  *
  * Keep these equal to the numbers in firestore.rules — a unit test reads that
- * file to check.
+ * file to check. The total's cap is the cafe's own, `settings.maxOrderTotal`,
+ * which the rules read from config/site (₹10,000 for TOE; see
+ * defaultMaxOrderTotal in @cafemenu/shared for everyone else's).
  */
 
-import { formatINR, MAX_QTY_PER_LINE } from "./money";
+import { formatMoney, type CafeSettings } from "@cafemenu/shared";
+
+import { MAX_QTY_PER_LINE } from "./money";
 
 /** Distinct lines (menu items) in one order. */
 export const MAX_ORDER_LINES = 20;
-/** Whole rupees. */
-export const MAX_ORDER_TOTAL = 10_000;
 
 export { MAX_QTY_PER_LINE };
+
+/** What the caps need from the settings: the cap, and how to show it. */
+export type CapSettings = Pick<
+  CafeSettings,
+  "currency" | "locale" | "moneyUnit" | "maxOrderTotal"
+>;
 
 /** Everything that would make the rules refuse this basket, as sentences. */
 export function orderCapProblems(
   lines: ReadonlyArray<{ qty: number }>,
   total: number,
+  settings: CapSettings,
 ): string[] {
   const problems: string[] = [];
   if (lines.length > MAX_ORDER_LINES) {
@@ -34,9 +43,9 @@ export function orderCapProblems(
   if (lines.some((l) => l.qty > MAX_QTY_PER_LINE)) {
     problems.push(`Up to ${MAX_QTY_PER_LINE} of each item per order.`);
   }
-  if (total > MAX_ORDER_TOTAL) {
+  if (total > settings.maxOrderTotal) {
     problems.push(
-      `One order can be up to ${formatINR(MAX_ORDER_TOTAL)} — please split it, or order at the counter.`,
+      `One order can be up to ${formatMoney(settings.maxOrderTotal, settings)} — please split it, or order at the counter.`,
     );
   }
   return problems;

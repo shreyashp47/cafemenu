@@ -20,6 +20,7 @@ import {
 } from "../order-status";
 import { orderTotal } from "../money";
 import { orderCapProblems } from "../order-caps";
+import { getSettingsSnapshot } from "../settings";
 import { isTableKey, type TableKeys } from "../table-keys";
 import { displayNumberFromId } from "../order-number";
 import { assignInTransaction, type Assigned } from "../day-number";
@@ -58,7 +59,12 @@ import {
 } from "./seed";
 import type { NewOrderInput } from "./types";
 
-export const DEMO_STORAGE_KEY = "cafe-qr-order.demo.v1";
+/**
+ * v2: prices and totals in minor units (#12). A v1 state on the device is in
+ * whole units and is left behind rather than read 100 times too small; the
+ * demo starts again from the seed.
+ */
+export const DEMO_STORAGE_KEY = "cafe-qr-order.demo.v2";
 const SYNC_EVENT = "cafe-qr-order:sync";
 
 interface DemoState {
@@ -447,7 +453,12 @@ export function demoCreateOrder(input: NewOrderInput): Order {
   if (expected && input.tableKey !== expected) {
     throw new DemoRulesRefusal("wrong or missing table code");
   }
-  if (orderCapProblems(input.items, orderTotal(input.items)).length > 0) {
+  // The rules read the cap from config/site; the demo's stand-in is the
+  // settings the page is showing.
+  const { settings } = getSettingsSnapshot();
+  if (
+    orderCapProblems(input.items, orderTotal(input.items), settings).length > 0
+  ) {
     throw new DemoRulesRefusal("order over the size limits");
   }
   // Mirrors the status check: `pending` always, `preparing` unless approval

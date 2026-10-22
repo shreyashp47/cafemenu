@@ -185,6 +185,63 @@ describe("a real cafe", () => {
   });
 });
 
+// What the stored integers count (#12). TOE's data is whole rupees until #21
+// migrates it; nothing may read them as paise meanwhile.
+describe("money: the unit the page reads prices in", () => {
+  const toeBefore12 = { schemaVersion: 1, name: "TOE Cafe", currency: "INR" };
+  const inPaise = {
+    schemaVersion: 2,
+    name: "New Cafe",
+    moneyUnit: "minor",
+    maxOrderTotal: 1_000_000,
+  };
+  const money = () => {
+    const { moneyUnit, maxOrderTotal } = getSettingsSnapshot().settings;
+    return { moneyUnit, maxOrderTotal };
+  };
+
+  it("reads TOE's settings from before #12 as whole rupees", () => {
+    bootWith(firebase, siteJson(toeBefore12));
+    expect(money()).toEqual({ moneyUnit: "major", maxOrderTotal: 10_000 });
+    setLiveSettings(toeBefore12);
+    expect(money()).toEqual({ moneyUnit: "major", maxOrderTotal: 10_000 });
+  });
+
+  it("reads a cafe in minor units as minor units, with its cap", () => {
+    bootWith(firebase, siteJson(inPaise));
+    setLiveSettings({ ...inPaise, maxOrderTotal: 900_000 });
+    expect(money()).toEqual({ moneyUnit: "minor", maxOrderTotal: 900_000 });
+  });
+
+  it("goes by config/site when it is older than site.json, as the rules do", () => {
+    bootWith(firebase, siteJson(inPaise));
+    setLiveSettings(toeBefore12);
+    expect(money()).toEqual({ moneyUnit: "major", maxOrderTotal: 10_000 });
+  });
+
+  it("with no config/site, keeps site.json's unit but the rules' cap", () => {
+    bootWith(firebase, siteJson(inPaise));
+    setLiveSettings(null);
+    expect(money()).toEqual({ moneyUnit: "minor", maxOrderTotal: 10_000 });
+  });
+
+  it("with neither file, is a project from before CafeMenu: whole rupees", () => {
+    bootWith(firebase, { status: "missing" });
+    setLiveSettings(null);
+    expect(money()).toEqual({ moneyUnit: "major", maxOrderTotal: 10_000 });
+  });
+
+  it("in demo mode is always minor units, the demo store's", () => {
+    bootWith(
+      { kind: "demo" },
+      { status: "ok", value: { settings: toeBefore12, demo: true } },
+    );
+    expect(money()).toEqual({ moneyUnit: "minor", maxOrderTotal: 1_000_000 });
+    setLiveSettings({ currency: "JPY", moneyUnit: "major" });
+    expect(money()).toEqual({ moneyUnit: "minor", maxOrderTotal: 20_000 });
+  });
+});
+
 describe("the device's copy", () => {
   it("is the merged result, written when it changes", () => {
     bootWith(firebase, siteJson({ name: "TOE Cafe" }));

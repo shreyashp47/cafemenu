@@ -11,6 +11,7 @@ import {
   shiftMonth,
 } from "@/lib/reports";
 import type { Order } from "@/lib/types";
+import { CURRENCIES, INR, TOE_RUPEES } from "@/test/money";
 
 const KOLKATA = "Asia/Kolkata";
 const LONDON = "Europe/London";
@@ -294,6 +295,7 @@ describe("ordersToCsv", () => {
         }),
       ],
       KOLKATA,
+      INR,
     );
     const lines = csv.split("\n");
     expect(lines).toHaveLength(3);
@@ -316,6 +318,7 @@ describe("ordersToCsv", () => {
         }),
       ],
       KOLKATA,
+      INR,
     );
     expect(csv).toContain('"Cheese, chilli ""hot"""');
   });
@@ -327,6 +330,7 @@ describe("ordersToCsv", () => {
         order({ orderNumber: 1, createdAt: base }),
       ],
       KOLKATA,
+      INR,
     );
     const rows = csv.split("\n").slice(1);
     expect(rows[0].startsWith("#1,")).toBe(true);
@@ -340,6 +344,7 @@ describe("ordersToCsv", () => {
         order({ id: "xyz789", orderNumber: 417, createdAt: base + hour }),
       ],
       KOLKATA,
+      INR,
     );
     const [header, ...rows] = csv.split("\n");
     expect(header.split(",").slice(0, 2)).toEqual(["Order #", "Order ID"]);
@@ -353,6 +358,7 @@ describe("ordersToCsv", () => {
     const csv = ordersToCsv(
       [order({ id: "late", createdAt: Date.parse("2026-09-28T18:29:00Z") })],
       KOLKATA,
+      INR,
     );
     const [header, row] = csv.split("\n");
     const cols = header.split(",");
@@ -370,6 +376,7 @@ describe("ordersToCsv", () => {
         order({ id: "gmt", createdAt: at("2026-10-25T01:30:00Z") }),
       ],
       LONDON,
+      INR,
     );
     const [header, ...rows] = csv.split("\n");
     const cols = header.split(",");
@@ -402,6 +409,7 @@ describe("ordersToCsv", () => {
         }),
       ],
       KOLKATA,
+      INR,
     );
     const rows = csv.split("\n").slice(1);
     expect(rows[0].split(",")[0]).toBe("#417");
@@ -409,6 +417,79 @@ describe("ordersToCsv", () => {
   });
 
   it("produces just a header for no orders", () => {
-    expect(ordersToCsv([], KOLKATA).split("\n")).toHaveLength(1);
+    expect(ordersToCsv([], KOLKATA, INR).split("\n")).toHaveLength(1);
+  });
+});
+
+describe("ordersToCsv: amounts in the cafe's currency", () => {
+  it.each([
+    ["INR in paise", INR, 18_050, "180.50", "361.00"],
+    ["USD in cents", CURRENCIES[1].settings, 450, "4.50", "9.00"],
+    ["JPY", CURRENCIES[2].settings, 450, "450", "900"],
+    ["TOE's whole rupees", TOE_RUPEES, 180, "180", "360"],
+  ])(
+    "%s: plain decimals, and the currency named",
+    (_, money, price, unit, sum) => {
+      const csv = ordersToCsv(
+        [
+          order({
+            items: [{ menuItemId: "l", name: "Latte", qty: 2, price }],
+            total: price * 2,
+          }),
+        ],
+        KOLKATA,
+        money,
+      );
+      const [header, row] = csv.split("\n");
+      const cols = header.split(",");
+      const cells = row.split(",");
+      expect(cells[cols.indexOf("Unit price")]).toBe(unit);
+      expect(cells[cols.indexOf("Line total")]).toBe(sum);
+      expect(cells[cols.indexOf("Order total")]).toBe(sum);
+      expect(cells[cols.indexOf("Currency")]).toBe(money.currency);
+      expect(cols.at(-1)).toBe("Currency");
+    },
+  );
+
+  it("adds up the items, not a doctored total, in the cafe's unit", () => {
+    const csv = ordersToCsv(
+      [
+        order({
+          items: [{ menuItemId: "l", name: "Latte", qty: 2, price: 450 }],
+          total: 1,
+        }),
+      ],
+      KOLKATA,
+      CURRENCIES[1].settings,
+    );
+    const [header, row] = csv.split("\n");
+    expect(row.split(",")[header.split(",").indexOf("Order total")]).toBe(
+      "9.00",
+    );
+  });
+});
+
+describe.each(CURRENCIES)("buildReport in $code", (c) => {
+  const range = { from: base - day, to: base + day };
+
+  it("sums revenue in the stored unit, and averages to a whole one", () => {
+    const report = buildReport(
+      [
+        order({
+          items: [{ menuItemId: "l", name: "Latte", qty: 1, price: c.latte }],
+        }),
+        order({
+          items: [
+            { menuItemId: "l", name: "Latte", qty: 1, price: c.latte + 1 },
+          ],
+        }),
+      ],
+      range,
+      KOLKATA,
+    );
+    expect(report.revenue).toBe(c.latte * 2 + 1);
+    expect(Number.isInteger(report.averageOrderValue)).toBe(true);
+    expect(report.averageOrderValue).toBe(c.latte + 1);
+    expect(report.topItems[0]).toMatchObject({ name: "Latte", qty: 2 });
   });
 });

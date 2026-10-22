@@ -24,7 +24,7 @@ import { useCafeSettings } from "@/hooks/useCafeSettings";
 import { useFeatures } from "@/hooks/useFeatures";
 import { demoSeedOrders } from "@/lib/data/demo-store";
 import { buildSampleOrders } from "@/lib/data/sample-orders";
-import { formatINR } from "@/lib/money";
+import { formatMoney } from "@/lib/money";
 import { summariseIntegrity } from "@/lib/order-integrity";
 import { fromInputDate, presetRange, toInputDate } from "@/lib/order-history";
 import { orderLabel } from "@/lib/order-number";
@@ -47,7 +47,8 @@ export default function ReportsPage() {
   // The plan's say on the CSV download (issue #17). Every plan has it today.
   const { csvExport } = useFeatures();
   // Months and days are the cafe's, wherever the owner is looking from.
-  const { timeZone } = useCafeSettings().settings;
+  const { settings } = useCafeSettings();
+  const { timeZone } = settings;
   const [mode, setMode] = useState<Mode>("month");
   const [cursor, setCursor] = useState(() => currentMonth(timeZone));
   const [from, setFrom] = useState(() =>
@@ -111,12 +112,12 @@ export default function ReportsPage() {
   // Rejected orders were never charged, so a doctored total on one is not
   // something the counter needs to reconcile.
   const integrity = useMemo(
-    () => summariseIntegrity(orders.filter(countsAsSale), menu),
-    [orders, menu],
+    () => summariseIntegrity(orders.filter(countsAsSale), menu, settings),
+    [orders, menu, settings],
   );
 
   function downloadCsv() {
-    const csv = ordersToCsv(orders, timeZone);
+    const csv = ordersToCsv(orders, timeZone, settings);
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -238,7 +239,7 @@ export default function ReportsPage() {
           <ul className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
             <Stat
               label="Revenue"
-              value={formatINR(report.revenue)}
+              value={formatMoney(report.revenue, settings)}
               icon="chart"
             />
             <Stat
@@ -248,7 +249,7 @@ export default function ReportsPage() {
             />
             <Stat
               label="Average order"
-              value={formatINR(report.averageOrderValue)}
+              value={formatMoney(report.averageOrderValue, settings)}
               icon="sparkle"
             />
           </ul>
@@ -349,7 +350,7 @@ export default function ReportsPage() {
                         {item.qty}
                       </td>
                       <td className="tnum text-primary px-2 py-2 text-right font-semibold">
-                        {formatINR(item.revenue)}
+                        {formatMoney(item.revenue, settings)}
                       </td>
                       <td className="px-4 py-2">
                         <span
@@ -408,6 +409,7 @@ function RevenueChart({
 }: {
   report: NonNullable<ReturnType<typeof buildReport>>;
 }) {
+  const { settings } = useCafeSettings();
   const peak = peakDay(report.byDay);
   // Fixed pixel bar area. A percentage height resolves against an auto-height
   // flex item, which collapses every bar to zero — this bit us once already.
@@ -435,7 +437,7 @@ function RevenueChart({
             <li
               key={day.date}
               className="flex min-w-0 flex-1 flex-col items-center gap-1.5"
-              title={`${day.label}: ${formatINR(day.revenue)} from ${
+              title={`${day.label}: ${formatMoney(day.revenue, settings)} from ${
                 day.orders
               } order${day.orders === 1 ? "" : "s"}`}
             >
@@ -456,7 +458,7 @@ function RevenueChart({
         Best day:{" "}
         <span className="tnum text-ink font-semibold">
           {best
-            ? `${best.label} · ${formatINR(best.revenue)} from ${best.orders} order${
+            ? `${best.label} · ${formatMoney(best.revenue, settings)} from ${best.orders} order${
                 best.orders === 1 ? "" : "s"
               }`
             : "—"}

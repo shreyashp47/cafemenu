@@ -30,7 +30,7 @@ import {
   friendlySignInError,
   friendlyStatusError,
 } from "@/lib/friendly-errors";
-import { formatINR, formatWait, lineSubtotal } from "@/lib/money";
+import { formatMoney, formatWait, lineSubtotal } from "@/lib/money";
 import { checkOrderIntegrity } from "@/lib/order-integrity";
 import { orderLabel, padDayNumber } from "@/lib/order-number";
 import {
@@ -561,6 +561,7 @@ function OrderTicket({
   onAdvance: (to: OrderStatus) => void;
   onReject: (reason?: string) => void;
 }) {
+  const { settings } = useCafeSettings();
   // Rejecting is a two-step action on the ticket itself, not a browser
   // confirm(): the counter tablet is often an installed app where the native
   // dialog looks like a system error, and the second step is also where the
@@ -581,7 +582,10 @@ function OrderTicket({
   const actions = actionsFor(order.status);
   // The total on the order came from the customer's phone. Re-derive it here,
   // where the money is taken, so a doctored one cannot slip past the counter.
-  const check = useMemo(() => checkOrderIntegrity(order, menu), [order, menu]);
+  const check = useMemo(
+    () => checkOrderIntegrity(order, menu, settings),
+    [order, menu, settings],
+  );
 
   return (
     <Card
@@ -641,7 +645,7 @@ function OrderTicket({
               {line.name}
             </span>
             <span className="tnum text-muted shrink-0 text-sm">
-              {formatINR(lineSubtotal(line))}
+              {formatMoney(lineSubtotal(line), settings)}
             </span>
           </li>
         ))}

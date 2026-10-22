@@ -18,7 +18,10 @@ export interface MenuItem {
   id: string;
   name: string;
   description: string;
-  /** Rupees. Stored as a whole number of rupees to avoid float drift. */
+  /**
+   * An integer in the cafe's money unit (settings.moneyUnit): paise, cents,
+   * yen, or TOE's whole rupees until #21. Never a float, so sums never drift.
+   */
   price: number;
   category: string;
   available: boolean;

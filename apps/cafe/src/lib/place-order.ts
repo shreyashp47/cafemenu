@@ -9,7 +9,7 @@
 
 import { loadBundle, type DataBundle, type NewOrderInput } from "./data";
 import { priceCart } from "./money";
-import { orderCapProblems } from "./order-caps";
+import { orderCapProblems, type CapSettings } from "./order-caps";
 import {
   OrderThrottled,
   readLastOrderAt,
@@ -28,6 +28,8 @@ export interface PlaceOrderArgs {
   paymentMethod?: Order["paymentMethod"];
   /** The table's QR code, from the scanned link or remembered from it. */
   tableKey?: string | null;
+  /** The cafe's currency and order cap (settings). */
+  settings: CapSettings;
 }
 
 /**
@@ -63,6 +65,7 @@ export async function placeOrder({
   notes,
   paymentMethod = "counter",
   tableKey,
+  settings,
 }: PlaceOrderArgs): Promise<Order> {
   if (!Number.isInteger(tableNumber) || tableNumber < 1) {
     throw new Error("We lost track of your table. Please scan again.");
@@ -75,12 +78,12 @@ export async function placeOrder({
   // subscription value, so this is the same data the staff board sees.
   // A price change is not fatal — the customer is charged the new price, which
   // the checkout button already displayed. A sold-out or deleted item is.
-  const check = priceCart(cartLines, menu);
+  const check = priceCart(cartLines, menu, settings);
   if (check.blocking.length > 0) {
     throw new OrderRejected(check.blocking);
   }
   // The rules refuse these too, with nothing but "permission-denied".
-  const tooBig = orderCapProblems(check.lines, check.total);
+  const tooBig = orderCapProblems(check.lines, check.total, settings);
   if (tooBig.length > 0) throw new OrderRejected(tooBig);
 
   // One order per customer per ORDER_GAP_SECONDS (issue #32). The rules enforce

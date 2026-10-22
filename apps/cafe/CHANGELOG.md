@@ -32,6 +32,19 @@ Work that is built but not yet merged is tracked in
   zone's two offsets in `config/site` (one more document read per numbered
   order). Without `config/site` it is India's, as before. See
   docs/decisions.md, "Any time zone".
+- **Any currency** (#12). Prices and totals are integers in the cafe's money
+  unit, `settings.moneyUnit`: minor units (paise, cents; yen have none) for
+  every new cafe and the demo, or whole units for TOE until its data moves
+  (#21). `formatINR` is `formatMoney(amount, settings)`: "₹180", "₹180.50",
+  "$4.50", "¥1,200". The menu editor's price field shows the cafe's symbol and
+  takes decimals where the currency has them. The CSV writes amounts as plain
+  decimals and adds a "Currency" column. Settings documents from before (schema
+  version 1, TOE's) read as whole units, so no menu shows prices 100× off; see
+  docs/decisions.md, "Any currency".
+- `firestore.rules`: an order's total cap is the cafe's own,
+  `config/site.maxOrderTotal`, in its money unit (one more document read per
+  order); without one, TOE's 10,000. The demo's saved state moves to a new key
+  (`cafe-qr-order.demo.v2`), since it is now in paise.
 
 ### Added
 

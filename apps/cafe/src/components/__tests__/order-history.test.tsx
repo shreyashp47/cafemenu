@@ -22,7 +22,8 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { demoAuthRepo, demoOrderRepo } from "@/lib/data/demo";
 import { demoSeedOrders, resetDemoStore } from "@/lib/data/demo-store";
 import { DEMO_CREDENTIALS } from "@/lib/data/seed";
-import { formatINR } from "@/lib/money";
+import { formatMoney } from "@/lib/money";
+import { getSettingsSnapshot } from "@/lib/settings";
 import {
   HISTORY_LIMIT,
   TERMINAL_STATUSES,
@@ -52,7 +53,7 @@ function line(name: string, price: number, qty = 1) {
 
 type Seed = Omit<Order, "id" | "orderNumber">;
 function seed(over: Partial<Seed>): Seed {
-  const items = over.items ?? [line("Masala Chai", 60)];
+  const items = over.items ?? [line("Masala Chai", 6_000)];
   return {
     tableNumber: 1,
     items,
@@ -68,7 +69,7 @@ const SEEDS: Seed[] = [
   seed({
     tableNumber: 2,
     createdAt: at(0, 9),
-    items: [line("Cappuccino", 180, 2), line("Blueberry Scone", 120)],
+    items: [line("Cappuccino", 18_000, 2), line("Blueberry Scone", 12_000)],
     notes: "Less sugar",
   }),
   seed({ tableNumber: 4, createdAt: at(0, 11), status: "preparing" }),
@@ -76,8 +77,8 @@ const SEEDS: Seed[] = [
   seed({
     tableNumber: 4,
     createdAt: at(0, 12),
-    items: [line("Cold Brew", 200)],
-    total: 20,
+    items: [line("Cold Brew", 20_000)],
+    total: 2_000,
   }),
   seed({ tableNumber: 3, createdAt: at(1, 13) }),
   seed({ tableNumber: 5, createdAt: at(5, 14) }),
@@ -217,11 +218,11 @@ describe("order history: summary", () => {
     const report = buildReport(await allStored(), month, KOLKATA);
     expect(
       await screen.findByText(
-        `${report.orderCount} orders · ${formatINR(report.revenue)}`,
+        `${report.orderCount} orders · ${formatMoney(report.revenue, getSettingsSnapshot().settings)}`,
       ),
     ).toBeInTheDocument();
     // from the items, so the ₹20 order counts as ₹200
-    expect(report.revenue).toBe(480 + 60 + 200 + 60 + 60 + 60);
+    expect(report.revenue).toBe((480 + 60 + 200 + 60 + 60 + 60) * 100);
   });
 });
 

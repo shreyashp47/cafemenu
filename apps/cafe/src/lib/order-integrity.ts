@@ -28,7 +28,9 @@
  * The figure to charge is `menuTotal`: what the basket costs at today's menu.
  */
 
-import { formatINR, orderTotal } from "./money";
+import { formatMoney, type MoneySettings } from "@cafemenu/shared";
+
+import { orderTotal } from "./money";
 import type { MenuItem, Order } from "./types";
 
 export type IntegrityIssueKind =
@@ -61,14 +63,16 @@ export interface IntegrityCheck {
 export function checkOrderIntegrity(
   order: Pick<Order, "items" | "total">,
   menu: readonly MenuItem[],
+  money: MoneySettings,
 ): IntegrityCheck {
+  const fmt = (amount: number) => formatMoney(amount, money);
   const issues: IntegrityIssue[] = [];
   const linesTotal = orderTotal(order.items);
 
   if (linesTotal !== order.total) {
     issues.push({
       kind: "total-mismatch",
-      message: `Order says ${formatINR(order.total)}, but its items add up to ${formatINR(linesTotal)}.`,
+      message: `Order says ${fmt(order.total)}, but its items add up to ${fmt(linesTotal)}.`,
     });
   }
 
@@ -92,7 +96,7 @@ export function checkOrderIntegrity(
       if (item.price !== line.price) {
         issues.push({
           kind: "price-differs",
-          message: `${line.name}: ${formatINR(line.price)} on the order, ${formatINR(item.price)} on the menu.`,
+          message: `${line.name}: ${fmt(line.price)} on the order, ${fmt(item.price)} on the menu.`,
         });
       }
       if (item.name.trim().toLowerCase() !== line.name.trim().toLowerCase()) {
@@ -122,6 +126,7 @@ export function checkOrderIntegrity(
 export function summariseIntegrity(
   orders: readonly Order[],
   menu: readonly MenuItem[],
+  money: MoneySettings,
 ): {
   totalMismatch: Order[];
   differsFromMenu: Order[];
@@ -129,7 +134,7 @@ export function summariseIntegrity(
   const totalMismatch: Order[] = [];
   const differsFromMenu: Order[] = [];
   for (const order of orders) {
-    const check = checkOrderIntegrity(order, menu);
+    const check = checkOrderIntegrity(order, menu, money);
     if (check.issues.some((i) => i.kind === "total-mismatch")) {
       totalMismatch.push(order);
     } else if (!check.ok) {

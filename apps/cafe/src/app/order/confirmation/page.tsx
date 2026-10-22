@@ -30,7 +30,8 @@ import { WaitingForCounter } from "@/components/WaitingForCounter";
 import { useCart } from "@/hooks/useCart";
 import { dropKeyFromAddress } from "@/hooks/useTableCode";
 import { useTableQuery } from "@/hooks/useTableQuery";
-import { formatINR, lineSubtotal } from "@/lib/money";
+import { useCafeSettings } from "@/hooks/useCafeSettings";
+import { formatMoney, lineSubtotal } from "@/lib/money";
 import {
   CUSTOMER_STEPS,
   isFinalForCustomer,
@@ -144,6 +145,7 @@ function StatusScreen({
   orderId: string;
   onRemember: () => void;
 }) {
+  const { settings } = useCafeSettings();
   const { order, loading } = useOrder(orderId);
   const offer = useSpecialOffer();
   // the live menu is only needed so the cart reconciler can drop sold-out lines
@@ -277,14 +279,14 @@ function StatusScreen({
                   {line.name}
                 </span>
                 <span className="tnum text-body shrink-0 font-semibold">
-                  {formatINR(lineSubtotal(line))}
+                  {formatMoney(lineSubtotal(line), settings)}
                 </span>
               </li>
             ))}
             <li className="bg-highlight-soft/40 flex items-center justify-between gap-3 px-4 py-3">
               <span className="font-round text-ink text-lg">Total</span>
               <span className="tnum font-round text-primary text-xl">
-                {formatINR(order.total)}
+                {formatMoney(order.total, settings)}
               </span>
             </li>
           </ul>

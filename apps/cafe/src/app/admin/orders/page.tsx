@@ -31,7 +31,7 @@ import { cn } from "@/lib/cn";
 import { demoSeedOrders } from "@/lib/data/demo-store";
 import { buildSampleOrders } from "@/lib/data/sample-orders";
 import { friendlyLoadError } from "@/lib/friendly-errors";
-import { formatINR, lineSubtotal, orderTotal } from "@/lib/money";
+import { formatMoney, lineSubtotal, orderTotal } from "@/lib/money";
 import { checkOrderIntegrity } from "@/lib/order-integrity";
 import { orderLabel } from "@/lib/order-number";
 import {
@@ -90,7 +90,8 @@ export default function OrderHistoryPage() {
   const repo = useOrderRepo();
   const isDemo = useIsDemo();
   const { items: menu } = useMenu();
-  const { timeZone } = useCafeSettings().settings;
+  const { settings } = useCafeSettings();
+  const { timeZone } = settings;
   const clock = useMemo(() => cafeClock(timeZone), [timeZone]);
 
   const [from, setFrom] = useState(() => {
@@ -185,7 +186,7 @@ export default function OrderHistoryPage() {
 
   function downloadCsv() {
     if (!range) return;
-    const csv = ordersToCsv(filtered, timeZone);
+    const csv = ordersToCsv(filtered, timeZone, settings);
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -285,7 +286,7 @@ export default function OrderHistoryPage() {
                   data-testid="history-summary"
                 >
                   {plural(report.orderCount, "order")} ·{" "}
-                  {formatINR(report.revenue)}
+                  {formatMoney(report.revenue, settings)}
                 </p>
                 <p className="text-muted text-sm">
                   {notCounted > 0
@@ -382,7 +383,7 @@ export default function OrderHistoryPage() {
                 <p className="border-line-soft text-muted tnum border-b-2 px-4 py-2.5 text-sm">
                   Showing {plural(filtered.length, "order")} of {orders.length}
                   {" · "}
-                  {formatINR(filteredReport.revenue)} in sales
+                  {formatMoney(filteredReport.revenue, settings)} in sales
                 </p>
               ) : null}
               <ul className="divide-line-soft divide-y-2">
@@ -498,7 +499,11 @@ function HistoryRow({
   open: boolean;
   onToggle: () => void;
 }) {
-  const check = useMemo(() => checkOrderIntegrity(order, menu), [order, menu]);
+  const { settings } = useCafeSettings();
+  const check = useMemo(
+    () => checkOrderIntegrity(order, menu, settings),
+    [order, menu, settings],
+  );
   const mismatch = check.issues.some((i) => i.kind === "total-mismatch");
   const count = itemCount(order);
   const panelId = `history-${order.id}`;
@@ -541,7 +546,7 @@ function HistoryRow({
                 <span className="sr-only">Total doesn&apos;t match items:</span>
               </>
             ) : null}
-            {formatINR(order.total)}
+            {formatMoney(order.total, settings)}
           </span>
           <StatusBadge status={order.status} size="sm" />
         </span>
@@ -573,6 +578,7 @@ function OrderDetails({
   check: ReturnType<typeof checkOrderIntegrity>;
   clock: CafeClock;
 }) {
+  const { settings } = useCafeSettings();
   const [copied, setCopied] = useState(false);
   const reason = rejectReasonOf(order);
   const mismatch = check.issues.find((i) => i.kind === "total-mismatch");
@@ -601,17 +607,17 @@ function OrderDetails({
           >
             <span className="text-ink min-w-0 flex-1">{line.name}</span>
             <span className="tnum text-muted shrink-0">
-              {line.qty} × {formatINR(line.price)}
+              {line.qty} × {formatMoney(line.price, settings)}
             </span>
             <span className="tnum text-ink w-16 shrink-0 text-right font-semibold">
-              {formatINR(lineSubtotal(line))}
+              {formatMoney(lineSubtotal(line), settings)}
             </span>
           </li>
         ))}
         <li className="flex items-baseline justify-between gap-2 px-3 py-2">
           <span className="text-ink font-semibold">Total</span>
           <span className="tnum font-round text-primary text-base">
-            {formatINR(order.total)}
+            {formatMoney(order.total, settings)}
           </span>
         </li>
       </ul>
@@ -625,7 +631,8 @@ function OrderDetails({
           <span className="font-semibold">
             Total doesn&apos;t match its items.
           </span>{" "}
-          {mismatch.message} Reports count {formatINR(orderTotal(order.items))}.
+          {mismatch.message} Reports count{" "}
+          {formatMoney(orderTotal(order.items), settings)}.
         </p>
       ) : null}
 

@@ -118,12 +118,14 @@ Two independent defences:
   re-prices the basket against the live menu. A sold-out or deleted item is
   rejected outright; a price change is applied and shown, not blocked, because
   stranding a customer mid-checkout over ₹30 is worse than charging the current
-  price. Totals are integer rupees — the cafe has no paise, and float sums on a
-  menu are a rounding bug waiting to happen.
+  price. Totals are integers in the cafe's money unit (paise, cents, yen; see
+  "Any currency" below) — float sums on a menu are a rounding bug waiting to
+  happen.
 - **Server**, in `firestore.rules`: the `create` rule pins `status` to
   `preparing`, requires `createdAt == request.time` so a phone cannot backdate an
   order out of a reporting month, restricts the document to an exact field set so
-  nothing extra can be injected, and requires `total` to be a bounded integer.
+  nothing extra can be injected, and requires `total` to be an integer within
+  the cafe's cap.
 
 **The gap, stated plainly:** the rules cannot recompute the total. Firestore rules
 have no loops, no lambdas and no `reduce`, so there is no way to sum a
@@ -547,7 +549,8 @@ one.** Plus order size caps in the rules, and a staff **Reject** (a terminal
   guests: see
   [Staff confirm new guests](#staff-confirm-new-guests-open-tables-not-location)
   below.
-- **Caps** (20 lines, 20 of each, ₹10,000) check the first and last line only:
+- **Caps** (20 lines, 20 of each, the cafe's total cap: ₹10,000 for TOE) check
+  the first and last line only:
   the rules cannot loop. The total cap, the board's re-derived totals and
   Reject cover a doctored middle line.
 
@@ -773,3 +776,111 @@ then, the board may be refused for an hour around midnight, and stops numbering
 after three refusals (the ticket shows the older number), as for any refusal.
 A browser whose own zone data is out of date can disagree with the platform the
 same way.
+
+### Any currency: integers in the cafe's unit, and TOE's rupees until #21
+
+TOE stored whole rupees, formatted them with `formatINR` (`en-IN`, no
+decimals), and the rules capped an order at `total <= 10000`. CafeMenu serves
+cafes in any currency (#12): cents and paise, currencies with no minor unit
+(JPY) and currencies with three digits (KWD).
+
+**Decision: every price and total is an integer in the cafe's money unit,
+`settings.moneyUnit`.**
+
+- **`"minor"`**: the currency's smallest unit, with the number of digits
+  `Intl.NumberFormat(locale, { style: "currency", currency })` resolves to:
+  2 for INR, USD and EUR, 0 for JPY, 3 for KWD. ₹180.50 is `18050`, $4.50 is
+  `450`, ¥450 is `450`. Every new cafe, and the demo store.
+- **`"major"`**: whole units of the currency. TOE's data, until #21 migrates
+  it. ₹180 is `180`, and there is no ₹180.50.
+- **The maths never asks which.** Cart and order totals, the staff board's
+  integrity check and the reports add integers, so they work on either.
+  Three things turn integers into money, all in
+  [`packages/shared/src/money.ts`](../../../packages/shared/src/money.ts) so the
+  console uses the same ones: `formatMoney(amount, settings)` on screen,
+  `parseMoneyInput` in the admin price field ("Price (₹)", decimals only where
+  the currency has them, a point or a comma), and `moneyToDecimal` in the CSV.
+- **On screen, decimals only when there is something after the point**: ₹180,
+  ₹180.50, $4, $4.50, ¥1,200. TOE's menu reads exactly as it did.
+- **The CSV** writes amounts as plain decimals with every place, "180.00",
+  "4.50", "1200", no symbol or grouping, so a spreadsheet in any locale reads
+  numbers; a new last column, "Currency", names the ISO code. The headers TOE's
+  sheets use are unchanged. While TOE is in whole rupees its amounts stay whole
+  numbers.
+- **The order cap is per cafe**: `settings.maxOrderTotal`, in its money unit.
+  The platform writes it to `config/site`, which `orderWithinCap` in
+  `firestore.rules` reads, as `dayKeyOk` reads the time zone's offsets; it also
+  bounds the first line's unit price, which was `<= 10000`. A cafe starts with
+  `defaultMaxOrderTotal`: about US$150, with TOE's ₹10,000 setting the scale
+  ($150, €150, ¥20,000, ₹10,000), and 1,000,000 whole units for a currency the
+  table does not list, so that an unlisted currency errs towards taking honest
+  orders. No `config/site`, or one with no cap, is TOE's 10,000; a cap that is
+  not a number refuses every order rather than guess. Cost: one more document
+  read per order (`config/site`), after the shape checks.
+
+**The transition: how TOE's whole rupees are read until #21.** The risk is a
+page reading `180` rupees as 180 paise, ₹1.80, or a migrated `18000` paise as
+₹18,000. The marker is the settings' schema version:
+
+- `SETTINGS_SCHEMA_VERSION` is now 2, which adds `moneyUnit` and
+  `maxOrderTotal`; `validateCafeSettings` requires both, so every document the
+  platform writes from now on says its unit.
+- Every settings document written before is version 1 and has neither. Its
+  cafe's data is whole units, because every cafe's was. So `parseCafeSettings`
+  reads a version 1 layer as `LEGACY_MONEY`, `{ moneyUnit: "major",
+maxOrderTotal: 10000 }`, whatever the layer under it says. A missing field
+  is not the signal on its own: the demo (`DEFAULT_SETTINGS`) is in minor units,
+  and a partial layer must not turn it into rupees.
+- The page goes by `config/site` when it has one, since that is what the rules
+  read: a version 1 `config/site` under a newer `site.json` reads as rupees.
+  With no `config/site` the rules cap at 10,000, so the page does too
+  (`moneyFor` in [`src/lib/settings.ts`](../src/lib/settings.ts)); with no
+  `site.json` either, it is a project from before CafeMenu, in whole rupees.
+  The platform has to write `config/site` for every new cafe, as it already
+  must for the time zone.
+- The demo store is always in minor units: its seed is in paise, its
+  localStorage key moved to `cafe-qr-order.demo.v2` so a saved demo from
+  before is dropped rather than read 100 times too small, and a preview of a
+  cafe still in rupees shows it as #21 will leave it.
+- `fixtures/toe.json` is TOE as the platform writes it from now until #21:
+  version 2, `"moneyUnit": "major"`, `"maxOrderTotal": 10000`.
+
+So nothing reads TOE's rupees as paise: the only thing that can say "minor"
+about TOE is a `config/site` the platform writes after the data has moved.
+
+**What #21 then does** (its design to finish; this is what the app is ready
+for):
+
+1. Run while the cafe is closed. The move is not one atomic write: a batch
+   holds 500 documents, and the orders may be more.
+2. Multiply `menu/*.price`, `orders/*.total` and every `orders/*.items[].price`
+   by 100 (10 to the currency's digits).
+3. Then write `config/site` at version 2 with `"moneyUnit": "minor"` and
+   `"maxOrderTotal": 1000000`, and redeploy `site.json` to match. Open pages
+   follow `config/site` live, so the switch is that one write. Until it lands,
+   migrated documents show 100 times too large and the rules still cap at
+   10,000 paise: big orders are refused, nothing is undercharged, which is why
+   it runs while the cafe is closed. Expand-then-contract, with the paise in
+   new fields beside the rupees, would avoid the window at the cost of the app
+   reading both shapes; that is #21's call.
+4. Refuse rollbacks to a release from before this one, which would read paise
+   as rupees: `minSchemaVersion` in `migrations/schema.json`. This release and
+   later read either unit.
+
+**Considered and not taken:**
+
+- **Decimal prices as floats.** Sums drift; TOE ruled them out for the same
+  reason.
+- **Two digits for every currency.** Wrong for yen (no minor unit) and for
+  dinars (three).
+- **A unit on every document** (each menu item and order saying what it
+  counts). No switch moment, but the order rules and every write would carry
+  it forever, and history would keep two shapes.
+- **The cap in the release's `firestore.rules`.** One verified rules file
+  serves every cafe (#19), so per-cafe numbers live in `config/site`.
+
+**Limits:** changing a cafe's currency is a migration, not a settings edit:
+the digits can change (INR to JPY is 2 to 0) and the stored integers would
+mean something else. The console should refuse it, or run a migration, once a
+cafe has a menu. The cap table is a 2026 snapshot of exchange rates; the
+platform can store any cap per cafe.

@@ -2,18 +2,23 @@
  * Money + order maths. Every calculation the app and the reports rely on lives
  * here so it can be unit-tested without a browser (see src/lib/__tests__).
  *
- * Prices are whole rupees (integers). Totals are computed from integers, never
- * by summing floats, so a cart can never show 99.999999999 rupees.
+ * Prices are integers in the cafe's money unit (`settings.moneyUnit`): paise,
+ * cents or yen, or whole rupees for TOE until #21 migrates it. The sums here
+ * never need to know which. Totals are computed from integers, never by summing
+ * floats, so a cart can never show 99.999999999. Turning an integer into money
+ * on screen is formatMoney, in @cafemenu/shared, with the cafe's settings.
  */
+
+import { formatMoney, type MoneySettings } from "@cafemenu/shared";
 
 import type { CartLine, MenuItem, Order, OrderLine } from "./types";
 
-/** Per-line subtotal, in rupees. */
+/** Per-line subtotal, in the cafe's unit. */
 export function lineSubtotal(line: Pick<OrderLine, "price" | "qty">): number {
   return Math.round(line.price) * Math.max(0, Math.round(line.qty));
 }
 
-/** Cart total, in rupees. */
+/** Cart total, in the cafe's unit. */
 export function cartTotal(lines: CartLine[]): number {
   return lines.reduce((sum, line) => sum + lineSubtotal(line), 0);
 }
@@ -47,7 +52,7 @@ export function clampQty(qty: number): number {
  *   - `blocking`: the item was deleted or sold out. The order cannot be placed.
  *   - `changes`: only the price moved. The customer has already seen the fresh
  *     total (the CTA always renders `check.total`), so this is informational —
- *     blocking here would strand a customer mid-checkout over a few rupees.
+ *     blocking here would strand a customer mid-checkout over small change.
  */
 export interface PriceCheck {
   ok: boolean;
@@ -60,7 +65,11 @@ export interface PriceCheck {
   changes: string[];
 }
 
-export function priceCart(lines: CartLine[], menu: MenuItem[]): PriceCheck {
+export function priceCart(
+  lines: CartLine[],
+  menu: MenuItem[],
+  money: MoneySettings,
+): PriceCheck {
   const byId = new Map(menu.map((item) => [item.id, item]));
   const out: OrderLine[] = [];
   const blocking: string[] = [];
@@ -79,7 +88,7 @@ export function priceCart(lines: CartLine[], menu: MenuItem[]): PriceCheck {
     }
     if (item.price !== line.price) {
       stale = true;
-      changes.push(`${line.name} is now ${formatINR(item.price)}.`);
+      changes.push(`${line.name} is now ${formatMoney(item.price, money)}.`);
     }
     out.push({
       menuItemId: item.id,
@@ -112,17 +121,7 @@ export function withConsistentTotal(order: Order): Order {
 
 // --- formatting -------------------------------------------------------------
 
-const inr = new Intl.NumberFormat("en-IN", {
-  style: "currency",
-  currency: "INR",
-  maximumFractionDigits: 0,
-});
-
-/** "₹180" — no decimals anywhere in the UI; the cafe prices in whole rupees. */
-export function formatINR(amount: number): string {
-  if (!Number.isFinite(amount)) return inr.format(0);
-  return inr.format(Math.round(amount));
-}
+export { formatMoney };
 
 const timeFmt = new Intl.DateTimeFormat("en-IN", {
   hour: "numeric",

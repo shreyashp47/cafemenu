@@ -2,14 +2,22 @@
  * Report aggregation (docs/requirements.md §4.3 steps 3–4, §5.4).
  *
  * Pure functions over an order list so the maths can be unit-tested and reused
- * by both the dashboard and the CSV export. Everything is whole rupees.
+ * by both the dashboard and the CSV export. Every amount is an integer in the
+ * cafe's money unit (src/lib/money.ts); only the CSV turns them into decimals.
  *
  * Days and months are the cafe's, in its time zone (settings.timeZone), not
  * the zone of whatever device the owner opens the page on: a day's bar is the
  * same orders the day's numbers count, wherever the owner is.
  */
 
-import { addMonths, dayKeyIn, dayStartIn, wallTimeIn } from "@cafemenu/shared";
+import {
+  addMonths,
+  dayKeyIn,
+  dayStartIn,
+  moneyToDecimal,
+  wallTimeIn,
+  type MoneySettings,
+} from "@cafemenu/shared";
 
 import { orderTotal } from "./money";
 import { orderLabel } from "./order-number";
@@ -233,8 +241,19 @@ function csvCell(value: unknown): string {
  * Rejected orders stay in the export, with "rejected" in the Status column and
  * the staff's reason, so the file is a complete record. Anyone summing it for
  * takings must filter on Status, the way the dashboard does.
+ *
+ * Amounts are plain decimals in the cafe's currency, every decimal place
+ * written ("180.00", "4.50", "1200" for yen), with no symbol or grouping, so a
+ * spreadsheet reads them as numbers in any locale. The last column names the
+ * currency. While a cafe keeps whole units (TOE until #21) they are whole
+ * numbers, as they always were.
  */
-export function ordersToCsv(orders: Order[], timeZone: string): string {
+export function ordersToCsv(
+  orders: Order[],
+  timeZone: string,
+  money: MoneySettings,
+): string {
+  const amount = (n: number) => moneyToDecimal(n, money, { padded: true });
   const header = [
     "Order #",
     "Order ID",
@@ -251,6 +270,7 @@ export function ordersToCsv(orders: Order[], timeZone: string): string {
     "Payment",
     "Notes",
     "Reject reason",
+    "Currency",
   ];
 
   const rows: string[] = [];
@@ -270,12 +290,13 @@ export function ordersToCsv(orders: Order[], timeZone: string): string {
           fmt(order.completedAt),
           line.name,
           line.qty,
-          line.price,
-          line.price * line.qty,
-          total,
+          amount(line.price),
+          amount(line.price * line.qty),
+          amount(total),
           order.paymentMethod,
           order.notes ?? "",
           order.rejectReason ?? "",
+          money.currency,
         ]
           .map(csvCell)
           .join(","),

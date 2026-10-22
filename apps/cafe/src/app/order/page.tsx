@@ -26,7 +26,7 @@ import { useCafeSettings } from "@/hooks/useCafeSettings";
 import { useCart } from "@/hooks/useCart";
 import { useTableCode, useTakeKeyFromAddress } from "@/hooks/useTableCode";
 import { useTableQuery } from "@/hooks/useTableQuery";
-import { formatINR, lineSubtotal, priceCart } from "@/lib/money";
+import { formatMoney, lineSubtotal, priceCart } from "@/lib/money";
 import { orderCapProblems } from "@/lib/order-caps";
 import { readTableCode, type TableCode } from "@/lib/table-keys";
 import type { MenuItem } from "@/lib/types";
@@ -147,8 +147,8 @@ function MenuScreen({
 
   /** Live re-pricing at checkout: catches a price change or a sold-out item. */
   const priceCheck = useMemo(
-    () => priceCart(cart.lines, items),
-    [cart.lines, items],
+    () => priceCart(cart.lines, items, settings),
+    [cart.lines, items, settings],
   );
 
   function jumpTo(category: string) {
@@ -297,7 +297,9 @@ function MenuScreen({
             <span className="tnum rounded-pill bg-on-dark/20 px-2.5 py-0.5 text-sm">
               {cart.count}
             </span>
-            <span className="tnum ml-auto">{formatINR(cart.total)}</span>
+            <span className="tnum ml-auto">
+              {formatMoney(cart.total, settings)}
+            </span>
           </Button>
         </div>
       ) : null}
@@ -357,6 +359,7 @@ function MenuCard({
   onInc: () => void;
   onDec: () => void;
 }) {
+  const { settings } = useCafeSettings();
   const soldOut = !item.available;
 
   return (
@@ -397,7 +400,7 @@ function MenuCard({
           stepper then drops under the price instead of spilling out of the card. */}
       <div className="border-line-soft mt-auto flex flex-wrap items-center justify-between gap-x-1 gap-y-1 border-t-2 px-2 py-1.5">
         <span className="tnum font-round text-primary pl-0.5 text-base font-semibold">
-          {formatINR(item.price)}
+          {formatMoney(item.price, settings)}
         </span>
         {soldOut ? (
           <span className="rounded-pill bg-tan-deep font-round text-ink px-3 py-1.5 text-sm">
@@ -501,6 +504,7 @@ function CartSheet({
   priceCheck: ReturnType<typeof priceCart>;
   menu: MenuItem[];
 }) {
+  const { settings } = useCafeSettings();
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [agreed, setAgreed] = useState(false);
@@ -508,7 +512,7 @@ function CartSheet({
   // A price change is fine (the button below shows the live total); a sold-out or
   // deleted item is not, and must be resolved before the order can go through.
   // Over the size limits the rules enforce: say so before the tap, not after.
-  const caps = orderCapProblems(priceCheck.lines, priceCheck.total);
+  const caps = orderCapProblems(priceCheck.lines, priceCheck.total, settings);
   const blocked = priceCheck.blocking.length > 0 || caps.length > 0;
   // The table has a code and this phone's copy has run out: no order can get
   // through, so say so before the tap rather than after it.
@@ -533,6 +537,7 @@ function CartSheet({
         menu,
         notes: undefined,
         tableKey,
+        settings,
       });
       cart.clear();
       // No code in this address: "Back to the menu" relies on the phone's
@@ -607,7 +612,7 @@ function CartSheet({
             >
               {placing
                 ? "Sending…"
-                : `Place order · ${formatINR(priceCheck.total)}`}
+                : `Place order · ${formatMoney(priceCheck.total, settings)}`}
             </Button>
           </div>
         )
@@ -634,7 +639,7 @@ function CartSheet({
                       {line.name}
                     </p>
                     <p className="tnum text-muted text-sm">
-                      {formatINR(line.price)} each
+                      {formatMoney(line.price, settings)} each
                     </p>
                   </div>
                   <Stepper
@@ -646,7 +651,7 @@ function CartSheet({
                 </div>
                 <div className="border-line-soft mt-2 flex items-center justify-between border-t pt-2">
                   <p className="tnum text-primary font-semibold">
-                    {formatINR(lineSubtotal(line))}
+                    {formatMoney(lineSubtotal(line), settings)}
                   </p>
                   <button
                     type="button"
