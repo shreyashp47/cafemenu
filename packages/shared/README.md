@@ -24,7 +24,7 @@ one cafe's site its own:
 | `schemaVersion` | `1`                                      | `SETTINGS_SCHEMA_VERSION` when written                     |
 | `name`          | `"TOE Cafe"`                             | 1–60 characters                                            |
 | `tagline`       | `"Good Coffee, Better Days"`             | 0–80 characters                                            |
-| `theme`         | `"cozy"`                                 | one of `THEMES`                                            |
+| `theme`         | `"cozy"`                                 | one of `THEMES`: `cozy`, `minimal`, `dark`, `bistro`       |
 | `accent`        | `"#7A3E1D"` or `null`                    | over the theme's own accent                                |
 | `logo`          | `"/logo.png"`, an https URL, or `null`   | `null` keeps the theme's artwork                           |
 | `currency`      | `"INR"`                                  | ISO 4217                                                   |
@@ -75,12 +75,63 @@ the first feature behind it. A plan a release does not know gets the free
 plan's features. Features decide what the app shows; anything that must be
 enforced also needs `firestore.rules`.
 
+## Themes and the accent
+
+`THEME_PRESETS` ([`src/themes.ts`](./src/themes.ts)) holds the four presets
+(`cozy`, `minimal`, `dark`, `bistro`): name, description, whether they are
+light or dark, and every colour token. The cafe app's `globals.css` has the
+same colours as CSS, and a test there keeps the two equal.
+
+- `accentColours(theme, accent)` gives the `--primary` tokens for a cafe's
+  accent: the colour itself when it passes WCAG AA on the theme, or the nearest
+  shade that does (darker on a light theme, lighter on Dark), keeping its hue.
+- `checkAccent(theme, accent)` is the strict version for a form: it says
+  whether the colour passes as it is and, when it does not, why, and which
+  colour the app would use instead.
+- `themeVariables(settings)` is the CSS custom properties the page sets, and
+  `themeColours(settings)` the toolbar and manifest colours.
+- `contrastRatio`, `fitContrast`, `mix` and friends
+  ([`src/colour.ts`](./src/colour.ts)) are the WCAG maths underneath.
+
+`monogramOf(name)` ([`src/monogram.ts`](./src/monogram.ts)) is the one or two
+letters that stand in for a missing logo: "Mochi & Beans" → "MB".
+
+## App icons
+
+`@cafemenu/shared/icons` is a separate entry point, so the cafe app never
+bundles it. `appIcons(settings, { logo, zlib })` makes every icon a cafe's site
+serves (`ICON_PATHS`: 192 and 512 "any", a 512 maskable, the 180
+`apple-touch-icon`, `favicon.ico` with 16, 32 and 48, and `icon.svg`) from its
+logo as PNG bytes, or from its monogram in its accent without one.
+`siteLogo(logo, zlib)` shrinks the logo the site itself serves. The deployer
+writes both:
+
+```js
+import zlib from "node:zlib";
+import { appIcons, siteLogo } from "@cafemenu/shared/icons";
+
+for (const file of [
+  ...appIcons(settings, { logo, zlib }),
+  siteLogo(logo, zlib),
+]) {
+  await writeFile(join(siteDir, file.path), file.bytes);
+}
+```
+
+It has no dependencies: the PNG reader and writer, the drawing and the
+monogram's letters are in [`src/icons/`](./src/icons/), and compression is
+`node:zlib`, passed in. Logos must be PNG (any colour type, bit depth or
+interlacing, up to 4096 pixels a side); the console converts uploads before
+storing them. A logo that cannot be read throws a `PngError` rather than
+falling back to the monogram.
+
 ## The web app manifest
 
 A static export fixes `manifest.webmanifest` at build time, and one build serves
 every cafe, so the deployer writes each cafe's own with
-`webManifest(settings)` ([`src/manifest.ts`](./src/manifest.ts)). The cafe app's
-build uses the same function for the demo cafe, so the two never drift.
+`webManifest(settings)` ([`src/manifest.ts`](./src/manifest.ts)), its colours
+from the cafe's theme and accent. The cafe app's build uses the same function
+for the demo cafe, so the two never drift.
 
 ## Time zones
 
