@@ -8,6 +8,7 @@
 
 import { getDemoStaffPin } from "../config";
 import { checkTablesForSave } from "../tables";
+import { cleanStaffName, generateInviteId } from "../invites";
 import type { MenuItem, Order, SpecialOffer, Unsubscribe } from "../types";
 import * as store from "./demo-store";
 import { DEMO_CREDENTIALS, DEMO_OWNER_USER, DEMO_STAFF_USER } from "./seed";
@@ -19,13 +20,30 @@ import type {
   NewOrderInput,
   OrderRepository,
   SessionRepository,
+  StaffRepository,
   StaffUser,
 } from "./types";
 import { looksOpen } from "../table-open";
 
 const SESSION_KEY = "cafe-qr-order.session.v1";
 
+/**
+ * Who is signed in, with the role and name their /staff record gives them
+ * now, as Firestore's auth repository reads it: no record is `unassigned`.
+ * Live, so an owner removing someone or changing a role in another tab
+ * reaches that person's board straight away.
+ */
 function readSession(): StaffUser | null {
+  const user = readStoredSession();
+  if (!user) return null;
+  const record = store.loadDemoState().staff[user.uid];
+  return record
+    ? { ...user, role: record.role, displayName: record.name }
+    : { ...user, role: "unassigned" };
+}
+
+/** The signed-in account itself, as Firebase Auth would hold it. */
+function readStoredSession(): StaffUser | null {
   try {
     const raw = globalThis.localStorage?.getItem(SESSION_KEY);
     if (!raw) return null;
@@ -56,11 +74,22 @@ function writeSession(user: StaffUser | null) {
   }
 }
 
-const sessionListeners = new Set<(user: StaffUser | null) => void>();
+const sessionListeners = new Set<() => void>();
 
 function emitSession() {
-  const user = readSession();
-  for (const listener of sessionListeners) listener(user);
+  for (const listener of sessionListeners) listener();
+}
+
+/** Firebase Auth's errors carry a code; friendly-errors.ts reads it. */
+function authError(code: string, message: string): Error {
+  return Object.assign(new Error(message), { code });
+}
+
+function isDemoEmail(email: string): boolean {
+  return (
+    email === DEMO_CREDENTIALS.staff.email ||
+    email === DEMO_CREDENTIALS.owner.email
+  );
 }
 
 export const demoMenuRepo: MenuRepository = {
@@ -174,11 +203,53 @@ export const demoAuthRepo: AuthRepository = {
       (email.trim().toLowerCase() === DEMO_CREDENTIALS.owner.email &&
         password === DEMO_CREDENTIALS.owner.password);
 
+    // Someone who joined with an invite in this browser.
+    const typed = email.trim().toLowerCase();
+    const joined = store.selectAccount(store.loadDemoState(), typed);
+    if (!match && joined?.password === password) {
+      writeSession({
+        uid: joined.uid,
+        email: typed,
+        role: "staff",
+        displayName: typed.split("@")[0],
+      });
+      emitSession();
+      return;
+    }
+
     if (!match) {
       throw new Error("That email and password do not match.");
     }
     const isOwner = email.trim().toLowerCase() === DEMO_CREDENTIALS.owner.email;
     writeSession(isOwner ? { ...DEMO_OWNER_USER } : { ...DEMO_STAFF_USER });
+    emitSession();
+  },
+
+  async signUp(email, password) {
+    const typed = email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(typed)) {
+      throw authError("auth/invalid-email", "That isn't an email address.");
+    }
+    if (password.length < 6) {
+      throw authError("auth/weak-password", "Use at least 6 characters.");
+    }
+    if (
+      isDemoEmail(typed) ||
+      store.selectAccount(store.loadDemoState(), typed)
+    ) {
+      throw authError(
+        "auth/email-already-in-use",
+        "That email has an account.",
+      );
+    }
+    const uid = store.makeId("demo-user");
+    store.demoAddAccount(typed, { uid, password });
+    writeSession({
+      uid,
+      email: typed,
+      role: "staff",
+      displayName: typed.split("@")[0],
+    });
     emitSession();
   },
 
@@ -196,10 +267,22 @@ export const demoAuthRepo: AuthRepository = {
   },
 
   subscribe(listener): Unsubscribe {
-    sessionListeners.add(listener);
-    listener(readSession());
+    // On sign-in and sign-out, and on any store change that moves this
+    // person's role (readSession), but only when something did change: the
+    // store changes on every order.
+    let last: string | undefined;
+    const emit = () => {
+      const user = readSession();
+      const key = JSON.stringify(user);
+      if (key === last) return;
+      last = key;
+      listener(user);
+    };
+    sessionListeners.add(emit);
+    const off = store.subscribeState(emit);
     return () => {
-      sessionListeners.delete(listener);
+      sessionListeners.delete(emit);
+      off();
     };
   },
 
@@ -210,7 +293,8 @@ export const demoAuthRepo: AuthRepository = {
 
 /** The rules' isStaff(): the owner counts, a customer's phone does not. */
 function requireStaff() {
-  if (!readSession()) {
+  const role = readSession()?.role;
+  if (role !== "staff" && role !== "owner") {
     throw new store.DemoRulesRefusal("only staff open and close tables");
   }
 }
@@ -284,5 +368,64 @@ export const demoConfigRepo: ConfigRepository = {
       throw new store.DemoRulesRefusal("table codes are owner-only");
     }
     store.demoSaveTableKeys(keys);
+  },
+};
+
+function requireOwner() {
+  if (readSession()?.role !== "owner") {
+    throw new store.DemoRulesRefusal("only the owner manages the team");
+  }
+}
+
+export const demoStaffRepo: StaffRepository = {
+  subscribe(listener, onError) {
+    if (readSession()?.role !== "owner") {
+      onError?.(new store.DemoRulesRefusal("the staff list is owner-only"));
+      return () => {};
+    }
+    return store.subscribeState((state) => listener(store.selectStaff(state)));
+  },
+  subscribeInvites(listener, onError) {
+    if (readSession()?.role !== "owner") {
+      onError?.(new store.DemoRulesRefusal("invites are owner-only"));
+      return () => {};
+    }
+    return store.subscribeState((state) =>
+      listener(store.selectInvites(state)),
+    );
+  },
+  async createInvite(role) {
+    requireOwner();
+    const invite = {
+      id: generateInviteId(),
+      role,
+      createdAt: Date.now(),
+      usedBy: null,
+    };
+    store.demoSaveInvite(invite);
+    return invite;
+  },
+  async deleteInvite(id) {
+    requireOwner();
+    store.demoDeleteInvite(id);
+  },
+  async setRole(uid, role) {
+    requireOwner();
+    store.demoSetStaffRole(uid, role);
+  },
+  async remove(uid) {
+    requireOwner();
+    store.demoRemoveStaff(uid);
+  },
+  async readInvite(id) {
+    return (
+      store.selectInvites(store.loadDemoState()).find((i) => i.id === id) ??
+      null
+    );
+  },
+  async join(id, name) {
+    const user = readStoredSession();
+    if (!user?.email) throw new Error("Sign in with your email first.");
+    return store.demoJoin(user, id, cleanStaffName(name));
   },
 };

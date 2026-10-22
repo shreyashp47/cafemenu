@@ -15,6 +15,7 @@ import type { TableKeys } from "../table-keys";
 import type { Assigned } from "../day-number";
 import type { NewOrderStatus } from "../order-status";
 import type { OrderingSettings, TableSessions } from "../table-open";
+import type { Invite, InviteRole, StaffMember } from "../invites";
 
 export type Listener<T> = (value: T) => void;
 export type ErrorListener = (error: Error) => void;
@@ -128,6 +129,11 @@ export interface StaffUser {
 export interface AuthRepository {
   /** Real Firebase Auth. `pin` is demo-mode only. */
   signIn(email: string, password: string): Promise<void>;
+  /**
+   * A new Email/Password account, signed in. It has no /staff record yet, so
+   * it is `unassigned` until it joins with an invite (StaffRepository.join).
+   */
+  signUp(email: string, password: string): Promise<void>;
   signInWithPin(pin: string): Promise<void>;
   signOut(): Promise<void>;
   subscribe(listener: Listener<StaffUser | null>): Unsubscribe;
@@ -197,12 +203,47 @@ export interface SessionRepository {
   saveSettings(settings: OrderingSettings): Promise<void>;
 }
 
+/**
+ * The team and its invites (src/lib/invites.ts). Everything but `readInvite`
+ * and `join` is owner-only: the rules refuse anyone else.
+ */
+export interface StaffRepository {
+  /** Every /staff record, live. */
+  subscribe(
+    listener: Listener<StaffMember[]>,
+    onError?: ErrorListener,
+  ): Unsubscribe;
+  /** Every invite, used ones included, live. */
+  subscribeInvites(
+    listener: Listener<Invite[]>,
+    onError?: ErrorListener,
+  ): Unsubscribe;
+  createInvite(role: InviteRole): Promise<Invite>;
+  /** Cancels an open invite, or clears away a used or expired one. */
+  deleteInvite(id: string): Promise<void>;
+  setRole(uid: string, role: InviteRole): Promise<void>;
+  /**
+   * Deletes the record. The person keeps their account but is `unassigned`
+   * from then on, and sees the "not set up yet" screen.
+   */
+  remove(uid: string): Promise<void>;
+  /** Anyone with the link: the invite, or null when there is no such one. */
+  readInvite(id: string): Promise<Invite | null>;
+  /**
+   * The signed-in account joins with the invite: its /staff record and the
+   * invite's usedBy in one commit, which the rules allow only for an open
+   * invite granting exactly its role. Resolves with the role it now has.
+   */
+  join(id: string, name: string): Promise<InviteRole>;
+}
+
 export interface DataBundle {
   menu: MenuRepository;
   orders: OrderRepository;
   auth: AuthRepository;
   config: ConfigRepository;
   sessions: SessionRepository;
+  staff: StaffRepository;
   /** True when backed by the localStorage demo store. */
   isDemo: boolean;
 }

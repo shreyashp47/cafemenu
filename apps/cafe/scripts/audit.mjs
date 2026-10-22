@@ -62,6 +62,8 @@ const ROUTES = [
   { path: "/admin/reports", name: "reports", auth: "owner" },
   { path: "/admin/orders", name: "history", auth: "owner" },
   { path: "/admin/qr", name: "qr", auth: "owner" },
+  { path: "/admin/staff", name: "team", auth: "owner" },
+  { path: "/join", name: "join" },
   { path: "/offline", name: "offline" },
 ];
 

@@ -42,7 +42,20 @@ import {
   type Unsubscribe,
 } from "../types";
 import { normalizeTables } from "../tables";
-import { SEED_MENU, SEED_OFFER } from "./seed";
+import {
+  inviteState,
+  parseInvite,
+  parseStaffMember,
+  type Invite,
+  type InviteRole,
+  type StaffMember,
+} from "../invites";
+import {
+  DEMO_OWNER_USER,
+  DEMO_STAFF_USER,
+  SEED_MENU,
+  SEED_OFFER,
+} from "./seed";
 import type { NewOrderInput } from "./types";
 
 export const DEMO_STORAGE_KEY = "cafe-qr-order.demo.v1";
@@ -75,6 +88,25 @@ interface DemoState {
    * Firestore; demoSetSite stands in for the platform in tests.
    */
   site: Record<string, unknown> | null;
+  /** staff/{uid}: the demo barista and owner, then whoever joins. */
+  staff: Record<string, Omit<StaffMember, "uid">>;
+  /** invites/{id}, without the id. */
+  invites: Record<string, Omit<Invite, "id">>;
+  /**
+   * The demo's stand-in for Firebase Auth, for accounts made on /join: email
+   * (lower case) to uid and password. The demo accounts in ./seed.ts are not
+   * here. Plain text, like those: it never leaves this browser.
+   */
+  accounts: Record<string, { uid: string; password: string }>;
+}
+
+function seedStaff(): DemoState["staff"] {
+  return Object.fromEntries(
+    [DEMO_STAFF_USER, DEMO_OWNER_USER].map((u) => [
+      u.uid,
+      { name: u.displayName, email: u.email, role: u.role },
+    ]),
+  );
 }
 
 function emptyState(): DemoState {
@@ -88,6 +120,9 @@ function emptyState(): DemoState {
     tableSessions: {},
     ordering: parseOrderingSettings(undefined),
     site: null,
+    staff: seedStaff(),
+    invites: {},
+    accounts: {},
   };
 }
 
@@ -102,6 +137,9 @@ function seedState(): DemoState {
     tableSessions: {},
     ordering: parseOrderingSettings(undefined),
     site: null,
+    staff: seedStaff(),
+    invites: {},
+    accounts: {},
   };
 }
 
@@ -168,6 +206,10 @@ function load(): DemoState {
       // States from before cafe settings have none: the defaults, exactly
       // like a Firestore project the platform has not written to yet.
       site: parseSite((parsed as DemoState)?.site),
+      // States from before invites have the two demo accounts and no one else.
+      staff: parseStaff((parsed as DemoState)?.staff),
+      invites: parseInvites((parsed as DemoState)?.invites),
+      accounts: parseAccounts((parsed as DemoState)?.accounts),
       // Older saved states also carry a `seq` counter from the original public
       // counter. It is ignored, as /meta/counters is in Firestore.
     };
@@ -320,6 +362,50 @@ function parseSite(raw: unknown): Record<string, unknown> | null {
   return typeof raw === "object" && raw !== null && !Array.isArray(raw)
     ? (raw as Record<string, unknown>)
     : null;
+}
+
+function parseStaff(raw: unknown): DemoState["staff"] {
+  if (!raw || typeof raw !== "object") return seedStaff();
+  const out: DemoState["staff"] = {};
+  for (const [uid, data] of Object.entries(raw)) {
+    const { name, email, role } = parseStaffMember(uid, data);
+    out[uid] = { name, email, role };
+  }
+  return out;
+}
+
+function parseInvites(raw: unknown): DemoState["invites"] {
+  const out: DemoState["invites"] = {};
+  if (!raw || typeof raw !== "object") return out;
+  for (const [id, data] of Object.entries(raw)) {
+    const invite = parseInvite(id, data);
+    if (invite)
+      out[id] = {
+        role: invite.role,
+        createdAt: invite.createdAt,
+        usedBy: invite.usedBy,
+      };
+  }
+  return out;
+}
+
+function parseAccounts(raw: unknown): DemoState["accounts"] {
+  const out: DemoState["accounts"] = {};
+  if (!raw || typeof raw !== "object") return out;
+  for (const [email, data] of Object.entries(raw)) {
+    const { uid, password } = (data ?? {}) as Record<string, unknown>;
+    if (typeof uid === "string" && typeof password === "string")
+      out[email] = { uid, password };
+  }
+  return out;
+}
+
+export function selectStaff(state: DemoState): StaffMember[] {
+  return Object.entries(state.staff).map(([uid, m]) => ({ uid, ...m }));
+}
+
+export function selectInvites(state: DemoState): Invite[] {
+  return Object.entries(state.invites).map(([id, i]) => ({ id, ...i }));
 }
 
 /**
@@ -707,3 +793,84 @@ export function demoSetSite(site: Record<string, unknown> | null): void {
 }
 
 export { subscribeState, load as loadDemoState, emptyState, seedState };
+
+// --- staff and invites (firestore.rules /staff and /invites) ----------------
+
+export function demoSaveInvite({ id, ...invite }: Invite): void {
+  mutate((state) => ({
+    ...state,
+    invites: { ...state.invites, [id]: invite },
+  }));
+}
+
+export function demoDeleteInvite(id: string): void {
+  mutate((state) => {
+    const invites = { ...state.invites };
+    delete invites[id];
+    return { ...state, invites };
+  });
+}
+
+export function demoSetStaffRole(uid: string, role: InviteRole): void {
+  const state = load();
+  const member = state.staff[uid];
+  // updateDoc on a missing document fails in Firestore too.
+  if (!member) throw new Error("That person is no longer on the team.");
+  commit({ ...state, staff: { ...state.staff, [uid]: { ...member, role } } });
+}
+
+export function demoRemoveStaff(uid: string): void {
+  mutate((state) => {
+    const staff = { ...state.staff };
+    delete staff[uid];
+    return { ...state, staff };
+  });
+}
+
+export function demoAddAccount(
+  email: string,
+  account: { uid: string; password: string },
+): void {
+  mutate((state) => ({
+    ...state,
+    accounts: { ...state.accounts, [email]: account },
+  }));
+}
+
+export function selectAccount(
+  state: DemoState,
+  email: string,
+): { uid: string; password: string } | null {
+  return state.accounts[email] ?? null;
+}
+
+/**
+ * Joining with an invite: the /staff record and usedBy in one commit, refused
+ * exactly where the rules refuse it. Returns the role granted.
+ */
+export function demoJoin(
+  user: { uid: string; email: string },
+  id: string,
+  name: string,
+  now: number = Date.now(),
+): InviteRole {
+  const state = load();
+  const invite = state.invites[id];
+  if (!invite) throw new DemoRulesRefusal("no such invite");
+  if (inviteState(invite, now) !== "open") {
+    throw new DemoRulesRefusal("the invite is used or expired");
+  }
+  if (state.staff[user.uid]) {
+    throw new DemoRulesRefusal("already on the team");
+  }
+  if (!name) throw new DemoRulesRefusal("a name is required");
+  commit({
+    ...state,
+    staff: {
+      ...state.staff,
+      [user.uid]: { name, email: user.email, role: invite.role },
+    },
+    invites: { ...state.invites, [id]: { ...invite, usedBy: user.uid } },
+  });
+  return invite.role;
+}
