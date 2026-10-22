@@ -2,6 +2,7 @@
 
 import { Suspense, useMemo, useState } from "react";
 
+import { CafeMark } from "@/components/CafeMark";
 import { Doodles } from "@/components/Doodles";
 import {
   Icon,
@@ -167,7 +168,7 @@ function MenuScreen({
 
       <header className="safe-t border-line-soft bg-cream/85 relative z-10 border-b-2 backdrop-blur-sm">
         <div className="shell flex items-center gap-3 py-3">
-          <Mascot size={58} className="shrink-0" />
+          <CafeMark size={58} className="shrink-0" />
           <div className="min-w-0 flex-1">
             <h1 className="font-hand text-primary truncate text-[2rem] leading-none">
               {settings.name}

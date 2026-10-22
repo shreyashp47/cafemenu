@@ -14,6 +14,7 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { Icon, type IconName } from "@/components/icons";
+import { CafeMark } from "@/components/CafeMark";
 import { Mascot } from "@/components/Mascot";
 import { NotSetUp } from "@/components/NotSetUp";
 import { OwnerSwitch } from "@/components/OwnerSwitch";
@@ -66,7 +67,7 @@ function Shell({ children }: { children: ReactNode }) {
     <div className="min-h-svh pb-10">
       <header className="safe-t border-line-soft bg-cream/95 sticky top-0 z-30 border-b-2 backdrop-blur">
         <div className="shell-wide flex items-center gap-2.5 py-2.5">
-          <Mascot size={40} className="shrink-0" />
+          <CafeMark size={40} className="shrink-0" />
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-lg leading-tight">Owner dashboard</h1>
             <p className="text-2xs text-muted truncate font-semibold tracking-[0.12em] uppercase">

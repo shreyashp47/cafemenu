@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { Mascot } from "@/components/Mascot";
+import { CafeMark } from "@/components/CafeMark";
 import { Button } from "@/components/ui/Button";
 
 interface BeforeInstallPromptEvent extends Event {
@@ -170,7 +170,7 @@ export function InstallHint({ appName }: { appName: string }) {
   return (
     <div className="shell-wide mb-3">
       <div className="border-secondary/50 bg-highlight-soft/40 flex items-center gap-3 rounded-lg border-2 border-dashed p-3">
-        <Mascot size={44} className="shrink-0" />
+        <CafeMark size={44} className="shrink-0" />
         <div className="min-w-0 flex-1">
           <p className="text-ink font-semibold">Install {appName}</p>
           <p className="text-muted text-sm">
