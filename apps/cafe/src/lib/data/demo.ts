@@ -134,6 +134,20 @@ export const demoMenuRepo: MenuRepository = {
   async replaceAll(items) {
     store.demoReplaceMenu(items);
   },
+
+  async importItems(items, replace = false) {
+    store.demoImportMenu(
+      items.map((input) => ({
+        name: input.name,
+        description: input.description ?? "",
+        price: input.price,
+        category: input.category,
+        available: input.available ?? true,
+        art: input.art,
+      })),
+      replace,
+    );
+  },
 };
 
 export const demoOrderRepo: OrderRepository = {

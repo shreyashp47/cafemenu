@@ -753,6 +753,23 @@ export function demoReplaceMenu(items: MenuItem[]): void {
   mutate((state) => ({ ...state, menu: items }));
 }
 
+/** New items after the menu's last, or instead of the whole menu. One write. */
+export function demoImportMenu(
+  inputs: Omit<MenuItem, "id" | "sortOrder">[],
+  replace: boolean,
+): void {
+  mutate((state) => {
+    const kept = replace ? [] : state.menu;
+    const last = Math.max(0, ...kept.map((item) => item.sortOrder));
+    const added = inputs.map((input, index) => ({
+      ...input,
+      id: makeId("m"),
+      sortOrder: last + (index + 1) * 10,
+    }));
+    return { ...state, menu: [...kept, ...added] };
+  });
+}
+
 /**
  * Replaces the order history with a sample month (demo mode only). Used by the
  * "Add a sample month" button so the reports page can be evaluated before there

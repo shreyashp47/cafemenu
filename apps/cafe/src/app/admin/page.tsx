@@ -7,7 +7,8 @@
  * is a list of compact rows the owner can scan: marking something sold out is
  * one tap on the row's switch, and the full edit form only opens for the one
  * item being edited. Adding an item is a form that stays out of the way until
- * it's asked for.
+ * it's asked for, and so is importing many (src/components/MenuImport.tsx),
+ * which an empty menu offers as a starter menu.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -21,6 +22,7 @@ import {
 } from "@cafemenu/shared";
 
 import { CategoryPicker } from "@/components/CategoryPicker";
+import { MenuImportCard, StarterMenuPicker } from "@/components/MenuImport";
 import { NewGuestsSetting } from "@/components/NewGuestsSetting";
 import { Icon, categoryIcon, itemArtIcon } from "@/components/icons";
 import {
@@ -51,6 +53,11 @@ export default function AdminMenuPage() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  // What the import box starts with; `key` remounts it for a starter menu.
+  const [importing, setImporting] = useState<{
+    text: string;
+    key: number;
+  } | null>(null);
 
   const categories = useMemo(
     () => [...new Set(items.map((i) => i.category))].sort(),
@@ -122,15 +129,30 @@ export default function AdminMenuPage() {
                 {soldOut === 0 ? "all available" : `${soldOut} sold out`}
               </p>
             </div>
-            <Button
-              onClick={() => setAdding((open) => !open)}
-              aria-expanded={adding}
-              aria-controls="add-item"
-              variant={adding ? "ghost" : "primary"}
-            >
-              <Icon name={adding ? "close" : "plus"} size={18} />
-              {adding ? "Close" : "Add item"}
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                onClick={() =>
+                  setImporting((open) =>
+                    open ? null : { text: "", key: Date.now() },
+                  )
+                }
+                aria-expanded={importing !== null}
+                aria-controls="import-items"
+                variant="ghost"
+              >
+                <Icon name={importing ? "close" : "plus"} size={18} />
+                {importing ? "Close import" : "Import"}
+              </Button>
+              <Button
+                onClick={() => setAdding((open) => !open)}
+                aria-expanded={adding}
+                aria-controls="add-item"
+                variant={adding ? "ghost" : "primary"}
+              >
+                <Icon name={adding ? "close" : "plus"} size={18} />
+                {adding ? "Close" : "Add item"}
+              </Button>
+            </div>
           </div>
 
           {adding ? (
@@ -141,17 +163,34 @@ export default function AdminMenuPage() {
             />
           ) : null}
 
+          {importing ? (
+            <MenuImportCard
+              key={importing.key}
+              menu={items}
+              initialText={importing.text}
+              onClose={() => setImporting(null)}
+            />
+          ) : null}
+
           {grouped.length > 1 ? <CategoryJump groups={grouped} /> : null}
 
           {items.length === 0 ? (
-            <EmptyState
-              title="No items yet"
-              body={
-                isDemo
-                  ? "Tap Add item to add your first drink, or restore the sample menu below."
-                  : "Tap Add item to add your first drink."
-              }
-            />
+            // While the import is open, it is what the empty menu is about.
+            importing ? null : (
+              <>
+                <EmptyState
+                  title="No items yet"
+                  body={
+                    isDemo
+                      ? "Tap Add item to add your first drink, start from a starter menu, or restore the sample menu below."
+                      : "Tap Add item to add your first drink, or start from a starter menu."
+                  }
+                />
+                <StarterMenuPicker
+                  onPick={(text) => setImporting({ text, key: Date.now() })}
+                />
+              </>
+            )
           ) : (
             grouped.map(([category, list]) => (
               <section
