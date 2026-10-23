@@ -47,7 +47,14 @@ const FIREBASE_JSON = JSON.stringify({
     headers: [
       {
         source: "**",
-        headers: [{ key: "X-Content-Type-Options", value: "nosniff" }],
+        headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+        ],
+      },
+      {
+        source: "/sw.js",
+        headers: [{ key: "Cache-Control", value: "no-cache" }],
       },
     ],
   },
@@ -91,6 +98,11 @@ export async function releasePackage(
       sources[n] ?? noOpMigration(n);
   await writeTree(dir, {
     "out/index.html": `<h1>Menu</h1><!-- ${version} -->`,
+    "out/order.html": `<h1>Order</h1><!-- ${version} -->`,
+    "out/staff.html": `<h1>Staff</h1><!-- ${version} -->`,
+    "out/admin.html": `<h1>Owner</h1><!-- ${version} -->`,
+    "out/offline.html": `<h1>Offline</h1><!-- ${version} -->`,
+    "out/404.html": `<h1>Not found</h1><!-- ${version} -->`,
     "out/sw.js": `const VERSION = "${version}";`,
     "out/_next/static/app.js": `console.log("${version}")`,
     "out/_next/static/shared.js": "console.log('same in every release')",
@@ -189,6 +201,12 @@ export const fakeShared = Object.freeze({
       : { ok: true, settings: raw };
   },
   siteFileFor: (settings) => ({ ...settings }),
+  validateSiteFile(raw) {
+    const { demo, ...settings } = raw ?? {};
+    if (demo !== undefined && typeof demo !== "boolean")
+      return { ok: false, problems: ["demo: must be true, false or absent"] };
+    return fakeShared.validateCafeSettings(settings);
+  },
   webManifest: (settings) => ({
     name: settings.name,
     short_name: settings.name,

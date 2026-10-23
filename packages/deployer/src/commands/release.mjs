@@ -14,7 +14,7 @@
  *               money unit stays the data's
  *   hosting     the package's site/ with the cafe's site.json, manifest,
  *               logo and icons laid over it, and its firebase.json headers
- *   smoke       the smoke test (#22)
+ *   smoke       the smoke test (#22); if it fails, the release is rolled back
  *   record      current/previous in the deploy log
  *
  * Every step compares with what is live and skips itself when nothing would
@@ -42,7 +42,11 @@ import {
 } from "../hosting-files.mjs";
 import { readDataSchema, runMigrations } from "../migrations.mjs";
 import { VerifyError, getPackage, packageText } from "../release-package.mjs";
-import { smokeTest } from "../smoke-test.mjs";
+import {
+  SmokeTestError,
+  rollBackAfterSmokeTest,
+  smokeTest,
+} from "../smoke-test.mjs";
 import { act, shortName } from "./act.mjs";
 import {
   canonical,
@@ -327,15 +331,26 @@ export async function deployRelease(ctx, options) {
       };
     }
 
-    await steps.run("smoke", () => smokeTest(ctx, { site, version }));
+    await steps.run("smoke", () =>
+      smokeTest(ctx, {
+        site,
+        version,
+        verified,
+        settings: input.settings,
+        shared,
+      }),
+    );
   } catch (error) {
     // Once the site is live it runs this release, finished or not, so it is
-    // recorded as current: `deployer rollback` then goes back to the one before.
+    // recorded as current: `deployer rollback` then goes back to the one before,
+    // which a failed smoke test does at once.
     await recordFailure(ctx, {
       deployment: { ...deployment, status: "failed", error: error.message },
       cafe: release ? nextRecord(before, site, release) : undefined,
     });
-    if (release) {
+    if (release && error instanceof SmokeTestError) {
+      await rollBackAfterSmokeTest(ctx, { site, version, release, error });
+    } else if (release) {
       error.message += ` (${version} is live and recorded as current; \`deployer rollback\` goes back to ${fromVersion ?? "nothing: there was no release before it"}.)`;
     }
     throw error;
