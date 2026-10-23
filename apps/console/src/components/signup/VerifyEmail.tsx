@@ -7,7 +7,7 @@ import { errorText, fill, messages } from "@/lib/messages";
 import type { PlatformUser } from "@/lib/platform/model";
 import { Button, TextButton } from "../Button";
 import { Rich } from "../Rich";
-import { StageHeading } from "./StageHeading";
+import { StageHeading } from "../StageHeading";
 import { continueUrl } from "./continue-url";
 
 const { verify: text } = messages.signup;

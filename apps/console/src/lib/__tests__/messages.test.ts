@@ -101,7 +101,19 @@ describe("the message file", () => {
     const links = [...JSON.stringify(messages).matchAll(/\]\(([^)]+)\)/g)];
     expect(links.length).toBeGreaterThan(0);
     for (const [, href] of links) {
-      expect(parseRich(`[x](${href})`)[0].kind).toBe("link");
+      // A link that is all slot, "({url})", is filled from
+      // src/lib/setup/links.ts, whose own tests keep it to https.
+      if (/^\{\w+\}$/.test(href)) continue;
+      // Any other slot, as in "/setup?cafe={id}", is filled with an id.
+      const filled = href.replace(/\{\w+\}/g, "x");
+      expect(parseRich(`[x](${filled})`)[0].kind).toBe("link");
     }
+  });
+
+  it("marks every placeholder the Phase 0 spike fills in the same way", () => {
+    const spikes = JSON.stringify(messages).match(/\[\[[^\]]*\]\]/g) ?? [];
+    // The role to pick, and the screenshots of Google's consoles.
+    expect(spikes.length).toBeGreaterThan(0);
+    for (const spike of spikes) expect(spike).toMatch(/^\[\[SPIKE #3: .+\]\]$/);
   });
 });

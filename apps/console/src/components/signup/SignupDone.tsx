@@ -1,6 +1,7 @@
 import { fill, messages } from "@/lib/messages";
+import { ButtonLink } from "../ButtonLink";
 import type { SavedCafe } from "@/lib/signup/flow";
-import { StageHeading } from "./StageHeading";
+import { StageHeading } from "../StageHeading";
 
 const { done: text } = messages.signup;
 const { names } = messages.locations;
@@ -45,6 +46,9 @@ export function SignupDone({
         ))}
       </dl>
       <p className="text-text">{text.next}</p>
+      <ButtonLink href={`/setup?cafe=${encodeURIComponent(cafe.id)}`}>
+        {text.continue}
+      </ButtonLink>
     </div>
   );
 }

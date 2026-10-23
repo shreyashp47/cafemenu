@@ -7,7 +7,7 @@ import { CafeInputError, SetupInputError } from "@/lib/platform/validate";
 import type { SignupDraft } from "@/lib/signup/draft";
 import { saveCafe, type SavedCafe } from "@/lib/signup/flow";
 import { Button } from "../Button";
-import { StageHeading } from "./StageHeading";
+import { StageHeading } from "../StageHeading";
 
 const { create: text } = messages.signup;
 
