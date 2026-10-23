@@ -17,6 +17,14 @@
  *
  *   npm run test:entry                       # spawns `next dev`
  *   BASE_URL=https://toe-cafe.web.app npm run test:entry
+ *   npm run test:entry -- --url https://lantern-cafe.web.app --table 2 \
+ *     --sw-version 3f2a9c1b7d40
+ *
+ * It takes any cafe's address (`--url`, or BASE_URL), a table that cafe has
+ * (`--table`, default 3), and the cache version the site must be serving
+ * (`--sw-version`: step 0 reads /sw.js, as the deployer's smoke test does).
+ * `--help` lists them. The deployer's smoke test (`packages/deployer/bin/
+ * smoke.mjs --browser`) runs this after its plain checks.
  *
  * Read-only: it navigates and reads the page, and never places an order, so
  * pointing it at the live site is safe. CI runs it against the built `out/`.
@@ -25,11 +33,27 @@ import { spawn } from "node:child_process";
 import process from "node:process";
 import { chromium, devices } from "playwright";
 
+import { PRICE, USAGE, entryOptions } from "./lib/entry-options.mjs";
 // The demo's expected 404s for init.json and site.json (src/lib/boot.ts).
 import { isBootFileMiss } from "./lib/page-noise.mjs";
+import { swVersionIn } from "./lib/sw-version.mjs";
 
 const PORT = 4313;
-const BASE = process.env.BASE_URL ?? `http://127.0.0.1:${PORT}`;
+
+let options;
+try {
+  options = entryOptions(process.argv.slice(2), process.env);
+} catch (error) {
+  console.error(`entry: ${error.message}\n\n${USAGE}`);
+  process.exit(2);
+}
+if (options.help) {
+  console.log(USAGE);
+  process.exit(0);
+}
+const BASE = options.url ?? `http://127.0.0.1:${PORT}`;
+// A table the cafe has: step 3 opens it, step 4 needs one it doesn't.
+const TABLE = options.table;
 
 let failures = 0;
 const step = (n, msg) => console.log(`\n[${n}] ${msg}`);
@@ -52,7 +76,7 @@ async function waitForServer(url, timeoutMs = 120_000) {
   return false;
 }
 
-const dev = process.env.BASE_URL
+const dev = options.url
   ? null
   : spawn("npm", ["run", "dev", "--", "--port", String(PORT)], {
       stdio: ["ignore", "ignore", "inherit"],
@@ -74,11 +98,12 @@ if (dev && !(await waitForServer(BASE))) {
  * on screen. Reading until the text holds steady is independent of the copy.
  */
 async function waitForMenu(page, ms = 15_000) {
-  // A price on screen is what "the menu is here" means. After a client-side
-  // navigation the menu is re-read from Firestore, so this legitimately takes a
-  // couple of seconds; the QR path is instant because the shell is already warm.
+  // A price on screen is what "the menu is here" means, in whatever currency
+  // the cafe uses. After a client-side navigation the menu is re-read from
+  // Firestore, so this legitimately takes a couple of seconds; the QR path is
+  // instant because the shell is already warm.
   await page
-    .getByText(/\u20b9\s*\d/)
+    .getByText(PRICE)
     .first()
     .waitFor({ state: "visible", timeout: ms })
     .catch(() => {});
@@ -111,7 +136,7 @@ async function classify(page) {
   // not a table this cafe has. A clean landing either way.
   if (/that table number looks odd/i.test(text)) return "odd-table notice";
   if (/mascot|loading/i.test(text) && text.length < 80) return "still loading";
-  if (text.includes("₹")) return "menu";
+  if (PRICE.test(text)) return "menu";
   return `unknown: ${text.slice(0, 60)}`;
 }
 
@@ -122,6 +147,23 @@ const context = await browser.newContext({
 });
 
 console.log(`\nentry paths against ${BASE}`);
+
+// -- 0. The right build ---------------------------------------------------------
+// The service worker names its caches after the build's content hash
+// (scripts/stamp-sw.mjs), so the version it carries says which build answered.
+if (options.swVersion) {
+  step(0, `/sw.js carries the cache version ${options.swVersion}`);
+  const res = await fetch(`${BASE}/sw.js`, {
+    redirect: "manual",
+    headers: { "cache-control": "no-cache" },
+  }).catch(() => null);
+  const found = res?.status === 200 ? swVersionIn(await res.text()) : null;
+  check(
+    "the site serves the expected build",
+    found === options.swVersion,
+    found ? `got ${found}` : `/sw.js answered ${res?.status ?? "nothing"}`,
+  );
+}
 
 // -- 1. The site's front door -----------------------------------------------------
 step(1, "Land on / — should land on the order page");
@@ -167,11 +209,11 @@ step(2, "The scan prompt offers no table buttons");
 // The same destination, reached the way a scanned code reaches it: a full page
 // load. Kept as a separate case because it is the one that always worked, and the
 // contrast between 2 and 3 is what identifies the fault.
-step(3, "Open /order?table=3 directly — the QR path");
+step(3, `Open /order?table=${TABLE} directly — the QR path`);
 // Both shapes of QR link: an old card (no code) and a new one (with a code).
 // The menu opens either way; whether the order is then accepted is the rules'
 // decision (scripts/rules-test.mjs), and on a fresh build no table has a code.
-for (const query of ["?table=3", "?table=3&k=PrintedCode12"]) {
+for (const query of [`?table=${TABLE}`, `?table=${TABLE}&k=PrintedCode12`]) {
   const page = await context.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
@@ -188,7 +230,7 @@ for (const query of ["?table=3", "?table=3&k=PrintedCode12"]) {
   // The code is saved on the phone and never left in the address.
   check(
     `${query} leaves no code in the address`,
-    new URL(page.url()).search === "?table=3",
+    new URL(page.url()).search === `?table=${TABLE}`,
     page.url(),
   );
   check("no console errors", errors.length === 0, errors.join("; "));
