@@ -1,17 +1,20 @@
 name: Deployer
 
-# packages/deployer only: its unit tests run against a fake Google, so they
-# need no credentials and no network beyond npm.
+# packages/deployer and the migrations it runs: the unit tests run against a
+# fake Google, so they need no credentials and no network beyond npm, and the
+# migrations also run on the Firestore emulator.
 on:
   push:
     branches: [main]
     paths:
       - "packages/deployer/**"
+      - "migrations/**"
       - ".github/workflows/deployer.yml"
   pull_request:
     branches: [main]
     paths:
       - "packages/deployer/**"
+      - "migrations/**"
       - ".github/workflows/deployer.yml"
 
 # Only one run per branch; a new push cancels the run it supersedes.
@@ -42,3 +45,31 @@ jobs:
 
       - name: Test
         run: npm test -w @cafemenu/deployer
+
+  emulator:
+    name: migrations on the Firestore emulator
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      # The Firestore emulator is a Java program, and current firebase-tools
+      # refuses to run it on anything below 21.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install
+        run: npm ci
+
+      # TOE-like data migrated by migrations/0002 through the deployer's REST
+      # adapter (packages/deployer/tests/emulator/), on port 8280.
+      - name: Migrate on the emulator
+        run: npm run test:emulator -w @cafemenu/deployer
