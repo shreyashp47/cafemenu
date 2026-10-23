@@ -11,7 +11,7 @@
  */
 import { mkdir, rm } from "node:fs/promises";
 import { chromium } from "playwright";
-import { ROUTES, startServer } from "./lib/server.mjs";
+import { ROUTES, openRoute, startServer } from "./lib/server.mjs";
 
 const OUT = ".screenshots";
 const VIEWPORTS = [
@@ -44,7 +44,7 @@ for (const vp of VIEWPORTS) {
     page.on("pageerror", (e) =>
       problems.push(`[${route.name}/${vp.name}] pageerror: ${e.message}`),
     );
-    await page.goto(`${base}${route.path}`, { waitUntil: "networkidle" });
+    await openRoute(page, base, route);
     // Lazy screenshots load as they scroll into view; load them all first.
     await page.evaluate(async () => {
       for (const img of document.querySelectorAll("img")) {

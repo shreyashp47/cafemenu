@@ -15,7 +15,7 @@
 import { mkdir, rm } from "node:fs/promises";
 import { chromium, webkit } from "playwright";
 import AxeBuilder from "@axe-core/playwright";
-import { ROUTES, startServer } from "./lib/server.mjs";
+import { ROUTES, openRoute, startServer } from "./lib/server.mjs";
 
 const OUT = ".screenshots/audit";
 const onlyEngine = process.argv
@@ -53,7 +53,7 @@ for (const { name, type } of engines) {
       page.on("pageerror", (e) =>
         problems.push(`[${where}] pageerror: ${e.message}`),
       );
-      await page.goto(`${base}${route.path}`, { waitUntil: "networkidle" });
+      await openRoute(page, base, route);
 
       const overflow = await page.evaluate(
         () =>
@@ -78,7 +78,7 @@ for (const { name, type } of engines) {
       }
       const ok = violations.length === 0 && overflow <= 1;
       console.log(
-        `  ${ok ? "ok  " : "FAIL"} ${vp.name.padEnd(8)} ${route.name.padEnd(8)} ${violations.length} violation(s)`,
+        `  ${ok ? "ok  " : "FAIL"} ${vp.name.padEnd(8)} ${route.name.padEnd(14)} ${violations.length} violation(s)`,
       );
       await page.screenshot({
         path: `${OUT}/${route.name}-${vp.name}-${name}.png`,

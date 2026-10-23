@@ -12,6 +12,7 @@ import {
   firstProblem,
   formProblems,
   settingsOf,
+  settleMenu,
   tableCount,
   withCountry,
   withName,
@@ -66,6 +67,28 @@ describe("filling the form", () => {
     for (const bad of ["0", "51", "", "6.5", "-1", "six", "1e1"]) {
       expect(tableCount(bad)).toBeNull();
     }
+  });
+});
+
+describe("a starter menu when the currency changes", () => {
+  it("opens as a list to price where the new currency has no prices", () => {
+    const before = filled();
+    const after = settleMenu(before, withCountry(before, "KE"));
+    expect(after.currency).toBe("KES");
+    expect(after.menuText).toMatch(/^name,category,price/);
+    expect(formProblems(after).menu).toBe("rows");
+  });
+
+  it("is left alone otherwise", () => {
+    const before = filled();
+    expect(settleMenu(before, withCountry(before, "US"))).toEqual(
+      withCountry(before, "US"),
+    );
+    const kenya = settleMenu(before, withCountry(before, "KE"));
+    const typed = { ...kenya, menuText: "Mandazi,Bakery,50" };
+    expect(settleMenu(kenya, { ...typed, currency: "UGX" }).menuText).toBe(
+      "Mandazi,Bakery,50",
+    );
   });
 });
 

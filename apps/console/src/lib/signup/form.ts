@@ -22,7 +22,13 @@ import { isFirestoreLocation } from "../platform/locations";
 import type { StartingMenu } from "../platform/model";
 import { STARTING_PLAN, type NewCafeInput } from "../platform/validate";
 import { OTHER_COUNTRY, countryDefaults } from "./countries";
-import { startingMenu, type MenuChoice, type MenuResult } from "./menu";
+import {
+  listStart,
+  needsList,
+  startingMenu,
+  type MenuChoice,
+  type MenuResult,
+} from "./menu";
 import {
   siteNameFrom,
   siteNameProblem,
@@ -168,9 +174,24 @@ export function menuOf(form: SignupForm): MenuResult {
   return startingMenu(form.menu, form.menuText, importSettingsOf(form));
 }
 
+/**
+ * After any change: a starter that was priced in the old currency and has no
+ * prices in the new one opens as its list, for the owner to price. Run it on
+ * every change to the form, with the form from before the change.
+ */
+export function settleMenu(before: SignupForm, after: SignupForm): SignupForm {
+  if (after.menu.kind !== "template") return after;
+  const now = importSettingsOf(after);
+  const pricedBefore = !needsList(after.menu, importSettingsOf(before));
+  return pricedBefore && needsList(after.menu, now)
+    ? { ...after, menuText: listStart(after.menu, now) }
+    : after;
+}
+
 export type FieldProblems = Partial<{
   name: "required" | "too-long";
-  site: SiteNameProblem;
+  /** "taken" comes from the web address check, not from here. */
+  site: SiteNameProblem | "taken";
   email: "required" | "invalid";
   password: "required" | "too-short";
   country: "required";

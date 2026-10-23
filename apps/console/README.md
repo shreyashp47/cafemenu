@@ -7,10 +7,10 @@ platform's own Firebase project. A cafe's menu and orders never come here;
 they live in the owner's project ([PLAN.md](../../PLAN.md#how-it-fits-together)).
 
 Today it has the landing page ([#25](https://github.com/shreyashp47/cafemenu/issues/25)),
-a "coming soon" sign-up page, and the platform's data model, sign-in and
-security rules ([#24](https://github.com/shreyashp47/cafemenu/issues/24)),
-which the sign-up form (#26), onboarding (#27), owner area (#29) and admin
-(#30) build on.
+the sign-up form and email check ([#26](https://github.com/shreyashp47/cafemenu/issues/26)),
+and the platform's data model, sign-in and security rules
+([#24](https://github.com/shreyashp47/cafemenu/issues/24)), which onboarding
+(#27), the owner area (#29) and admin (#30) build on.
 
 Same stack as the cafe app, on the same versions: Next.js 15 (static export),
 React 19, TypeScript, Tailwind CSS v4, Firebase 12, Vitest.
@@ -34,6 +34,44 @@ npm run dev -w @cafemenu/console     # http://localhost:3100
 ```
 
 Port 3100, so the cafe app can run on 3000 beside it.
+
+### Sign-up
+
+`/signup` is steps 1 and 2 of [the owner's steps](../../PLAN.md#the-owners-steps-steps-to-own-it):
+
+1. **The form**: cafe name, web address, number of tables; country, which
+   fills in the currency, time zone, number and date format and where the
+   data is kept (all four editable); theme, accent colour (with a live
+   preview and the shared contrast guard from `@cafemenu/shared`) and logo;
+   the starting menu (a shared starter, a pasted list or CSV read by the
+   shared import, or blank); and the owner's email and password.
+2. **The email link.** The account is made when the form is sent, which
+   sends the link; the rules refuse every write until it is clicked, so the
+   form waits in the browser as a draft (`src/lib/signup/draft.ts`, never the
+   password). Once verified, the page saves the cafe as a `draft`, then its
+   logo and starting menu.
+
+<p align="center">
+  <img src="docs/screens/signup-phone.jpg" width="816" alt="Sign-up on a phone, four views: the form's first section with the cafe name Lantern Café and its web address lantern-cafe, marked as looking free; an accent colour #F5B041 flagged as too light to read, 1.3 to 1, with a button to use #785620 instead; the logo kept at 512 by 512 pixels and a preview of the menu in the Cozy theme with an espresso at ₹120; and the Check your email step with the demo's stand-in for the link">
+</p>
+
+What the form decides is plain data in [`src/lib/signup/`](./src/lib/signup),
+tested without a browser; the components in `src/components/signup/` only
+show it. A reload or a return comes back to the same step.
+
+- **Web address.** The format is the rules' (`SITE_NAME`); nearby names are
+  offered when one is taken or malformed. Whether a name is free can only be
+  known for sure at setup, since names are unique across all of Firebase, and
+  the form says so. Until then the check is a `SiteNameChecker`
+  (`src/lib/data/checks.ts`): simulated in demo mode and the emulators (a few
+  common words, and the demo's own cafes, are "taken"), and "unknown" against
+  the real platform until the backend can try a validate-only `sites.create`
+  ([#28](https://github.com/shreyashp47/cafemenu/issues/28)).
+- **Logo.** PNG, JPEG or WebP up to 8 MB, at least 192 px on its longer side.
+  The browser redraws it as a PNG of at most 512 px (the largest icon; it also
+  drops camera data) and shrinks it further if it would pass 750 kB.
+- **Against the real platform** the page stays "coming soon" until
+  `NEXT_PUBLIC_SIGNUP_OPEN=1`, so the landing page can go live first.
 
 ### Three backends
 
@@ -61,6 +99,7 @@ Types in [`src/lib/platform/model.ts`](./src/lib/platform/model.ts), rules in
 | `cafes/{cafeId}`     | one per cafe                                               | its owner (some fields), the backend (the rest) | its owner, the admin         |
 | `releases/{version}` | one per published release, id `1.4.2`                      | the backend only                                | any verified account         |
 | `deployments/{id}`   | one per setup, deploy, rollback or branding sync of a cafe | the backend only                                | that cafe's owner, the admin |
+| `cafes/{id}/setup/…` | the logo and starting menu from sign-up                    | its owner, while the cafe is a draft            | its owner, the admin         |
 
 A cafe:
 
@@ -70,6 +109,7 @@ A cafe:
 | `ownerEmail`             | that account's email                                                         | at creation, as own             |
 | `projectId`              | the owner's Firebase project; `null` until the access step                   | while `draft`                   |
 | `site`                   | Hosting site name: `their-cafe` → their-cafe.web.app                         | while `draft`                   |
+| `region`                 | the Firestore location for the cafe's database: `asia-south1`, `nam5`        | while `draft`                   |
 | `settings`               | `CafeSettings` from `@cafemenu/shared`: name, theme, accent, currency, zone… | yes, except `plan`              |
 | `release.channel`        | `stable` or `beta`                                                           | yes                             |
 | `release.pinned`         | a minor line (`"1.4"`) to stay on, or `null`; patches of it still apply      | yes                             |
@@ -77,6 +117,29 @@ A cafe:
 | `release.previous`       | the version before it: where Roll back goes                                  | **never**                       |
 | `status`                 | `draft` → `provisioning` → `live`; or `failed`, `disconnected`, `suspended`  | **never** (`draft` at creation) |
 | `createdAt`, `updatedAt` | server time                                                                  | stamped by the server           |
+
+Under a draft cafe, two documents hold what sign-up collected until
+provisioning ([#28](https://github.com/shreyashp47/cafemenu/issues/28))
+copies it into the owner's own project:
+
+| Document     | What                                                                                                                         |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| `setup/logo` | `png`: the logo as Firestore bytes, a PNG of at most 512 px and 750 kB; `updatedAt`                                          |
+| `setup/menu` | `source` (`template`, `import`, `blank`), `template` (the starter's id), `currency`, `items` (at most 200 rows); `updatedAt` |
+
+The rules check their shape and size, that the menu is priced in the cafe's
+own currency, and that the cafe is the caller's and still a draft. They can't
+look inside every menu row or decode a PNG, so the deployer checks both again
+before using them, as it does the settings.
+
+**Where the logo goes in production:** the same document, in the platform
+project's Firestore. Provisioning reads it, makes `/logo.png` and the app
+icons with `siteLogo` and `appIcons` from `@cafemenu/shared/icons` (what
+`deployer deploy --logo` does today), deploys them into the cafe's own
+Hosting site with `settings.logo` set to `/logo.png`, and can then delete the
+document. A 512-px PNG fits a Firestore document easily; if logos ever need
+more room, Cloud Storage on the platform project (on Blaze already, for
+Functions) is the place, with storage rules mirroring these.
 
 A deployment carries `cafeId`, `ownerUid` (copied, so an owner's query can be
 proved by the rules), `kind` (`provision`, `deploy`, `rollback`, `branding`),
@@ -130,6 +193,11 @@ Pages, with Playwright (`npx playwright install chromium webkit` once):
 ```bash
 npm run screenshot           # every page at 4 widths into .screenshots/; fails on overflow
 npm run audit                # WCAG 2.1 A/AA with axe, in Chromium and WebKit
+
+Both look at the steps behind a page too (the form's problems, the accent
+warning, the email check), from demo states in
+[`scripts/lib/demo-states.mjs`](./scripts/lib/demo-states.mjs) and the
+routes in `scripts/lib/server.mjs`.
 ```
 
 CI runs all of it in [`.github/workflows/console.yml`](../../.github/workflows/console.yml)
@@ -143,17 +211,21 @@ espresso ink, a basil green. Colours are tokens in
 [`src/app/globals.css`](./src/app/globals.css); never put a hex in a component.
 Text pairs and their contrast (WCAG AA needs 4.5:1):
 
-| Text            | On               |     Ratio |
-| --------------- | ---------------- | --------: |
-| `text`          | `paper`          |      11.7 |
-| `muted`         | `paper` / `sunk` | 6.1 / 5.5 |
-| `brand-ink`     | `paper`          |       8.2 |
-| white           | `brand`          |       6.5 |
-| `brand-soft`    | `brand`          |       5.4 |
-| `accent-ink`    | `accent-soft`    |       5.9 |
-| `on-dark`       | `espresso`       |      13.9 |
-| `on-dark-muted` | `espresso`       |       8.6 |
-| `accent`        | `espresso`       |       6.5 |
+| Text            | On                                  |           Ratio |
+| --------------- | ----------------------------------- | --------------: |
+| `text`          | `paper`                             |            11.7 |
+| `muted`         | `paper` / `sunk`                    |       6.1 / 5.5 |
+| `brand-ink`     | `paper`                             |             8.2 |
+| white           | `brand`                             |             6.5 |
+| `brand-soft`    | `brand`                             |             5.4 |
+| `accent-ink`    | `accent-soft`                       |             5.9 |
+| `on-dark`       | `espresso`                          |            13.9 |
+| `on-dark-muted` | `espresso`                          |             8.6 |
+| `accent`        | `espresso`                          |             6.5 |
+| `danger`        | `surface` / `paper` / `danger-soft` | 7.4 / 7.0 / 6.4 |
+
+Form fields are edged in `line-field`, 4.0:1 on `surface` (WCAG asks 3:1 of a
+control's edge); `line-strong` is for decoration only.
 
 Headings use Fraunces at one weight, self-hosted by `next/font`; body text is
 the system font. Every word is in [`messages/en.json`](./messages/en.json),

@@ -19,6 +19,20 @@ export function problemText(problem: CafeProblem | SetupProblem): string {
   return messages.problems[problem];
 }
 
+/**
+ * A message with its `{name}` slots filled: fill("Use {name}", { name: "x" }).
+ * A slot with no value is left as it is, so a missing one shows on the page
+ * rather than vanishing.
+ */
+export function fill(
+  template: string,
+  values: Record<string, string | number>,
+): string {
+  return template.replace(/\{(\w+)\}/g, (slot, key: string) =>
+    key in values ? String(values[key]) : slot,
+  );
+}
+
 /** The words for an error a repository threw, by its Firebase-style code. */
 export function errorText(error: unknown): string {
   const code =

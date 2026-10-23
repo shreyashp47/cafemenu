@@ -273,18 +273,286 @@
     "legal": "The privacy policy and terms are published before sign-up opens."
   },
   "signup": {
-    "eyebrow": "Sign up",
-    "title": "Sign-up is coming soon.",
-    "text": "CafeMenu is in early development. The form, the email check and the guided setup are being built now, and sign-up opens as soon as they are ready and tested.",
-    "meanwhile": "In the meantime",
-    "tryIt": "Run the demo on your computer",
-    "follow": "Follow the work on GitHub",
+    "closed": {
+      "eyebrow": "Sign up",
+      "title": "Sign-up is coming soon.",
+      "text": "CafeMenu is in early development. The form, the email check and the guided setup are being built now, and sign-up opens as soon as they are ready and tested.",
+      "meanwhile": "In the meantime",
+      "tryIt": "Run the demo on your computer",
+      "follow": "Follow the work on GitHub",
+      "back": "Back to the home page"
+    },
+    "eyebrow": "Step 1 of 5 · your cafe",
+    "title": "Tell us about your cafe",
+    "lead": "A few details now, then a few minutes of setup in your own Google account. You can change all of it later.",
+    "demo": "**Demo mode.** Nothing you type leaves this browser: no account is made and no email is sent.",
+    "loading": "Loading…",
+    "optional": "optional",
+    "sections": {
+      "cafe": "Your cafe",
+      "place": "Where it is",
+      "look": "How it looks",
+      "menu": "Starting menu",
+      "account": "Your account"
+    },
+    "name": {
+      "label": "Cafe name",
+      "hint": "As your customers know it. It heads your menu and your QR cards."
+    },
+    "site": {
+      "label": "Web address",
+      "suffix": ".web.app",
+      "hint": "Lowercase letters, numbers and hyphens. Your menu will be at **{address}**.",
+      "checking": "Checking…",
+      "looksFree": "Looks free.",
+      "taken": "That name is taken.",
+      "unknown": "We can't check names from here yet.",
+      "final": "Names are unique across all of Firebase, so the final check happens at setup. If it's gone by then, you'll pick another.",
+      "suggestions": "Try one of these",
+      "use": "Use {name}"
+    },
+    "tables": {
+      "label": "Number of tables",
+      "hint": "One QR card for each, numbered from 1. Up to 50; you can change it later."
+    },
+    "country": {
+      "label": "Country",
+      "choose": "Choose your country",
+      "other": "Somewhere else",
+      "hint": "Fills in the four below. Change any that aren't right.",
+      "otherHint": "Choose each of the four below yourself."
+    },
+    "currency": {
+      "label": "Currency",
+      "hint": "For your prices."
+    },
+    "timeZone": {
+      "label": "Time zone",
+      "hint": "Your cafe's day starts at midnight here: order numbers and daily reports follow it.",
+      "here": "In {country}",
+      "all": "All time zones",
+      "same": "{offset} all year.",
+      "daylight": "{standard}, and {daylight} with daylight saving."
+    },
+    "locale": {
+      "label": "Number and date format",
+      "sample": "Prices look like {price} and dates like {date}."
+    },
+    "region": {
+      "label": "Where your data is kept",
+      "hint": "The Google data centre for your menu and orders. It can't be moved later, so the nearest one is best."
+    },
+    "theme": {
+      "label": "Theme"
+    },
+    "accent": {
+      "label": "Accent colour",
+      "own": "The theme's own",
+      "custom": "My own colour",
+      "picker": "Pick a colour",
+      "hex": "Colour code",
+      "hexHint": "Like #1D6A51.",
+      "passes": "Readable: {ratio} to 1 against the theme, and text needs 4.5.",
+      "fails": "Too light to read as text on this theme: {ratio} to 1, and text needs 4.5.",
+      "failsDark": "Too dark to read as text on this theme: {ratio} to 1, and text needs 4.5.",
+      "useSuggested": "Use {colour} instead",
+      "suggested": "The nearest shade that passes"
+    },
+    "preview": {
+      "label": "Preview",
+      "namePlaceholder": "Your cafe",
+      "item": "Flat white",
+      "add": "Add",
+      "monogram": "Your initials stand in until there's a logo."
+    },
+    "logo": {
+      "label": "Logo",
+      "choose": "Choose a logo",
+      "change": "Choose another",
+      "remove": "Remove",
+      "hint": "PNG, JPEG or WebP, up to 8 MB. Square works best, at least 512 × 512 pixels. Without one, your initials are used.",
+      "reading": "Reading the image…",
+      "alt": "Your logo",
+      "stored": "Kept at {width} × {height} pixels, as a PNG.",
+      "small": "It's smaller than 512 pixels, so the home-screen icon may look soft.",
+      "not-square": "It's much wider or taller than it is square, so it will be small in the square app icon.",
+      "problems": {
+        "type": "That file isn't a PNG, JPEG or WebP image.",
+        "file-size": "That file is over 8 MB. Choose a smaller one.",
+        "unreadable": "That image couldn't be read. Try saving it again as a PNG.",
+        "too-small": "That image is too small: it needs to be at least 192 pixels on its longer side.",
+        "too-detailed": "That image is too detailed to keep at a size that loads fast. Try a simpler version of the logo."
+      },
+      "where": "We keep it on CafeMenu until your site is set up, then it goes into your own project."
+    },
+    "menu": {
+      "label": "Start with",
+      "items": "{count} items",
+      "import": "My own list",
+      "importHint": "Paste from a spreadsheet, or upload a CSV file.",
+      "blank": "A blank menu",
+      "blankHint": "Add items yourself in your dashboard.",
+      "list": "Your menu",
+      "listHint": "One item per line: name, category, price, and optionally a description and whether it's available. A header row naming the columns is fine.",
+      "upload": "Upload a CSV file",
+      "unpriced": "These come without prices in {currency}. Fill in each one below.",
+      "ready": "{count} items ready.",
+      "rowsToFix": "{count} rows to fix:",
+      "row": "Row {row}",
+      "more": "…and {count} more.",
+      "fileProblem": "That file couldn't be read as text."
+    },
+    "account": {
+      "email": "Email",
+      "emailHint": "We send a link here to check it's yours.",
+      "password": "Password",
+      "passwordHint": "At least 8 characters.",
+      "show": "Show",
+      "hide": "Hide",
+      "signedIn": "Signed in as **{email}**.",
+      "signOut": "Not you? Sign out",
+      "signInInstead": "Sign in with this password"
+    },
+    "submit": "Create account and continue",
+    "submitSignedIn": "Save and continue",
+    "submitting": "Creating your account…",
+    "afterSubmit": "Next, we email you a link to confirm your address.",
+    "fixFields": "Check the {count} fields marked.",
+    "fixField": "Check the field marked.",
+    "problems": {
+      "name": {
+        "required": "Give your cafe's name.",
+        "too-long": "Keep it to 60 characters."
+      },
+      "site": {
+        "empty": "Choose a web address.",
+        "characters": "Use only lowercase letters, numbers and hyphens.",
+        "too-long": "Keep it to 30 characters.",
+        "hyphen-ends": "It can't start or end with a hyphen.",
+        "taken": "That name is taken. Choose another, or one of the free names nearby."
+      },
+      "email": {
+        "required": "Give your email address.",
+        "invalid": "That email address doesn't look right."
+      },
+      "password": {
+        "required": "Choose a password.",
+        "too-short": "Use at least 8 characters."
+      },
+      "country": {
+        "required": "Choose your country, or Somewhere else."
+      },
+      "currency": {
+        "invalid": "Choose a currency."
+      },
+      "timeZone": {
+        "invalid": "Choose a time zone."
+      },
+      "locale": {
+        "invalid": "Choose a format."
+      },
+      "region": {
+        "invalid": "Choose where your data is kept."
+      },
+      "tables": {
+        "invalid": "Use a whole number from 1 to 50."
+      },
+      "accent": {
+        "invalid": "Use a colour code like #1D6A51.",
+        "contrast": "Pick a colour that passes, or use the suggested one."
+      },
+      "menu": {
+        "empty": "Add at least one item, or start with a blank menu.",
+        "rows": "Fix the rows marked, or remove them."
+      }
+    },
+    "verify": {
+      "eyebrow": "Step 2 of 5 · your email",
+      "title": "Check your email",
+      "text": "We sent a link to **{email}**. Open it on any device, then come back here and continue.",
+      "kept": "Your answers are kept in this browser until then.",
+      "noDraft": "Once your email is confirmed, you'll fill in your cafe's details.",
+      "check": "I've clicked the link",
+      "checking": "Checking…",
+      "notYet": "Not confirmed yet. The email can take a minute to arrive; look in spam too.",
+      "resend": "Send the link again",
+      "resent": "Sent. Look for the newest email.",
+      "restart": "Wrong address? Start again",
+      "demo": "Demo mode sends no email.",
+      "demoVerify": "Pretend I clicked the link",
+      "emulators": "Emulators: the link is in the Auth emulator's log, and its UI on port 4010."
+    },
+    "create": {
+      "title": "Saving your cafe…",
+      "failed": "Your cafe wasn't saved.",
+      "retry": "Try again"
+    },
+    "done": {
+      "eyebrow": "Step 2 of 5 · done",
+      "title": "{name} is saved.",
+      "text": "It's a draft until it's set up. Nothing is live yet.",
+      "address": "Web address",
+      "region": "Data kept in",
+      "menu": "Starting menu",
+      "blank": "Blank",
+      "next": "Next: create a free Firebase project in your own Google account, and give CafeMenu access to it."
+    },
     "back": "Back to the home page"
   },
   "notFound": {
     "title": "That page isn't here.",
     "text": "The address may be mistyped, or the page may have moved.",
     "back": "Back to the home page"
+  },
+  "locations": {
+    "groups": {
+      "multi": "Several regions",
+      "americas": "The Americas",
+      "europe": "Europe",
+      "asia": "Asia and Oceania",
+      "middleEast": "The Middle East",
+      "africa": "Africa"
+    },
+    "names": {
+      "nam5": "United States (several regions)",
+      "eur3": "Europe (several regions)",
+      "us-central1": "Iowa",
+      "us-east1": "South Carolina",
+      "us-east4": "Northern Virginia",
+      "us-west1": "Oregon",
+      "us-west2": "Los Angeles",
+      "us-west3": "Salt Lake City",
+      "us-west4": "Las Vegas",
+      "northamerica-northeast1": "Montréal",
+      "northamerica-northeast2": "Toronto",
+      "southamerica-east1": "São Paulo",
+      "southamerica-west1": "Santiago",
+      "europe-west1": "Belgium",
+      "europe-west2": "London",
+      "europe-west3": "Frankfurt",
+      "europe-west4": "Netherlands",
+      "europe-west6": "Zürich",
+      "europe-west8": "Milan",
+      "europe-west9": "Paris",
+      "europe-central2": "Warsaw",
+      "europe-north1": "Finland",
+      "europe-southwest1": "Madrid",
+      "asia-south1": "Mumbai",
+      "asia-south2": "Delhi",
+      "asia-southeast1": "Singapore",
+      "asia-southeast2": "Jakarta",
+      "asia-east1": "Taiwan",
+      "asia-east2": "Hong Kong",
+      "asia-northeast1": "Tokyo",
+      "asia-northeast2": "Osaka",
+      "asia-northeast3": "Seoul",
+      "australia-southeast1": "Sydney",
+      "australia-southeast2": "Melbourne",
+      "me-central1": "Doha",
+      "me-west1": "Tel Aviv",
+      "africa-south1": "Johannesburg"
+    },
+    "option": "{name} · {id}"
   },
   "problems": {
     "site-format": "Use lowercase letters, numbers and hyphens, up to 30 characters, not starting or ending with a hyphen.",

@@ -4,6 +4,7 @@
  * wait for it.
  */
 import { spawn } from "node:child_process";
+import { applyDemoState } from "./demo-states.mjs";
 
 export async function waitForServer(url, timeoutMs = 120_000) {
   const deadline = Date.now() + timeoutMs;
@@ -37,8 +38,41 @@ export async function startServer(port) {
   return { base, stop: () => dev.kill("SIGTERM") };
 }
 
-/** Every page of the console, as served. */
+/**
+ * Every page of the console, as served, and the states behind its steps:
+ * `demo` names a state from demo-states.mjs to load first, and `act` does
+ * something on the page before it is looked at.
+ */
 export const ROUTES = [
   { path: "/", name: "home" },
   { path: "/signup", name: "signup" },
+  {
+    path: "/signup",
+    name: "signup-errors",
+    // Sent empty: every field's problem is on show.
+    act: async (page) => {
+      await page.getByRole("button", { name: /create account/i }).click();
+      await page.getByRole("alert").first().waitFor();
+    },
+  },
+  {
+    path: "/signup",
+    name: "signup-accent",
+    // An accent too light for the theme: the contrast guard's warning.
+    act: async (page) => {
+      await page.getByLabel("My own colour").check();
+      await page.getByLabel("Colour code").fill("#F5B041");
+      await page.getByText(/too light/i).waitFor();
+    },
+  },
+  { path: "/signup", name: "signup-verify", demo: "verify" },
 ];
+
+/** Opens `route` in `page`: its demo state, the page, then its action. */
+export async function openRoute(page, base, route) {
+  await applyDemoState(page, route.demo);
+  await page.goto(`${base}${route.path}`, { waitUntil: "networkidle" });
+  // The sign-up flow renders once the account state is known.
+  await page.locator("main h1").first().waitFor();
+  if (route.act) await route.act(page);
+}
