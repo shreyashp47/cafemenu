@@ -105,6 +105,30 @@ many cafes.
 9. **No licensed characters or brand art** in themes or templates. Everything
    is original or properly licensed.
 
+## Changing the shape of a cafe's data
+
+House rule 4 in practice. Each cafe's data has a schema version
+(`config/meta.schemaVersion`), and `migrations/NNNN-what-it-does.mjs` takes it
+to schema NNNN ([migrations/README.md](migrations/README.md)).
+
+- **Expand**: the release adds the new fields beside the old ones and reads
+  either; its migration fills them in. `minSchemaVersion` stays, so the
+  release before it still works on the data and a rollback is safe, and
+  `deployer deploy` runs the migration with the old release live.
+- **Contract**, a release or more later: a migration removes the old fields,
+  and `minSchemaVersion` rises to the first schema whose releases no longer
+  read them.
+- A migration exports `from`, `to`, `describe` and `up(db)`, and the deployer
+  refuses one whose `from` isn't the data's schema, so a contract can't run on
+  data its expand hasn't reached.
+- A change that can't expand first (0002 turns every amount into paise in
+  place) sets `minSchemaVersion` to its own number. The deploy then refuses to
+  run it under the live release, and it runs with `deployer migrate` while the
+  cafe is closed.
+- Change documents only through `db.each` and `db.update`, which save progress
+  with every page, so a run can stop anywhere. Test it on the emulator as
+  `packages/deployer/tests/emulator/` does.
+
 ## Pull requests
 
 - Say what you verified. "Ran the rules tests against the emulators" is useful;
