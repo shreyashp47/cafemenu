@@ -848,8 +848,9 @@ maxOrderTotal: 10000 }`, whatever the layer under it says. A missing field
 So nothing reads TOE's rupees as paise: the only thing that can say "minor"
 about TOE is a `config/site` the platform writes after the data has moved.
 
-**What #21 then does** (its design to finish; this is what the app is ready
-for):
+**What #21 does**
+([`migrations/0002-money-minor-units.mjs`](../../../migrations/0002-money-minor-units.mjs),
+run by the deployer):
 
 1. Run while the cafe is closed. The move is not one atomic write: a batch
    holds 500 documents, and the orders may be more.
@@ -862,10 +863,14 @@ for):
    10,000 paise: big orders are refused, nothing is undercharged, which is why
    it runs while the cafe is closed. Expand-then-contract, with the paise in
    new fields beside the rupees, would avoid the window at the cost of the app
-   reading both shapes; that is #21's call.
+   reading both shapes. #21 took the window: `deployer migrate --to 2` runs it,
+   and `deployer deploy` refuses to run it under a live release.
 4. Refuse rollbacks to a release from before this one, which would read paise
-   as rupees: `minSchemaVersion` in `migrations/schema.json`. This release and
-   later read either unit.
+   as rupees: `minSchemaVersion` in `migrations/schema.json` is 2.
+5. Keep it: a deploy or a branding sync whose settings still say `"major"`
+   (TOE's `fixtures/toe.json`) keeps the unit `config/site` has and converts
+   the cap, with a warning, so a settings file can't relabel paise as rupees.
+   Only a migration changes the unit.
 
 **Considered and not taken:**
 

@@ -151,9 +151,36 @@ a manual fallback. Dotfiles in `out/` are left out of the package; Hosting's
 Both live in [`migrations/`](../migrations/README.md) at the repository root:
 `migrations/schema.json` holds `schemaVersion` and `minSchemaVersion`, and
 `migrations/NNNN-what-it-does.mjs` is the migration to schema NNNN. Schema 1 is
-TOE's data as it is today, so there are no migrations yet. `package.mjs`
-refuses to build when the migrations don't add up to `schemaVersion`.
-[#21](https://github.com/shreyashp47/cafemenu/issues/21) builds the runner.
+TOE's data before CafeMenu; schema 2 is
+[`0002-money-minor-units.mjs`](../migrations/0002-money-minor-units.mjs), TOE's
+whole rupees as paise, with `minSchemaVersion` 2. `package.mjs` refuses to
+build when the migrations don't add up to `schemaVersion`.
+
+The deployer runs them as the cafe's service account
+([packages/deployer](../packages/deployer/README.md#migrate)), from the data's
+`config/meta.schemaVersion` up to the release's `schemaVersion`:
+
+- `deployer deploy --version` runs the package's own migrations before the
+  rules and the site, when the release live during the upgrade can run on the
+  result (the release's `minSchemaVersion` is at or below the data's schema).
+- `deployer migrate --project <id> --to <n>` runs the repository's, outside a
+  deploy. A release whose `minSchemaVersion` is above the data's, as the first
+  one at schema 2 is for TOE, needs it first, while the cafe is closed.
+
+Both carry on where a stopped run left off, and `--dry-run` says what they
+would change without writing.
+
+Upgrading TOE to schema 2, from a checkout of that release:
+
+```bash
+deployer migrate --project <toe> --to 2 --dry-run
+deployer migrate --project <toe> --to 2          # with the cafe closed
+deployer deploy  --project <toe> --site <site> --version <x.y.z> --settings toe.json
+```
+
+The deploy keeps the money unit `config/site` now has, even with a settings
+file that still says `"major"`, and puts it in `site.json` too. Rolling TOE
+back to a release at schema 1 is refused from then on.
 
 ## Checking a package
 
