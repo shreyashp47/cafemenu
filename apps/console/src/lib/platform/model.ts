@@ -5,6 +5,8 @@
  *
  *   cafes/{cafeId}         one per cafe: who owns it, where it runs, which
  *                          release it is on. The owner reads and edits it.
+ *   cafes/{cafeId}/setup/  the logo and starting menu from sign-up, until
+ *     {logo,menu}          provisioning copies them into the owner's project.
  *   releases/{version}     one per published release. Written by the backend.
  *   deployments/{id}       one per setup, deploy, rollback or branding sync.
  *                          Written by the backend.
@@ -99,6 +101,13 @@ export interface Cafe {
   /** The Hosting site name: "their-cafe" serves their-cafe.web.app. */
   site: string;
   /**
+   * Where the cafe's Firestore database is created: a location ID from
+   * ./locations.ts, such as "asia-south1". Chosen at sign-up from the
+   * country; fixed once setup starts, since a database cannot move. Null on
+   * a record written before sign-up asked for it.
+   */
+  region: string | null;
+  /**
    * The cafe's name, look, currency, locale and time zone, in the shape the
    * cafe app reads. Edited in the console; the backend copies it to the cafe's
    * `config/site` and deployed files on the next sync. `settings.plan` is the
@@ -109,6 +118,65 @@ export interface Cafe {
   status: CafeStatus;
   createdAt: number;
   updatedAt: number;
+}
+
+// -- what the owner gives at sign-up ---------------------------------------------
+
+/**
+ * Two documents under a draft cafe, `cafes/{cafeId}/setup/{logo,menu}`, kept
+ * on the platform until provisioning (#28) copies them into the owner's own
+ * project, and then the cafe's own dashboard is where they change:
+ *
+ *   logo  the logo as a PNG, already shrunk to fit SETUP_LOGO_SIDE, for
+ *         `siteLogo` and `appIcons` from @cafemenu/shared/icons to turn into
+ *         the site's /logo.png and its app icons (`settings.logo` is then
+ *         "/logo.png")
+ *   menu  the starting menu, as the rows the cafe app's import writes
+ *
+ * The rules let only the owner write them, and only while the cafe is a
+ * draft. They cannot look inside every menu row, so the deployer checks the
+ * rows again before loading them, as it does the settings.
+ */
+export const SETUP_PARTS = ["logo", "menu"] as const;
+export type SetupPart = (typeof SETUP_PARTS)[number];
+
+/** The longest side of a stored logo, in pixels: the size of the largest icon. */
+export const SETUP_LOGO_SIDE = 512;
+/**
+ * The most a stored logo may weigh. A Firestore document holds 1 MiB, and a
+ * 512-pixel PNG of a real logo is a small fraction of this.
+ */
+export const SETUP_LOGO_MAX_BYTES = 750_000;
+
+/**
+ *   template  one of the starter menus from @cafemenu/shared, priced in the
+ *             cafe's currency, perhaps edited
+ *   blank     no menu: the owner adds items in their dashboard
+ *   import    a list or CSV the owner pasted or uploaded
+ */
+export const STARTING_MENU_SOURCES = ["template", "blank", "import"] as const;
+export type StartingMenuSource = (typeof STARTING_MENU_SOURCES)[number];
+
+/** One row of the starting menu: what the cafe app's menu import writes. */
+export interface StartingMenuItem {
+  name: string;
+  category: string;
+  description: string;
+  /** In minor units of `StartingMenu.currency`, above 0. */
+  price: number;
+  available: boolean;
+}
+
+export interface StartingMenu {
+  source: StartingMenuSource;
+  /** The starter menu's id ("coffee-shop") when `source` is template. */
+  template: string | null;
+  /**
+   * The currency the prices are in. The deployer will not load them into a
+   * cafe whose currency has changed since: 450 cents are not 450 yen.
+   */
+  currency: string;
+  items: StartingMenuItem[];
 }
 
 // -- deployments ---------------------------------------------------------------

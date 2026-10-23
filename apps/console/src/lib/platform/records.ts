@@ -6,7 +6,7 @@
  */
 
 import type { CafeSettings } from "@cafemenu/shared";
-import type { CafeRelease } from "./model";
+import type { CafeRelease, StartingMenu } from "./model";
 import { releaseChoiceOf, type ReleaseChoice } from "./validate";
 
 export interface CafeRecord<Time> {
@@ -14,6 +14,7 @@ export interface CafeRecord<Time> {
   ownerEmail: string;
   projectId: string | null;
   site: string;
+  region: string;
   settings: CafeSettings;
   release: CafeRelease;
   status: "draft";
@@ -30,6 +31,7 @@ export function newCafeRecord<Time>(
   owner: { uid: string; email: string },
   fields: {
     site: string;
+    region: string;
     settings: CafeSettings;
     projectId?: string | null;
     release?: Partial<ReleaseChoice>;
@@ -42,6 +44,7 @@ export function newCafeRecord<Time>(
     ownerEmail: owner.email,
     projectId: fields.projectId ?? null,
     site: fields.site,
+    region: fields.region,
     settings: {
       ...fields.settings,
       utcOffsets: { ...fields.settings.utcOffsets },
@@ -55,6 +58,38 @@ export function newCafeRecord<Time>(
     },
     status: "draft",
     createdAt: now,
+    updatedAt: now,
+  };
+}
+
+/**
+ * The setup documents, `cafes/{cafeId}/setup/{logo,menu}`, pinned by the
+ * rules as the cafe is. The PNG is in whatever form the store keeps bytes:
+ * Firestore's Bytes, or base64 in the demo store. Both must already have
+ * passed the checks in validate.ts.
+ */
+export function logoRecord<Bytes, Time>(
+  png: Bytes,
+  now: Time,
+): { png: Bytes; updatedAt: Time } {
+  return { png, updatedAt: now };
+}
+
+export function startingMenuRecord<Time>(
+  menu: StartingMenu,
+  now: Time,
+): StartingMenu & { updatedAt: Time } {
+  return {
+    source: menu.source,
+    template: menu.template,
+    currency: menu.currency,
+    items: menu.items.map((item) => ({
+      name: item.name,
+      category: item.category,
+      description: item.description,
+      price: item.price,
+      available: item.available,
+    })),
     updatedAt: now,
   };
 }

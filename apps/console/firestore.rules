@@ -11,8 +11,9 @@ rules_version = '2';
 // Who can do what:
 //
 //   an owner      reads their own cafes and those cafes' deployments, edits
-//                 their cafe's settings and release choice, and creates new
-//                 cafes, all only with a verified email
+//                 their cafe's settings and release choice, creates new
+//                 cafes, and gives a draft cafe its logo and starting menu,
+//                 all only with a verified email
 //   the admin     (custom claim admin: true) reads everything
 //   the backend   writes everything else: release records, deployments, a
 //                 cafe's status, plan and the version it runs. It uses the platform
@@ -63,6 +64,14 @@ service cloud.firestore {
     function isSiteName(value) {
       return value is string
         && value.matches('[a-z0-9]([a-z0-9-]{0,28}[a-z0-9])?');
+    }
+
+    // A Firestore location ID: "nam5", "asia-south1". The console offers a
+    // list (src/lib/platform/locations.ts); the deployer passes it to the
+    // Firestore Admin API, which refuses one it does not have.
+    function isRegion(value) {
+      return value is string
+        && value.matches('[a-z]{2,20}([0-9]{1,2}|-[a-z]{2,20}[0-9]{1,2})');
     }
 
     function isProjectIdOrNull(value) {
@@ -132,16 +141,17 @@ service cloud.firestore {
       // field is pinned, so nothing the backend owns can be set at birth.
       allow create: if verified()
         && request.resource.data.keys().hasOnly([
-          'ownerUid', 'ownerEmail', 'projectId', 'site', 'settings', 'release',
-          'status', 'createdAt', 'updatedAt'])
+          'ownerUid', 'ownerEmail', 'projectId', 'site', 'region', 'settings',
+          'release', 'status', 'createdAt', 'updatedAt'])
         && request.resource.data.keys().hasAll([
-          'ownerUid', 'ownerEmail', 'projectId', 'site', 'settings', 'release',
-          'status', 'createdAt', 'updatedAt'])
+          'ownerUid', 'ownerEmail', 'projectId', 'site', 'region', 'settings',
+          'release', 'status', 'createdAt', 'updatedAt'])
         && request.resource.data.ownerUid == request.auth.uid
         && request.resource.data.ownerEmail == request.auth.token.email
         && request.resource.data.status == 'draft'
         && isProjectIdOrNull(request.resource.data.projectId)
         && isSiteName(request.resource.data.site)
+        && isRegion(request.resource.data.region)
         && isSettings(request.resource.data.settings)
         // Every cafe starts free. Plans are the backend's to change (#17).
         && request.resource.data.settings.plan == 'free'
@@ -157,9 +167,10 @@ service cloud.firestore {
         && request.resource.data.createdAt == request.time
         && request.resource.data.updatedAt == request.time;
 
-      // The owner edits settings and the release choice. The site and the
-      // project can still change while the cafe is a draft; once setup has
-      // started they are fixed, because the backend deploys to them.
+      // The owner edits settings and the release choice. The site, the
+      // database's region and the project can still change while the cafe is
+      // a draft; once setup has started they are fixed, because the backend
+      // deploys to them and a database cannot move.
       //
       // Never the owner's: ownerUid, ownerEmail, status, createdAt, the plan
       // and the money unit in settings (the unit says what the cafe's stored
@@ -170,7 +181,8 @@ service cloud.firestore {
       allow update: if verified()
         && owns(resource.data)
         && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['settings', 'release', 'projectId', 'site', 'updatedAt'])
+          .hasOnly(['settings', 'release', 'projectId', 'site', 'region',
+            'updatedAt'])
         && request.resource.data.updatedAt == request.time
         && isSettings(request.resource.data.settings)
         && request.resource.data.settings.plan == resource.data.settings.plan
@@ -182,14 +194,83 @@ service cloud.firestore {
         && isReleaseChoice(request.resource.data.release)
         && isProjectIdOrNull(request.resource.data.projectId)
         && isSiteName(request.resource.data.site)
+        // A record from before sign-up asked for the region has none.
+        && (request.resource.data.get('region', null) == null
+          || isRegion(request.resource.data.region))
         && (resource.data.status == 'draft'
           || (request.resource.data.projectId == resource.data.projectId
-            && request.resource.data.site == resource.data.site));
+            && request.resource.data.site == resource.data.site
+            && request.resource.data.get('region', null)
+              == resource.data.get('region', null)));
 
       // Leaving CafeMenu is removing its access in the owner's own project;
       // the record stays so the admin can see the cafe disconnected. Deleting
       // an account's data is a backend job.
       allow delete: if false;
+
+      // -- what the owner gives at sign-up ---------------------------------------
+      //
+      //   setup/logo   the logo: a PNG of at most 512 px a side
+      //   setup/menu   the starting menu: a starter, blank, or pasted rows
+      //
+      // Kept here until provisioning (#28) copies them into the owner's own
+      // project: the logo into the site as /logo.png and its icons, the menu
+      // into its /menu. Only while the cafe is a draft; after that, the cafe's
+      // own dashboard is where they change. The rules cannot look inside every
+      // menu row or decode a PNG, so the deployer checks both again before
+      // using them, as it does the settings.
+      match /setup/{part} {
+        function cafe() {
+          return get(/databases/$(database)/documents/cafes/$(cafeId)).data;
+        }
+
+        function ownDraft() {
+          return verified()
+            && cafe().ownerUid == request.auth.uid
+            && cafe().status == 'draft';
+        }
+
+        // A PNG fits a 1 MiB document: SETUP_LOGO_MAX_BYTES in model.ts.
+        function isLogo(d) {
+          return d.keys().hasOnly(['png', 'updatedAt'])
+            && d.keys().hasAll(['png', 'updatedAt'])
+            && d.png is bytes
+            && d.png.size() > 8
+            && d.png.size() <= 750000;
+        }
+
+        // At most 200 rows (MAX_IMPORT_ROWS in @cafemenu/shared), priced in
+        // the cafe's own currency. A starter names its template; nothing else
+        // does. A blank menu has no rows; the others have at least one.
+        function isStartingMenu(d) {
+          return d.keys().hasOnly(['source', 'template', 'currency', 'items',
+              'updatedAt'])
+            && d.keys().hasAll(['source', 'template', 'currency', 'items',
+              'updatedAt'])
+            && d.source in ['template', 'blank', 'import']
+            && (d.source == 'template'
+              ? (d.template is string
+                && d.template.matches('[a-z][a-z0-9-]{0,31}'))
+              : d.template == null)
+            && d.currency == cafe().settings.currency
+            && d.items is list
+            && d.items.size() <= 200
+            && (d.source == 'blank'
+              ? d.items.size() == 0
+              : d.items.size() >= 1);
+        }
+
+        allow get: if isAdmin()
+          || (signedIn() && cafe().ownerUid == request.auth.uid);
+        allow list: if isAdmin();
+        allow create, update: if ownDraft()
+          && request.resource.data.updatedAt == request.time
+          && ((part == 'logo' && isLogo(request.resource.data))
+            || (part == 'menu' && isStartingMenu(request.resource.data)));
+        // An owner may drop the logo. The menu is replaced, never removed:
+        // "blank" is a choice too.
+        allow delete: if ownDraft() && part == 'logo';
+      }
     }
 
     // -- releases ------------------------------------------------------------------

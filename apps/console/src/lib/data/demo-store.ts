@@ -204,8 +204,76 @@ export function currentUser(state: DemoState): PlatformUser | null {
   };
 }
 
+// --- the setup documents --------------------------------------------------------
+
+/**
+ * `cafes/{cafeId}/setup/{part}` in demo mode, one localStorage key each, so
+ * a logo of a few hundred kilobytes is not parsed on every read of the main
+ * state. demo.ts applies the rules' checks before writing them.
+ */
+export const DEMO_SETUP_PREFIX = `${DEMO_STORAGE_KEY}.setup.`;
+
+const memorySetup = new Map<string, string>();
+const setupKey = (cafeId: string, part: string) =>
+  `${DEMO_SETUP_PREFIX}${cafeId}.${part}`;
+
+export function loadSetup(cafeId: string, part: string): unknown {
+  const key = setupKey(cafeId, part);
+  const store = safeStorage();
+  const raw = store ? store.getItem(key) : (memorySetup.get(key) ?? null);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+/** Saves a setup document, or deletes it when `value` is null. */
+export function saveSetup(cafeId: string, part: string, value: unknown) {
+  const key = setupKey(cafeId, part);
+  const store = safeStorage();
+  if (value === null) {
+    if (store) store.removeItem(key);
+    memorySetup.delete(key);
+    return;
+  }
+  const raw = JSON.stringify(value);
+  try {
+    if (store) store.setItem(key, raw);
+    else memorySetup.set(key, raw);
+  } catch {
+    // Storage full: keep it for this tab, as private mode would.
+    memorySetup.set(key, raw);
+  }
+}
+
+/** Bytes to base64 and back, for the logo. In chunks: a logo is large. */
+export function toBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(binary);
+}
+
+export function fromBase64(text: string): Uint8Array {
+  const binary = atob(text);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
 /** Forget everything. For tests, and a future "reset the demo" button. */
 export function resetDemo() {
   memoryState = null;
+  memorySetup.clear();
+  const store = safeStorage();
+  if (store) {
+    const keys = Array.from({ length: store.length }, (_, i) => store.key(i));
+    for (const key of keys) {
+      if (key?.startsWith(DEMO_SETUP_PREFIX)) store.removeItem(key);
+    }
+  }
   save(seedState());
 }

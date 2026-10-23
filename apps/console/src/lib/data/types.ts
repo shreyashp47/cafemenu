@@ -13,6 +13,7 @@ import type {
   Deployment,
   PlatformUser,
   Release,
+  StartingMenu,
 } from "../platform/model";
 import type { NewCafeInput, ReleaseChoice } from "../platform/validate";
 
@@ -70,6 +71,46 @@ export interface CafeRepository {
   connectProject(cafeId: string, projectId: string): Promise<void>;
 }
 
+/**
+ * What the owner gives at sign-up that does not fit in the cafe record: the
+ * logo and the starting menu (`cafes/{cafeId}/setup/…`; see model.ts). Only
+ * the owner writes them, only while the cafe is a draft, and provisioning
+ * (#28) copies them into the owner's own project.
+ */
+export interface SetupRepository {
+  /**
+   * The logo, as a PNG already shrunk to fit SETUP_LOGO_SIDE. Throws
+   * SetupInputError before writing anything if it is not a PNG or too big.
+   */
+  saveLogo(cafeId: string, png: Uint8Array): Promise<void>;
+  removeLogo(cafeId: string): Promise<void>;
+  /** The owner's own logo, or null when there is none. */
+  getLogo(cafeId: string): Promise<Uint8Array | null>;
+  /**
+   * The starting menu. Takes the cafe for its currency: the prices must be in
+   * it. Throws SetupInputError before writing anything if a check fails.
+   */
+  saveMenu(
+    cafe: Pick<Cafe, "id" | "settings">,
+    menu: StartingMenu,
+  ): Promise<void>;
+  getMenu(cafeId: string): Promise<StartingMenu | null>;
+}
+
+/**
+ * Whether a web address name looks free, at sign-up:
+ *
+ *   looks-free  nothing says it is taken. Not a promise: names are unique
+ *               across all of Firebase, and only provisioning can be sure
+ *   taken       someone has it
+ *   unknown     there is no way to tell from here yet
+ */
+export type SiteAvailability = "looks-free" | "taken" | "unknown";
+
+export interface SiteNameChecker {
+  check(site: string): Promise<SiteAvailability>;
+}
+
 export interface ReleaseRepository {
   /** Published releases, newest version first. Needs a verified account. */
   list(): Promise<Release[]>;
@@ -96,6 +137,8 @@ export type Backend = "demo" | "emulators" | "firebase";
 export interface DataBundle {
   auth: AuthRepository;
   cafes: CafeRepository;
+  setup: SetupRepository;
+  sites: SiteNameChecker;
   releases: ReleaseRepository;
   deployments: DeploymentRepository;
   backend: Backend;

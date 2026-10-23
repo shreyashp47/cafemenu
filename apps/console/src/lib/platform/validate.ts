@@ -7,12 +7,23 @@
  * messages/en.json under `problems`.
  */
 
-import { validateCafeSettings, type CafeSettings } from "@cafemenu/shared";
+import {
+  MAX_IMPORT_ROWS,
+  MENU_TEXT_LIMITS,
+  STARTER_MENU_IDS,
+  validateCafeSettings,
+  type CafeSettings,
+} from "@cafemenu/shared";
+import { isFirestoreLocation } from "./locations";
 import {
   CAFE_STATUSES,
   RELEASE_CHANNELS,
+  SETUP_LOGO_MAX_BYTES,
+  STARTING_MENU_SOURCES,
   type CafeStatus,
   type ReleaseChannel,
+  type StartingMenu,
+  type StartingMenuItem,
 } from "./model";
 
 /**
@@ -29,6 +40,13 @@ export const SITE_NAME = /^[a-z0-9](?:[a-z0-9-]{0,28}[a-z0-9])?$/;
  * hyphens, starting with a letter and not ending with a hyphen.
  */
 export const PROJECT_ID = /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/;
+
+/**
+ * The shape of a Firestore location ID, "nam5" or "asia-south1", as the rules
+ * check it. The console offers only the ones in ./locations.ts.
+ */
+export const REGION_FORMAT =
+  /^[a-z]{2,20}(?:[0-9]{1,2}|-[a-z]{2,20}[0-9]{1,2})$/;
 
 /** A release version: "1.4.2", or a pre-release such as "1.5.0-beta.1". */
 export const VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
@@ -47,6 +65,9 @@ export const isSiteName = (value: unknown): value is string =>
 
 export const isProjectId = (value: unknown): value is string =>
   typeof value === "string" && PROJECT_ID.test(value);
+
+export const isRegionFormat = (value: unknown): value is string =>
+  typeof value === "string" && REGION_FORMAT.test(value);
 
 export const isVersion = (value: unknown): value is string =>
   typeof value === "string" && VERSION.test(value);
@@ -80,6 +101,7 @@ export function isPlainObject(
 
 export type CafeProblem =
   | "site-format"
+  | "region-unknown"
   | "project-id-format"
   | "settings-invalid"
   | "plan-locked"
@@ -115,6 +137,8 @@ export function releaseChoiceProblems(choice: ReleaseChoice): CafeProblem[] {
 /** What an owner sends to create a cafe. */
 export interface NewCafeInput {
   site: string;
+  /** A location from ./locations.ts. */
+  region: string;
   /** Build it with newCafeSettings() from @cafemenu/shared. */
   settings: CafeSettings;
   /** Usually not known yet at sign-up: it comes at the access step. */
@@ -144,6 +168,7 @@ export function checkNewCafe(
   | { ok: false; problems: CafeProblem[]; settingsProblems: string[] } {
   const problems: CafeProblem[] = [];
   if (!isSiteName(input.site)) problems.push("site-format");
+  if (!isFirestoreLocation(input.region)) problems.push("region-unknown");
   const projectId = input.projectId ?? null;
   if (projectId !== null && !isProjectId(projectId)) {
     problems.push("project-id-format");
@@ -176,5 +201,91 @@ export class CafeInputError extends Error {
   ) {
     super(`Invalid cafe: ${[...problems, ...settingsProblems].join(", ")}`);
     this.name = "CafeInputError";
+  }
+}
+
+// -- what the owner gives at sign-up --------------------------------------------
+
+export type SetupProblem =
+  | "logo-not-png"
+  | "logo-too-big"
+  | "menu-source"
+  | "menu-template"
+  | "menu-currency"
+  | "menu-empty"
+  | "menu-too-long"
+  | "menu-item";
+
+const PNG_SIGNATURE = [137, 80, 78, 71, 13, 10, 26, 10];
+
+/**
+ * The checks the rules make on a stored logo, and one they cannot: that it
+ * is a PNG at all. The deployer decodes it again before drawing icons.
+ */
+export function logoProblems(png: Uint8Array): SetupProblem[] {
+  const problems: SetupProblem[] = [];
+  const isPng =
+    png.length > PNG_SIGNATURE.length &&
+    PNG_SIGNATURE.every((byte, i) => png[i] === byte);
+  if (!isPng) problems.push("logo-not-png");
+  if (png.length > SETUP_LOGO_MAX_BYTES) problems.push("logo-too-big");
+  return problems;
+}
+
+const textOf = (value: unknown, min: number, max: number) =>
+  typeof value === "string" && value.length >= min && value.length <= max;
+
+/** One row, against the limits of the cafe app's own menu import. */
+export function isStartingMenuItem(item: unknown): item is StartingMenuItem {
+  if (!isPlainObject(item)) return false;
+  const keys = Object.keys(item).sort().join(",");
+  return (
+    keys === "available,category,description,name,price" &&
+    textOf(item.name, 1, MENU_TEXT_LIMITS.name) &&
+    textOf(item.category, 1, MENU_TEXT_LIMITS.category) &&
+    textOf(item.description, 0, MENU_TEXT_LIMITS.description) &&
+    typeof item.price === "number" &&
+    Number.isSafeInteger(item.price) &&
+    item.price > 0 &&
+    typeof item.available === "boolean"
+  );
+}
+
+/**
+ * Every problem with a starting menu, for the cafe whose settings are
+ * `settings`. The rules check all of this but the rows themselves, which they
+ * can only count.
+ */
+export function startingMenuProblems(
+  menu: StartingMenu,
+  settings: Pick<CafeSettings, "currency">,
+): SetupProblem[] {
+  const problems: SetupProblem[] = [];
+  if (!(STARTING_MENU_SOURCES as readonly string[]).includes(menu.source)) {
+    problems.push("menu-source");
+  }
+  const template = menu.template;
+  const templateOk =
+    menu.source === "template"
+      ? (STARTER_MENU_IDS as readonly (string | null)[]).includes(template)
+      : template === null;
+  if (!templateOk) problems.push("menu-template");
+  if (menu.currency !== settings.currency) problems.push("menu-currency");
+  const items: unknown[] = Array.isArray(menu.items) ? menu.items : [];
+  if (menu.source === "blank" ? items.length > 0 : items.length === 0) {
+    problems.push("menu-empty");
+  }
+  if (items.length > MAX_IMPORT_ROWS) problems.push("menu-too-long");
+  if (!Array.isArray(menu.items) || !items.every(isStartingMenuItem)) {
+    problems.push("menu-item");
+  }
+  return problems;
+}
+
+/** Thrown by the setup repository when a check above fails, before writing. */
+export class SetupInputError extends Error {
+  constructor(readonly problems: SetupProblem[]) {
+    super(`Invalid setup: ${problems.join(", ")}`);
+    this.name = "SetupInputError";
   }
 }

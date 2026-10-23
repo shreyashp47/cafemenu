@@ -34,6 +34,7 @@ import {
 } from "firebase/auth";
 import {
   addDoc,
+  Bytes,
   collection,
   connectFirestoreEmulator,
   deleteDoc,
@@ -274,6 +275,7 @@ const cafeRecord = (owner, o = {}) => ({
   ownerEmail: owner.email,
   projectId: `${owner.email.split("@")[0]}-cafe`,
   site: `${owner.email.split("@")[0]}-cafe`,
+  region: "asia-south1",
   settings: settings({ name: "A Cafe" }),
   release: {
     channel: "stable",
@@ -346,6 +348,7 @@ const newCafe = (c, o = {}) => ({
   ownerEmail: c.email,
   projectId: null,
   site: "carols-cafe",
+  region: "asia-south1",
   settings: settings({ name: "Carol's" }),
   release: { channel: "stable", pinned: null, current: null, previous: null },
   status: "draft",
@@ -566,6 +569,22 @@ for (const site of [
   await t(
     `cannot create with site name "${site.length > 12 ? `${site.slice(0, 6)}… (${site.length})` : site}"`,
     denied(() => create(carol, { site })),
+  );
+}
+await t(
+  "…with its database in a multi-region (nam5)",
+  allowed(() => create(carol, { site: "carols-us", region: "nam5" })),
+);
+await t(
+  "cannot create a cafe missing a field (region)",
+  denied(() =>
+    addDoc(collection(carol.db, "cafes"), without(newCafe(carol), "region")),
+  ),
+);
+for (const region of ["Asia-South1", "asia south 1", "asia-south", "", null]) {
+  await t(
+    `cannot create with region ${JSON.stringify(region)}`,
+    denied(() => create(carol, { region })),
   );
 }
 await t(
@@ -818,6 +837,32 @@ await t(
   denied(() => edit(alice, "cafe-a-draft", { projectId: "Not A Project" })),
 );
 await t(
+  "owner A moves the database of their draft cafe to another region",
+  allowed(() => edit(alice, "cafe-a-draft", { region: "europe-west2" })),
+);
+await t(
+  "…but not to a malformed one",
+  denied(() => edit(alice, "cafe-a-draft", { region: "Europe West 2" })),
+);
+await t(
+  "owner A cannot move the database of a live cafe",
+  denied(() => edit(alice, "cafe-a", { region: "europe-west2" })),
+);
+{
+  // A record from before sign-up asked for the region.
+  await seed("cafes/cafe-no-region", without(cafeRecord(ALICE), "region"));
+  await t(
+    "a live cafe with no region still has its settings edited",
+    allowed(() =>
+      edit(alice, "cafe-no-region", { settings: settings({ name: "Old" }) }),
+    ),
+  );
+  await t(
+    "…but is not given a region by the owner once live",
+    denied(() => edit(alice, "cafe-no-region", { region: "asia-south1" })),
+  );
+}
+await t(
   "owner B cannot edit owner A's cafe",
   denied(() =>
     edit(bob, "cafe-a", { settings: settings({ name: "Bob's now" }) }),
@@ -834,6 +879,203 @@ await t(
 await t(
   "owner A cannot delete their cafe",
   denied(() => deleteDoc(cafe(alice, "cafe-a"))),
+);
+
+// -- what the owner gives at sign-up --------------------------------------------
+
+console.log("\n the logo and starting menu of a draft cafe");
+// A PNG's first bytes, then filler: the rules check the type and the size;
+// only the console and the deployer look inside.
+const png = (size) => {
+  const bytes = new Uint8Array(size);
+  bytes.set([137, 80, 78, 71, 13, 10, 26, 10]);
+  return Bytes.fromUint8Array(bytes);
+};
+const setupDoc = (c, cafeId, part) => doc(c.db, "cafes", cafeId, "setup", part);
+const putLogo = (c, cafeId, o = {}) =>
+  setDoc(setupDoc(c, cafeId, "logo"), {
+    png: png(2048),
+    updatedAt: serverTimestamp(),
+    ...o,
+  });
+const item = (name) => ({
+  name,
+  category: "Coffee",
+  description: "",
+  price: 18000,
+  available: true,
+});
+const putMenu = (c, cafeId, o = {}) =>
+  setDoc(setupDoc(c, cafeId, "menu"), {
+    source: "template",
+    template: "coffee-shop",
+    currency: "INR",
+    items: [item("Flat White"), item("Espresso")],
+    updatedAt: serverTimestamp(),
+    ...o,
+  });
+await seed(
+  "cafes/cafe-l-draft",
+  cafeRecord(LAPSED, {
+    projectId: null,
+    site: "lapsed-draft",
+    status: "draft",
+    release: { channel: "stable", pinned: null, current: null, previous: null },
+  }),
+);
+await t(
+  "owner A saves a logo for their draft cafe",
+  allowed(() => putLogo(alice, "cafe-a-draft")),
+);
+await t(
+  "…replaces it",
+  allowed(() => putLogo(alice, "cafe-a-draft", { png: png(4096) })),
+);
+await t(
+  "…and reads it back",
+  allowed(async () => {
+    const snap = await getDoc(setupDoc(alice, "cafe-a-draft", "logo"));
+    expect(snap.data()?.png?.toUint8Array().length === 4096, "wrong bytes");
+  }),
+);
+await t(
+  "a logo of 750 000 bytes fits",
+  allowed(() => putLogo(alice, "cafe-a-draft", { png: png(750_000) })),
+);
+await t(
+  "a logo of 750 001 bytes does not",
+  denied(() => putLogo(alice, "cafe-a-draft", { png: png(750_001) })),
+);
+await t(
+  "a logo must be bytes, not text",
+  denied(() => putLogo(alice, "cafe-a-draft", { png: "iVBORw0KGgo=" })),
+);
+await t(
+  "a logo cannot carry another field",
+  denied(() => putLogo(alice, "cafe-a-draft", { url: "https://x.test/l.png" })),
+);
+await t(
+  "a logo must be stamped with the server time",
+  denied(() => putLogo(alice, "cafe-a-draft", { updatedAt: Timestamp.now() })),
+);
+await t(
+  "owner A saves a starter menu",
+  allowed(() => putMenu(alice, "cafe-a-draft")),
+);
+await t(
+  "…or a pasted one",
+  allowed(() =>
+    putMenu(alice, "cafe-a-draft", { source: "import", template: null }),
+  ),
+);
+await t(
+  "…or a blank one, with no rows",
+  allowed(() =>
+    putMenu(alice, "cafe-a-draft", {
+      source: "blank",
+      template: null,
+      items: [],
+    }),
+  ),
+);
+await t(
+  "…and 200 rows, the most an import takes",
+  allowed(() =>
+    putMenu(alice, "cafe-a-draft", {
+      items: Array.from({ length: 200 }, (_, i) => item(`Item ${i}`)),
+    }),
+  ),
+);
+await t(
+  "a menu of 201 rows is refused",
+  denied(() =>
+    putMenu(alice, "cafe-a-draft", {
+      items: Array.from({ length: 201 }, (_, i) => item(`Item ${i}`)),
+    }),
+  ),
+);
+for (const [what, bad] of [
+  ["a blank menu with rows", { source: "blank", template: null }],
+  ["a starter with no rows", { items: [] }],
+  ["a starter with no template", { template: null }],
+  ["a pasted menu naming a template", { source: "import" }],
+  ["a template id that is not one", { template: "Coffee Shop!" }],
+  ["an unknown source", { source: "ai", template: null }],
+  ["rows that are not a list", { items: { a: item("Latte") } }],
+  ["prices in another currency than the cafe's", { currency: "USD" }],
+  ["an extra field", { publish: true }],
+  ["a client timestamp", { updatedAt: Timestamp.now() }],
+]) {
+  await t(
+    `cannot save ${what}`,
+    denied(() => putMenu(alice, "cafe-a-draft", bad)),
+  );
+}
+await t(
+  "the menu cannot be deleted, only replaced",
+  denied(() => deleteDoc(setupDoc(alice, "cafe-a-draft", "menu"))),
+);
+await t(
+  "the logo can be deleted",
+  allowed(() => deleteDoc(setupDoc(alice, "cafe-a-draft", "logo"))),
+);
+await t(
+  "nothing else lives under setup",
+  denied(() =>
+    setDoc(setupDoc(alice, "cafe-a-draft", "payment"), {
+      card: "4242",
+      updatedAt: serverTimestamp(),
+    }),
+  ),
+);
+await t(
+  "once setup has started they are fixed (live cafe: logo)",
+  denied(() => putLogo(alice, "cafe-a")),
+);
+await t(
+  "…(live cafe: menu)",
+  denied(() => putMenu(alice, "cafe-a")),
+);
+await t(
+  "not for a cafe that does not exist",
+  denied(() => putLogo(alice, "cafe-nobody")),
+);
+await t(
+  "owner B cannot give owner A's cafe a logo",
+  denied(() => putLogo(bob, "cafe-a-draft")),
+);
+await t(
+  "owner B cannot read owner A's menu",
+  denied(() => getDoc(setupDoc(bob, "cafe-a-draft", "menu"))),
+);
+await t(
+  "an unverified owner cannot give their draft a logo",
+  denied(() => putLogo(lapsed, "cafe-l-draft")),
+);
+await t(
+  "…but can read what is there, as they read the cafe",
+  allowed(() => getDoc(setupDoc(lapsed, "cafe-l-draft", "menu"))),
+);
+for (const [who, c] of [
+  ["signed out", nobody],
+  ["anonymous", anon],
+]) {
+  await t(
+    `${who}: cannot read a draft's menu`,
+    denied(() => getDoc(setupDoc(c, "cafe-a-draft", "menu"))),
+  );
+}
+await t(
+  "an owner cannot list setup documents",
+  denied(() => getDocs(collection(alice.db, "cafes", "cafe-a-draft", "setup"))),
+);
+await t(
+  "the admin reads a draft's menu",
+  allowed(() => getDoc(setupDoc(erin, "cafe-a-draft", "menu"))),
+);
+await t(
+  "the admin cannot write one from a browser",
+  denied(() => putMenu(erin, "cafe-a-draft")),
 );
 
 // -- releases ---------------------------------------------------------------------

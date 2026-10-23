@@ -115,6 +115,7 @@ describe("a new cafe", () => {
     expect(
       checkNewCafe({
         site: "toe-cafe",
+        region: "asia-south1",
         settings: { ...settings, name: " TOE   Cafe " },
       }),
     ).toEqual({ ok: true, settings });
@@ -124,6 +125,7 @@ describe("a new cafe", () => {
     expect(
       checkNewCafe({
         site: "toe-cafe",
+        region: "asia-south1",
         settings: { ...settings, plan: "pro" as "free" },
       }),
     ).toMatchObject({ ok: false, problems: ["settings-invalid"] });
@@ -133,6 +135,7 @@ describe("a new cafe", () => {
     expect(
       checkNewCafe({
         site: "TOE Cafe",
+        region: "the-moon",
         projectId: "Bad Project",
         settings: { ...settings, currency: "rupees" },
         release: { pinned: "latest" },
@@ -141,6 +144,7 @@ describe("a new cafe", () => {
       ok: false,
       problems: [
         "site-format",
+        "region-unknown",
         "project-id-format",
         "settings-invalid",
         "pinned-format",

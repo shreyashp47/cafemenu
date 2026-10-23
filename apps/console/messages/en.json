@@ -288,11 +288,20 @@
   },
   "problems": {
     "site-format": "Use lowercase letters, numbers and hyphens, up to 30 characters, not starting or ending with a hyphen.",
+    "region-unknown": "Choose where your database lives from the list.",
     "project-id-format": "That doesn't look like a Firebase project ID. Copy it from Project settings in the Firebase console.",
     "settings-invalid": "Some settings aren't valid. Check the fields marked.",
     "plan-locked": "A new cafe starts on the free plan.",
     "channel-unknown": "Choose stable or beta.",
-    "pinned-format": "Choose a version line such as 1.4."
+    "pinned-format": "Choose a version line such as 1.4.",
+    "logo-not-png": "That logo couldn't be read. Try a PNG, JPEG or WebP file.",
+    "logo-too-big": "That logo is too detailed to store. Try a simpler image or a smaller file.",
+    "menu-source": "Choose a starting menu.",
+    "menu-template": "Choose one of the starter menus.",
+    "menu-currency": "The menu's prices are in another currency. Check them again.",
+    "menu-empty": "A starter or a pasted list needs at least one item; a blank menu has none.",
+    "menu-too-long": "That's more than 200 items. Start with fewer and add the rest in your dashboard.",
+    "menu-item": "Some menu rows aren't complete. Check the rows marked."
   },
   "errors": {
     "auth/invalid-email": "That email address doesn't look right.",

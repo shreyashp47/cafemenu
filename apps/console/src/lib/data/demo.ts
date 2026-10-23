@@ -5,27 +5,40 @@
  * so demo mode is a fair stand-in: an owner reads and writes only their own
  * cafes, only a verified account writes, `release.current`, `previous`, the
  * status and the plan are never the owner's to set, and the project is fixed
- * once setup has started. No email is sent; demoVerifyEmail() stands in for
- * the link.
+ * once setup has started; the logo and starting menu are the owner's to
+ * write only while the cafe is a draft. No email is sent; demoVerifyEmail()
+ * stands in for the link.
  */
 
 import type { Cafe, PlatformUser } from "../platform/model";
-import { compareVersionsDesc } from "../platform/parse";
-import { newCafeRecord } from "../platform/records";
+import { compareVersionsDesc, parseStartingMenu } from "../platform/parse";
+import {
+  logoRecord,
+  newCafeRecord,
+  startingMenuRecord,
+} from "../platform/records";
 import {
   CafeInputError,
+  SetupInputError,
   checkNewCafe,
   checkSettings,
   isProjectId,
+  logoProblems,
   releaseChoiceProblems,
+  startingMenuProblems,
 } from "../platform/validate";
+import { simulatedSiteChecker } from "./checks";
 import {
   currentUser,
+  fromBase64,
   load,
+  loadSetup,
   makeId,
   mutate,
   onChange,
   passwordHash,
+  saveSetup,
+  toBase64,
   type DemoState,
 } from "./demo-store";
 import {
@@ -37,6 +50,7 @@ import {
   type DeploymentRepository,
   type Listener,
   type ReleaseRepository,
+  type SetupRepository,
   type Unsubscribe,
 } from "./types";
 
@@ -60,6 +74,25 @@ function ownCafe(state: DemoState, cafeId: string): Cafe {
   const cafe = state.cafes.find((c) => c.id === cafeId);
   if (!cafe) throw new CodedError("not-found", "No such cafe.");
   if (cafe.ownerUid !== user.uid) throw denied();
+  return cafe;
+}
+
+/** The caller's own cafe while it is still a draft: the setup rules. */
+function ownDraft(state: DemoState, cafeId: string): Cafe {
+  const cafe = ownCafe(state, cafeId);
+  if (cafe.status !== "draft") throw denied();
+  return cafe;
+}
+
+/**
+ * The caller's own cafe, to read its setup documents: signed in, not
+ * necessarily verified, as for reading the cafe. A cafe that does not exist
+ * is refused, as the rules' lookup of it fails.
+ */
+function readableCafe(state: DemoState, cafeId: string): Cafe {
+  const user = currentUser(state);
+  const cafe = state.cafes.find((c) => c.id === cafeId);
+  if (!user || !cafe || cafe.ownerUid !== user.uid) throw denied();
   return cafe;
 }
 
@@ -228,6 +261,36 @@ export const demoCafeRepo: CafeRepository = {
   },
 };
 
+export const demoSetupRepo: SetupRepository = {
+  async saveLogo(cafeId, png) {
+    const problems = logoProblems(png);
+    if (problems.length) throw new SetupInputError(problems);
+    ownDraft(load(), cafeId);
+    saveSetup(cafeId, "logo", logoRecord(toBase64(png), Date.now()));
+  },
+  async removeLogo(cafeId) {
+    ownDraft(load(), cafeId);
+    saveSetup(cafeId, "logo", null);
+  },
+  async getLogo(cafeId) {
+    readableCafe(load(), cafeId);
+    const record = loadSetup(cafeId, "logo") as { png?: unknown } | null;
+    return typeof record?.png === "string" ? fromBase64(record.png) : null;
+  },
+  async saveMenu(cafe, menu) {
+    const problems = startingMenuProblems(menu, cafe.settings);
+    if (problems.length) throw new SetupInputError(problems);
+    const stored = ownDraft(load(), cafe.id);
+    // The rules compare with the stored cafe, not the one the caller passed.
+    if (stored.settings.currency !== menu.currency) throw denied();
+    saveSetup(cafe.id, "menu", startingMenuRecord(menu, Date.now()));
+  },
+  async getMenu(cafeId) {
+    readableCafe(load(), cafeId);
+    return parseStartingMenu(loadSetup(cafeId, "menu"));
+  },
+};
+
 export const demoReleaseRepo: ReleaseRepository = {
   async list() {
     const state = load();
@@ -263,6 +326,9 @@ export const demoDeploymentRepo: DeploymentRepository = {
 export const demoBundle: DataBundle = {
   auth: demoAuthRepo,
   cafes: demoCafeRepo,
+  setup: demoSetupRepo,
+  // Every demo cafe is in this browser, whoever signed it up.
+  sites: simulatedSiteChecker(() => load().cafes.map((c) => c.site)),
   releases: demoReleaseRepo,
   deployments: demoDeploymentRepo,
   backend: "demo",
