@@ -5,11 +5,13 @@
  * deploy, in the order PLAN.md gives:
  *
  *   package     download (or take) the release package and verify it
- *   migrations  check the data's schema, then migrate it (#21)
+ *   migrations  check the data's schema, then run the package's migrations
+ *               up to its schema (src/migrations.mjs)
  *   rules       the package's firestore.rules
  *   indexes     the package's firestore.indexes.json
  *   settings    config/site: the cafe's settings, which the rules read and
- *               which win over site.json in the app, so they must agree
+ *               which win over site.json in the app, so they must agree; the
+ *               money unit stays the data's
  *   hosting     the package's site/ with the cafe's site.json, manifest,
  *               logo and icons laid over it, and its firebase.json headers
  *   smoke       the smoke test (#22)
@@ -99,20 +101,49 @@ async function recordFailure(ctx, args) {
 
 // --- config/site -------------------------------------------------------------
 
-/** Makes config/site hold exactly `settings`' fields, unless it already does. */
-export async function writeCafeSettings(ctx, shared, settings) {
+/**
+ * The settings as they can go live on this cafe's data. The money unit is
+ * the data's, and only a migration changes it (0002 moves TOE's rupees to
+ * paise, and config/site with them), so when config/site counts in another
+ * unit than the settings say, its unit wins and the cap is converted to it:
+ * rewriting "major" over paise would show every price 100 times too small.
+ */
+function withDataMoneyUnit(ctx, shared, live, settings) {
+  if (!live) return settings;
+  const unit =
+    live.schemaVersion !== 1 && live.moneyUnit === "minor" ? "minor" : "major";
+  if (settings.moneyUnit === unit) return settings;
+  const factor =
+    10 ** shared.currencyDigits(settings.currency, settings.locale);
+  const maxOrderTotal =
+    unit === "minor"
+      ? settings.maxOrderTotal * factor
+      : Math.floor(settings.maxOrderTotal / factor);
+  ctx.log.warn(
+    `the settings say "moneyUnit": "${settings.moneyUnit}", but this cafe's data counts ${unit} units (${SETTINGS_DOC}), which only a migration changes: using "${unit}" and "maxOrderTotal": ${maxOrderTotal}. Update the settings to match.`,
+  );
+  return { ...settings, moneyUnit: unit, maxOrderTotal };
+}
+
+/**
+ * Makes config/site hold exactly `settings`' fields, unless it already does,
+ * with the data's money unit (withDataMoneyUnit). Returns {changed,
+ * settings}: the settings as written, which site.json must match.
+ */
+export async function writeCafeSettings(ctx, shared, input) {
   const { api, log, project } = ctx;
   log.step(`Cafe settings (${SETTINGS_DOC})`);
   const keys = [...shared.SETTINGS_KEYS];
   const doc = await getDocument(api, project, SETTINGS_DOC);
   const live = doc ? decodeFields(doc.fields) : null;
+  const settings = withDataMoneyUnit(ctx, shared, live, input);
   if (live) {
     const changed = keys.filter(
       (key) => canonical(live[key]) !== canonical(settings[key]),
     );
     if (changed.length === 0) {
       log.same(`already holds these settings ("${settings.name}")`);
-      return { changed: false };
+      return { changed: false, settings };
     }
     await act(
       ctx,
@@ -134,7 +165,7 @@ export async function writeCafeSettings(ctx, shared, settings) {
         patchDocument(api, project, SETTINGS_DOC, encodeFields(settings), keys),
     );
   }
-  return { changed: true };
+  return { changed: true, settings };
 }
 
 // --- Hosting -----------------------------------------------------------------
@@ -234,7 +265,7 @@ export async function deployRelease(ctx, options) {
         throw new ActionNeededError(
           `${version} needs the release live during its upgrade to run on schema ${manifest.minSchemaVersion} or later, but this cafe's data is at schema ${data}.`,
           {
-            hint: "Deploy a release in between first, so the data reaches that schema.",
+            hint: `Deploy a release in between first, so the data reaches that schema. Or, with the cafe closed, migrate it from a checkout of ${version} (\`deployer migrate --project ${project} --to ${manifest.minSchemaVersion}\`) and deploy again.`,
           },
         );
       }
@@ -247,7 +278,7 @@ export async function deployRelease(ctx, options) {
       log.same(
         `${version} (schema ${manifest.schemaVersion}, min ${manifest.minSchemaVersion}) can deploy onto data at schema ${data}`,
       );
-      return runMigrations(ctx, { manifest, from: data });
+      return runMigrations(ctx, { manifest, from: data, verified });
     });
 
     const rules = await steps.run("rules", () =>
@@ -264,14 +295,14 @@ export async function deployRelease(ctx, options) {
         "firestore.indexes.json",
       ),
     );
-    await steps.run("settings", () =>
+    const { settings } = await steps.run("settings", () =>
       writeCafeSettings(ctx, shared, input.settings),
     );
 
     const hosting = await steps.run("hosting", async () => {
       log.step(`Hosting ${site}.web.app`);
       const { config, files: built } = await packageSite(verified);
-      const own = cafeFiles(shared, input);
+      const own = cafeFiles(shared, { ...input, settings });
       const files = withCafeFiles(built, paths, own);
       log.info(
         `${files.length - own.length} files from the package, ${own.length} of the cafe's own (${own.map((f) => f.path).join(", ")})`,
@@ -374,7 +405,7 @@ export async function syncBranding(ctx, options) {
 
   let hosting;
   try {
-    await steps.run("settings", () =>
+    const { settings } = await steps.run("settings", () =>
       writeCafeSettings(ctx, shared, input.settings),
     );
     hosting = await steps.run("hosting", async () => {
@@ -397,7 +428,7 @@ export async function syncBranding(ctx, options) {
       const liveFiles = (await listVersionFiles(api, live.version.name)).map(
         ({ path, hash }) => ({ path, hash }),
       );
-      const own = cafeFiles(shared, input);
+      const own = cafeFiles(shared, { ...input, settings });
       const paths = cafePaths(shared);
       const files = withCafeFiles(liveFiles, paths, own);
       log.info(

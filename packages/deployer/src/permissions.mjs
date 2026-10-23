@@ -50,8 +50,21 @@ export const PERMISSIONS = {
       "create, upload, finalize and release a version",
     ],
     ["datastore.entities.get", "read config/meta and config/site"],
-    ["datastore.entities.create", "write config/site the first time"],
-    ["datastore.entities.update", "write config/site"],
+    ["datastore.entities.list", "page through what a migration changes"],
+    [
+      "datastore.entities.create",
+      "write config/site and config/meta the first time",
+    ],
+    [
+      "datastore.entities.update",
+      "write config/site, and what a migration changes",
+    ],
+  ],
+  migrate: [
+    ["datastore.entities.get", "read config/meta and config/site"],
+    ["datastore.entities.list", "page through what a migration changes"],
+    ["datastore.entities.create", "write config/meta the first time"],
+    ["datastore.entities.update", "write what a migration changes"],
   ],
   rollback: [
     ["firebasehosting.sites.get", "list the site's past releases"],

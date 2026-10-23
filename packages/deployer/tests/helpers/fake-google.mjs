@@ -45,7 +45,11 @@ export function freshState() {
     rulesRelease: null,
     indexes: [],
     users: [],
-    docs: new Map(),
+    docs: new Map(), // Firestore path → fields
+    docTimes: new Map(), // Firestore path → {createTime, updateTime}
+    commits: 0,
+    failCommits: new Set(), // the nth commits (from 1) to answer 503, writing nothing
+    afterCommit: null, // (n) => void, after the nth commit is applied
     emails: [],
     github: new Map(), // release asset URL → Buffer, served without a token
   };
@@ -60,6 +64,21 @@ export function createFakeGoogle({ publicKeyPem, state = freshState() } = {}) {
   let clock = Date.UTC(2026, 9, 1);
   const next = (prefix) => `${prefix}${(counter += 1)}`;
   const tick = () => new Date((clock += 60_000)).toISOString();
+
+  // A document's times: a test that fills state.docs directly gets the
+  // clock's start as both.
+  const docTimes = (docPath) =>
+    state.docTimes.get(docPath) ?? {
+      createTime: new Date(Date.UTC(2026, 9, 1)).toISOString(),
+      updateTime: new Date(Date.UTC(2026, 9, 1)).toISOString(),
+    };
+  const setDoc = (docPath, fields, time) => {
+    state.docTimes.set(docPath, {
+      createTime: state.docs.has(docPath) ? docTimes(docPath).createTime : time,
+      updateTime: time,
+    });
+    state.docs.set(docPath, fields);
+  };
 
   /** A not-yet-done operation that is done (with `response`) when polled. */
   const operation = (name, response) => {
@@ -252,6 +271,78 @@ export function createFakeGoogle({ publicKeyPem, state = freshState() } = {}) {
           done: false,
         });
       }
+      const docs = `${db.slice(4)}/documents/`;
+      const resource = (docPath) => ({
+        name: `${docs}${docPath}`,
+        fields: state.docs.get(docPath),
+        ...docTimes(docPath),
+      });
+      if (method === "POST" && path === `${db}/documents:runQuery`) {
+        const { from, orderBy, startAt, limit } = body.structuredQuery;
+        if (
+          from.length !== 1 ||
+          from[0].allDescendants ||
+          orderBy?.[0]?.field.fieldPath !== "__name__" ||
+          (startAt && startAt.before !== false)
+        )
+          return googleError(
+            400,
+            "INVALID_ARGUMENT",
+            "the fake can't run that query",
+          );
+        const after = startAt?.values[0].referenceValue.slice(docs.length);
+        const found = [...state.docs.keys()]
+          .filter((p) => {
+            const [collection, id, ...rest] = p.split("/");
+            return collection === from[0].collectionId && id && !rest.length;
+          })
+          .sort()
+          .filter((p) => after === undefined || p > after)
+          .slice(0, limit);
+        const readTime = new Date(clock).toISOString();
+        return json(
+          200,
+          found.length
+            ? found.map((p) => ({ document: resource(p), readTime }))
+            : [{ readTime }],
+        );
+      }
+      if (method === "POST" && path === `${db}/documents:commit`) {
+        state.commits += 1;
+        if (state.failCommits.has(state.commits))
+          return googleError(503, "UNAVAILABLE", "The service is unavailable");
+        if (body.writes.length > 500)
+          return googleError(400, "INVALID_ARGUMENT", "too many writes");
+        for (const { update, currentDocument } of body.writes) {
+          const docPath = update.name.slice(docs.length);
+          const exists = state.docs.has(docPath);
+          const { exists: want, updateTime } = currentDocument ?? {};
+          if (
+            (want !== undefined && want !== exists) ||
+            (updateTime && docTimes(docPath).updateTime !== updateTime)
+          )
+            return googleError(
+              400,
+              "FAILED_PRECONDITION",
+              "precondition failed",
+            );
+        }
+        const commitTime = tick();
+        for (const { update, updateMask } of body.writes) {
+          const docPath = update.name.slice(docs.length);
+          const merged = { ...(state.docs.get(docPath) ?? {}) };
+          for (const field of updateMask.fieldPaths) {
+            if (field in update.fields) merged[field] = update.fields[field];
+            else delete merged[field];
+          }
+          setDoc(docPath, merged, commitTime);
+        }
+        state.afterCommit?.(state.commits);
+        return json(200, {
+          writeResults: body.writes.map(() => ({ updateTime: commitTime })),
+          commitTime,
+        });
+      }
       if (
         (m = path.match(
           new RegExp(`^${db.replace(/[()]/g, "\\$&")}/documents/(.+)$`),
@@ -259,20 +350,16 @@ export function createFakeGoogle({ publicKeyPem, state = freshState() } = {}) {
       ) {
         const docPath = m[1];
         if (method === "GET") {
-          const fields = state.docs.get(docPath);
-          return fields
-            ? json(200, { name: `${db.slice(4)}/documents/${docPath}`, fields })
+          return state.docs.has(docPath)
+            ? json(200, resource(docPath))
             : googleError(404, "NOT_FOUND", "no doc");
         }
         if (method === "PATCH") {
           const mask = q.getAll("updateMask.fieldPaths");
           const merged = { ...(state.docs.get(docPath) ?? {}) };
           for (const field of mask) merged[field] = body.fields[field];
-          state.docs.set(docPath, merged);
-          return json(200, {
-            name: `${db.slice(4)}/documents/${docPath}`,
-            fields: merged,
-          });
+          setDoc(docPath, merged, tick());
+          return json(200, resource(docPath));
         }
       }
     }
@@ -650,6 +737,7 @@ export function createFakeGoogle({ publicKeyPem, state = freshState() } = {}) {
 /** POSTs that only read. Everything else that isn't a GET writes. */
 export const READ_ONLY_POST = [
   /:testIamPermissions$/,
+  /\/documents:runQuery$/,
   /\/accounts:lookup$/,
   /[?&]validateOnly=true(&|$)/,
 ];
