@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { errorText, messages, parseRich, problemText } from "../messages";
-import type { CafeProblem } from "../platform/validate";
+import { errorText, fill, messages, parseRich, problemText } from "../messages";
+import { FIRESTORE_LOCATIONS } from "../platform/locations";
+import type { CafeProblem, SetupProblem } from "../platform/validate";
 
 describe("parseRich", () => {
   it("leaves plain text alone", () => {
@@ -44,10 +45,28 @@ describe("parseRich", () => {
   });
 });
 
+describe("fill", () => {
+  it("puts values in their slots, and leaves unknown slots alone", () => {
+    expect(fill("Use {name} for {count} items", { name: "x", count: 3 })).toBe(
+      "Use x for 3 items",
+    );
+    expect(fill("Hello {who}", {})).toBe("Hello {who}");
+  });
+});
+
 describe("the message file", () => {
   it("has words for every validation problem", () => {
-    const problems: CafeProblem[] = [
+    const problems: (CafeProblem | SetupProblem)[] = [
       "site-format",
+      "region-unknown",
+      "logo-not-png",
+      "logo-too-big",
+      "menu-source",
+      "menu-template",
+      "menu-currency",
+      "menu-empty",
+      "menu-too-long",
+      "menu-item",
       "project-id-format",
       "settings-invalid",
       "plan-locked",
@@ -55,6 +74,14 @@ describe("the message file", () => {
       "pinned-format",
     ];
     for (const p of problems) expect(problemText(p)).toMatch(/\w/);
+  });
+
+  it("names every database location the form offers", () => {
+    const names: Record<string, string> = messages.locations.names;
+    for (const { id, group } of FIRESTORE_LOCATIONS) {
+      expect(names[id]).toMatch(/\w/);
+      expect(messages.locations.groups[group]).toMatch(/\w/);
+    }
   });
 
   it("maps an error's code to words, with a fallback", () => {

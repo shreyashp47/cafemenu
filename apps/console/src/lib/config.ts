@@ -64,5 +64,18 @@ export const backend: Backend = useEmulators
 
 export const isDemoMode = backend === "demo";
 
+/**
+ * Whether the sign-up form is open. Always in demo mode and against the
+ * emulators, where nothing real is made. Against the real platform only when
+ * NEXT_PUBLIC_SIGNUP_OPEN is set: sign-up is v1.1, and the platform project
+ * may be live for the landing page well before then. Until it is set,
+ * /signup says sign-up is coming.
+ */
+export const signupOpen =
+  backend !== "firebase" ||
+  ["1", "true"].includes(
+    read(process.env.NEXT_PUBLIC_SIGNUP_OPEN).toLowerCase(),
+  );
+
 /** The public repository, for "read the code" and "run it yourself" links. */
 export const REPO_URL = "https://github.com/shreyashp47/cafemenu";

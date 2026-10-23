@@ -36,9 +36,14 @@
   --accent-soft: #fcebd3;
   --accent-ink: #8a4a0e; /* text on accent-soft, 5.9:1 */
 
+  /* -- problems: a form field that needs fixing -------------------------------- */
+  --danger: #a1281f; /* text, 7.4:1 on surface, 7.0:1 on paper */
+  --danger-soft: #fcebe8; /* tint behind danger text, 6.4:1 */
+
   /* -- lines and depth ---------------------------------------------------------- */
   --line: #e4dace;
   --line-strong: #bfb2a2; /* decorative borders only, not for text */
+  --line-field: #8a7c6e; /* a form field's edge, 4.0:1 on surface (UI needs 3) */
   --ring: #1d6a51;
   --shadow-card:
     0 1px 2px rgb(29 24 19 / 0.05), 0 4px 16px rgb(29 24 19 / 0.06);
@@ -73,6 +78,9 @@
   --color-accent-ink: var(--accent-ink);
   --color-line: var(--line);
   --color-line-strong: var(--line-strong);
+  --color-line-field: var(--line-field);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
   --color-ring: var(--ring);
 
   --font-display: var(--font-fraunces), ui-serif, Georgia, serif;
