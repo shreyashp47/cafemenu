@@ -507,6 +507,21 @@ BASE_URL=https://toe-cafe.web.app npm run test:entry   # every way a customer re
 BASE_URL=https://toe-cafe.web.app npm run audit         # contrast + WebKit, both engines
 ```
 
+`test:entry` takes any cafe's address, so it checks a deployed cafe as well as
+TOE. Name a table the cafe has (it opens `/order?table=3` by default, which a
+cafe with two tables doesn't have) and the cache version the release should be
+serving (the `sw.js: cache version …` line `npm run build` prints). With a
+version, a first step reads `/sw.js` and fails if another build answers:
+
+```bash
+npm run test:entry -- --url https://lantern-cafe.web.app --table 2 --sw-version 3f2a9c1b7d40
+```
+
+The deployer runs a lighter, browserless version of this after every deploy
+and rolls the cafe back if it fails
+([Smoke test](../../packages/deployer/README.md#smoke-test-is-the-cafe-up));
+its `--browser` option adds this script to that run.
+
 `npm run audit` is this project's script, not npm's built-in `npm audit`; the
 `run` matters. Against a live site it checks the staff and owner screens as a
 signed-out visitor would see them. `npm run flow` is not in this list on

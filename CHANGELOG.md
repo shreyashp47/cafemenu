@@ -15,3 +15,9 @@ follow [Semantic Versioning](https://semver.org/).
   roadmap as GitHub milestones and issues.
 - MIT License, contributing guide, security policy, code of conduct, and issue
   and pull request templates.
+- **A smoke test after every deploy** (#22). `deployer deploy --version` checks
+  the cafe's live address with read-only requests (its pages, the new build's
+  service worker, `site.json`, `init.json`, the security headers, a 404) and
+  rolls the cafe back, recording both in the deploy log, if any check still
+  fails after a few tries. The same checks run alone with
+  `packages/deployer/bin/smoke.mjs`.
