@@ -95,6 +95,61 @@ export async function patchDocument(api, project, path, fields, fieldPaths) {
   );
 }
 
+/** A document's full resource name, as runQuery and commit take it. */
+export const documentName = (project, path) =>
+  `${databaseName(project)}/documents/${path}`;
+
+/**
+ * Up to `limit` documents of one top-level collection, in document-ID order,
+ * after the document named `after` (a full name) if given. Each is
+ * {name, fields, createTime, updateTime}.
+ */
+export async function queryCollection(
+  api,
+  project,
+  collectionId,
+  { after, limit },
+) {
+  // https://firebase.google.com/docs/firestore/reference/rest/v1/projects.databases.documents/runQuery
+  // POST v1/{database}/documents:runQuery {structuredQuery} → [{document?, readTime}]
+  // Checked against the Firestore emulator (tests/emulator/); UNVERIFIED on
+  // the real API: run in spike #6
+  const res = await api.post(
+    `${FIRESTORE}/${databaseName(project)}/documents:runQuery`,
+    {
+      structuredQuery: {
+        from: [{ collectionId }],
+        orderBy: [{ field: { fieldPath: "__name__" }, direction: "ASCENDING" }],
+        ...(after && {
+          startAt: { values: [{ referenceValue: after }], before: false },
+        }),
+        limit,
+      },
+    },
+    { write: false },
+  );
+  return (Array.isArray(res) ? res : [])
+    .map((entry) => entry.document)
+    .filter(Boolean);
+}
+
+/**
+ * Applies `writes` atomically: all of them or, if any precondition fails,
+ * none. Each write is {update: {name, fields}, updateMask: {fieldPaths},
+ * currentDocument?: {updateTime} | {exists}}. Returns {writeResults,
+ * commitTime}, one result (with the document's new updateTime) per write.
+ */
+export async function commit(api, project, writes) {
+  // https://firebase.google.com/docs/firestore/reference/rest/v1/projects.databases.documents/commit
+  // POST v1/{database}/documents:commit {writes} → {writeResults, commitTime}
+  // At most 500 writes per commit.
+  // Checked against the Firestore emulator (tests/emulator/); UNVERIFIED on
+  // the real API: run in spike #6
+  return api.post(`${FIRESTORE}/${databaseName(project)}/documents:commit`, {
+    writes,
+  });
+}
+
 // --- Firestore value encoding (only the types the deployer writes) ---------
 
 /** One JSON-like value as a Firestore Value. */

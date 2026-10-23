@@ -64,19 +64,31 @@ export const DEMO_FILES = {
   "favicon.ico": "demo favicon",
 };
 
+/** A migration to schema `n` that changes nothing. */
+export const noOpMigration = (n) => `export const from = ${n - 1};
+export const to = ${n};
+export const describe = "step ${n}";
+export async function up() {}
+`;
+
 /**
  * Builds cafemenu-cafe-<version>.tar.gz and SHA256SUMS in a folder of their
  * own. Returns buildPackage's {archivePath, sumsPath, sha256, manifest}.
  */
 export async function releasePackage(
   version,
-  { schemaVersion = 1, minSchemaVersion = 1, site = {} } = {},
+  {
+    schemaVersion = 1,
+    minSchemaVersion = 1,
+    site = {},
+    migrations: sources = {},
+  } = {},
 ) {
   const dir = await tempDir();
   const migrations = {};
   for (let n = 2; n <= schemaVersion; n += 1)
     migrations[`migrations/${String(n).padStart(4, "0")}-step.mjs`] =
-      "export default {};\n";
+      sources[n] ?? noOpMigration(n);
   await writeTree(dir, {
     "out/index.html": `<h1>Menu</h1><!-- ${version} -->`,
     "out/sw.js": `const VERSION = "${version}";`,
@@ -181,6 +193,11 @@ export const fakeShared = Object.freeze({
     name: settings.name,
     short_name: settings.name,
   }),
+  currencyDigits: (currency, locale = "en") =>
+    new Intl.NumberFormat(locale, {
+      style: "currency",
+      currency,
+    }).resolvedOptions().maximumFractionDigits,
   isPng: (bytes) => bytes.subarray(0, 8).equals(PNG.subarray(0, 8)),
   siteLogo: (logo) => ({ path: "/logo.png", type: "image/png", bytes: logo }),
   appIcons: (settings, { logo }) =>

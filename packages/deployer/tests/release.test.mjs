@@ -8,7 +8,8 @@ import { cafeFiles, readCafeInput } from "../src/cafe-files.mjs";
 import { deployRelease, syncBranding } from "../src/commands/release.mjs";
 import { rollback } from "../src/commands/rollback.mjs";
 import { ActionNeededError } from "../src/errors.mjs";
-import { encodeFields } from "../src/apis/firestore.mjs";
+import { decodeFields, encodeFields } from "../src/apis/firestore.mjs";
+import { migrate } from "../src/commands/migrate.mjs";
 import {
   PROJECT,
   createFakeGoogle,
@@ -267,9 +268,58 @@ describe("schema versions", () => {
     assert.deepEqual(writes(c.google), []);
   });
 
-  it("refuses to deploy onto data it would need to migrate, until #21", async () => {
-    const c = await cafe({ v1: { schemaVersion: 2, minSchemaVersion: 1 } });
-    await assert.rejects(c.deploy("1.0.0"), /can't run migrations yet/);
+  it("runs the package's migrations, before the rules", async () => {
+    const c = await cafe({
+      v1: {
+        schemaVersion: 2,
+        minSchemaVersion: 1,
+        migrations: {
+          2: `export const from = 1;
+export const to = 2;
+export const describe = "paise beside the rupees";
+export async function up(db) {
+  await db.each("menu", "menu", (item) => ({ pricePaise: item.price * 100 }));
+}
+`,
+        },
+      },
+    });
+    c.google.state.docs.set("menu/latte", encodeFields({ price: 180 }));
+    const ctx = await c.ctx();
+    const { release } = await deployRelease(ctx, {
+      site: SITE,
+      version: "1.0.0",
+      settings: c.settings,
+    });
+
+    assert.deepEqual(decodeFields(c.google.state.docs.get("menu/latte")), {
+      price: 180,
+      pricePaise: 18000,
+    });
+    assert.deepEqual(decodeFields(c.google.state.docs.get("config/meta")), {
+      schemaVersion: 2,
+    });
+    const sent = writes(c.google).map((call) => call.url);
+    const lastCommit = sent.findLastIndex((url) => url.endsWith(":commit"));
+    const firstRules = sent.findIndex((url) => url.includes("/rulesets"));
+    assert.ok(lastCommit >= 0 && lastCommit < firstRules);
+    assert.match(
+      ctx.output(),
+      /0002-step\.mjs, schema 1 → 2: paise beside the rupees/,
+    );
+    assert.equal(release.schemaVersion, 2);
+  });
+
+  it("refuses a release that changes the data under the live one, and says how to migrate it", async () => {
+    const c = await cafe({ v1: { schemaVersion: 2, minSchemaVersion: 2 } });
+    await assert.rejects(c.deploy("1.0.0"), (error) => {
+      assert.ok(error instanceof ActionNeededError);
+      assert.match(
+        error.hint,
+        /with the cafe closed, migrate it from a checkout of 1\.0\.0 \(`deployer migrate --project test-cafe --to 2`\)/,
+      );
+      return true;
+    });
     assert.deepEqual(writes(c.google), []);
   });
 
@@ -305,6 +355,51 @@ describe("schema versions", () => {
     await c.deploy("1.1.0");
     await rollback(await c.ctx(), { site: SITE });
     assert.equal((await c.log()).cafes[PROJECT].current.version, "1.0.0");
+  });
+});
+
+describe("the money unit", () => {
+  const TOE = {
+    ...SETTINGS,
+    name: "TOE Cafe",
+    moneyUnit: "major",
+    maxOrderTotal: 10000,
+  };
+  const site = (c) => decodeFields(c.google.state.docs.get("config/site"));
+
+  it("stays the data's after 0002, whatever the settings say", async () => {
+    const c = await cafe({ v2: { schemaVersion: 2, minSchemaVersion: 2 } });
+    const toe = await writeSettings(c.dir, TOE, "toe.json");
+    await c.deploy("1.0.0", { settings: toe });
+    assert.equal(site(c).moneyUnit, "major");
+
+    await migrate(await c.ctx(), { to: 2 });
+    assert.equal(site(c).moneyUnit, "minor");
+
+    // The settings file still says rupees; config/site and site.json don't.
+    const ctx = await c.ctx();
+    await deployRelease(ctx, { site: SITE, version: "1.1.0", settings: toe });
+    assert.match(
+      ctx.output(),
+      /! the settings say "moneyUnit": "major", but this cafe's data counts minor units \(config\/site\), which only a migration changes: using "minor" and "maxOrderTotal": 1000000/,
+    );
+    assert.equal(site(c).moneyUnit, "minor");
+    assert.equal(site(c).maxOrderTotal, 1000000);
+    const siteJson = JSON.parse(served(c.google, "/site.json"));
+    assert.equal(siteJson.moneyUnit, "minor");
+    assert.equal(siteJson.maxOrderTotal, 1000000);
+
+    await syncBranding(await c.ctx(), { site: SITE, settings: toe });
+    assert.equal(site(c).moneyUnit, "minor");
+  });
+
+  it("can't be switched to minor by the settings alone", async () => {
+    const c = await cafe();
+    const toe = await writeSettings(c.dir, TOE, "toe.json");
+    await c.deploy("1.0.0", { settings: toe });
+    await c.deploy("1.1.0");
+    assert.equal(site(c).moneyUnit, "major");
+    assert.equal(site(c).maxOrderTotal, 10000);
   });
 });
 

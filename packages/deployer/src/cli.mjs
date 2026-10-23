@@ -9,6 +9,7 @@ import { parseArgs } from "node:util";
 import { createTokenProvider, loadServiceAccountKey } from "./auth.mjs";
 import { check } from "./commands/check.mjs";
 import { PARTS, deploy } from "./commands/deploy.mjs";
+import { migrate } from "./commands/migrate.mjs";
 import { owner } from "./commands/owner.mjs";
 import { DEFAULT_APP_NAME, provision } from "./commands/provision.mjs";
 import { deployRelease, syncBranding } from "./commands/release.mjs";
@@ -106,6 +107,24 @@ deployer deploy --project <id> [--rules <file>] [--indexes <file>]
       package: { type: "string" },
       sha256: { type: "string" },
       log: { type: "string" },
+    },
+  },
+  migrate: {
+    summary: "Migrate a cafe's data to a schema version, outside a deploy",
+    usage: `deployer migrate --project <id> --to <n> [--migrations <folder>]
+
+  Runs the migrations from the data's schema (config/meta.schemaVersion) up
+  to <n>, each to the end and then recorded. A run that stops part way
+  carries on where it stopped. For a migration the live release can't run
+  alongside, which deploy --version refuses: run it while the cafe is closed,
+  from a checkout of the release you deploy next.
+
+  --to <n>             The schema version to bring the data to
+  --migrations <dir>   Where the migrations are (default: the repository's
+                       migrations/)`,
+    options: {
+      to: { type: "string" },
+      migrations: { type: "string" },
     },
   },
   rollback: {
@@ -302,6 +321,15 @@ export function commandOptions(command, values) {
         message: values.message,
       };
     }
+    case "migrate": {
+      const to = required(values, "to");
+      if (!/^[1-9]\d{0,8}$/.test(to))
+        throw new UsageError(`--to takes a schema version (1, 2, …): ${to}`);
+      return {
+        to: Number(to),
+        dir: values.migrations?.trim() || undefined,
+      };
+    }
     case "rollback":
       return {
         site: siteName(values),
@@ -379,6 +407,7 @@ const RUN = {
   provision,
   deploy: (ctx, options) =>
     options.release ? deployRelease(ctx, options) : deploy(ctx, options),
+  migrate,
   rollback,
   "sync-branding": syncBranding,
   owner,
