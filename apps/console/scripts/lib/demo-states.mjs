@@ -8,6 +8,7 @@
 
 const DEMO_KEY = "cafemenu-console.demo.v1";
 const DRAFT_KEY = "cafemenu-console.signup.v1";
+const WIZARD_KEY = "cafemenu-console.setup.v1";
 const OWNER = { uid: "owner-demo", email: "owner@lantern.test" };
 
 const account = (emailVerified) => ({
@@ -35,8 +36,51 @@ const form = {
   menuText: "",
 };
 
-const demo = (accounts) =>
-  JSON.stringify({ accounts, session: OWNER.uid, cafes: [], deployments: [] });
+const demo = (accounts, cafes = []) =>
+  JSON.stringify({ accounts, session: OWNER.uid, cafes, deployments: [] });
+
+/** A draft cafe as sign-up leaves it; settings missing here read as defaults. */
+const cafe = (projectId = null) => ({
+  id: "cafe-demo",
+  ownerUid: OWNER.uid,
+  ownerEmail: OWNER.email,
+  projectId,
+  site: "lantern-cafe",
+  region: "asia-south1",
+  settings: { schemaVersion: 2, name: "Lantern Café", tagline: "" },
+  release: { channel: "stable", pinned: null, current: null, previous: null },
+  status: "draft",
+  createdAt: 1_790_000_000_000,
+  updatedAt: 1_790_000_000_000,
+});
+
+const wizard = (step, projectId, result) =>
+  JSON.stringify({
+    "cafe-demo": {
+      step,
+      projectId,
+      check: result
+        ? { status: "answered", projectId, result, at: 1_790_000_000_000 }
+        : null,
+    },
+  });
+
+/** What `deployer check` names when the role is too small. */
+const MISSING = {
+  status: "missing",
+  missing: [
+    {
+      permission: "datastore.databases.create",
+      why: "create the Firestore database",
+      neededBy: ["provision"],
+    },
+    {
+      permission: "firebaseauth.configs.update",
+      why: "turn on Email/Password and Anonymous sign-in",
+      neededBy: ["provision"],
+    },
+  ],
+};
 
 /** localStorage for each named state. */
 export const DEMO_STATES = {
@@ -44,6 +88,22 @@ export const DEMO_STATES = {
   verify: {
     [DEMO_KEY]: demo([account(false)]),
     [DRAFT_KEY]: JSON.stringify({ form, email: OWNER.email, cafeId: null }),
+  },
+  /** Verified, the cafe saved as a draft: onboarding's first step. */
+  project: {
+    [DEMO_KEY]: demo([account(true)], [cafe()]),
+  },
+  /** At "Give CafeMenu access", after a check found the role too small. */
+  access: {
+    [DEMO_KEY]: demo([account(true)], [cafe("lantern-cafe-1a2b")]),
+    [WIZARD_KEY]: wizard("access", "lantern-cafe-1a2b", MISSING),
+  },
+  /** The check passed. */
+  connected: {
+    [DEMO_KEY]: demo([account(true)], [cafe("lantern-cafe-1a2b")]),
+    [WIZARD_KEY]: wizard("connected", "lantern-cafe-1a2b", {
+      status: "connected",
+    }),
   },
 };
 

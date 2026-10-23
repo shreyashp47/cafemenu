@@ -28,6 +28,7 @@ import {
   startingMenuProblems,
 } from "../platform/validate";
 import { fromBase64, toBase64 } from "../bytes";
+import { simulatedConnectionChecker } from "../setup/connection";
 import { simulatedSiteChecker } from "./checks";
 import {
   currentUser,
@@ -328,6 +329,8 @@ export const demoBundle: DataBundle = {
   setup: demoSetupRepo,
   // Every demo cafe is in this browser, whoever signed it up.
   sites: simulatedSiteChecker(() => load().cafes.map((c) => c.site)),
+  // Long enough for "Checking…" to be read.
+  connection: simulatedConnectionChecker(600),
   releases: demoReleaseRepo,
   deployments: demoDeploymentRepo,
   backend: "demo",

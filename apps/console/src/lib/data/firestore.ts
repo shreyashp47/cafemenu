@@ -56,6 +56,10 @@ import {
   releaseChoiceProblems,
   startingMenuProblems,
 } from "../platform/validate";
+import {
+  pendingConnectionChecker,
+  simulatedConnectionChecker,
+} from "../setup/connection";
 import { pendingSiteChecker, simulatedSiteChecker } from "./checks";
 import { getFirebase, type FirebaseHandles } from "./firebase";
 import {
@@ -348,6 +352,11 @@ export function createFirebaseBundle(
     // The emulators know nothing of real Firebase's names either.
     sites:
       backend === "emulators" ? simulatedSiteChecker() : pendingSiteChecker,
+    // The emulators cannot reach Google's IAM either.
+    connection:
+      backend === "emulators"
+        ? simulatedConnectionChecker(600)
+        : pendingConnectionChecker,
     releases: firestoreReleaseRepo(connect),
     deployments: firestoreDeploymentRepo(connect),
     backend,

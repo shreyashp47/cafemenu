@@ -77,5 +77,23 @@ export const signupOpen =
     read(process.env.NEXT_PUBLIC_SIGNUP_OPEN).toLowerCase(),
   );
 
+/**
+ * The stand-in deploy account demo mode and the emulators show. A `demo-`
+ * project never exists in real Google Cloud, so adding this address to a
+ * real project fails rather than granting anyone anything.
+ */
+export const DEMO_DEPLOY_ACCOUNT =
+  "deploy@demo-cafemenu.iam.gserviceaccount.com";
+
+/**
+ * The platform's deploy service account, which each owner adds as a member
+ * of their own project (PLAN.md, the owner's step 4). It is settled with the
+ * platform project (#2) and set with NEXT_PUBLIC_DEPLOY_SERVICE_ACCOUNT;
+ * null against the real platform until then, and the setup page says so.
+ */
+export const deployAccount: string | null =
+  read(process.env.NEXT_PUBLIC_DEPLOY_SERVICE_ACCOUNT) ||
+  (backend === "firebase" ? null : DEMO_DEPLOY_ACCOUNT);
+
 /** The public repository, for "read the code" and "run it yourself" links. */
 export const REPO_URL = "https://github.com/shreyashp47/cafemenu";

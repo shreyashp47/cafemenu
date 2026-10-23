@@ -66,6 +66,10 @@ export const ROUTES = [
     },
   },
   { path: "/signup", name: "signup-verify", demo: "verify" },
+  { path: "/setup", name: "setup-signin" },
+  { path: "/setup", name: "setup-project", demo: "project" },
+  { path: "/setup", name: "setup-access", demo: "access" },
+  { path: "/setup", name: "setup-connected", demo: "connected" },
 ];
 
 /** Opens `route` in `page`: its demo state, the page, then its action. */

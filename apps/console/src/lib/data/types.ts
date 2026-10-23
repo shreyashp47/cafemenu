@@ -16,6 +16,7 @@ import type {
   StartingMenu,
 } from "../platform/model";
 import type { NewCafeInput, ReleaseChoice } from "../platform/validate";
+import type { ConnectionChecker } from "../setup/connection";
 
 export type Unsubscribe = () => void;
 export type Listener<T> = (value: T) => void;
@@ -139,6 +140,8 @@ export interface DataBundle {
   cafes: CafeRepository;
   setup: SetupRepository;
   sites: SiteNameChecker;
+  /** "Check connection" in onboarding; see src/lib/setup/connection.ts. */
+  connection: ConnectionChecker;
   releases: ReleaseRepository;
   deployments: DeploymentRepository;
   backend: Backend;

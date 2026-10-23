@@ -8,9 +8,10 @@ they live in the owner's project ([PLAN.md](../../PLAN.md#how-it-fits-together))
 
 Today it has the landing page ([#25](https://github.com/shreyashp47/cafemenu/issues/25)),
 the sign-up form and email check ([#26](https://github.com/shreyashp47/cafemenu/issues/26)),
-and the platform's data model, sign-in and security rules
-([#24](https://github.com/shreyashp47/cafemenu/issues/24)), which onboarding
-(#27), the owner area (#29) and admin (#30) build on.
+onboarding ([#27](https://github.com/shreyashp47/cafemenu/issues/27)), and the
+platform's data model, sign-in and security rules
+([#24](https://github.com/shreyashp47/cafemenu/issues/24)), which automatic
+setup (#28), the owner area (#29) and admin (#30) build on.
 
 Same stack as the cafe app, on the same versions: Next.js 15 (static export),
 React 19, TypeScript, Tailwind CSS v4, Firebase 12, Vitest.
@@ -72,6 +73,37 @@ show it. A reload or a return comes back to the same step.
   drops camera data) and shrinks it further if it would pass 750 kB.
 - **Against the real platform** the page stays "coming soon" until
   `NEXT_PUBLIC_SIGNUP_OPEN=1`, so the landing page can go live first.
+
+### Onboarding
+
+`/setup` is steps 3 and 4: **create a Firebase project** on the free Spark
+plan, then **give CafeMenu access** (paste the project's ID, add the deploy
+account as a member under Settings → Users and permissions, and press
+**Check connection**). It says plainly that the member won't show in the
+Firebase console's list, and links to the Google Cloud IAM page, where it
+does and where it can be removed.
+
+<p align="center">
+  <img src="docs/screens/setup-phone.jpg" width="816" alt="Onboarding on a phone, four views: step 3, Create a Firebase project, with the five steps above it; step 4's Add CafeMenu as a member, with the deploy account's address and a Copy button, the role still to be settled by the Phase 0 spike, and the note that it won't appear in the Firebase console's list; a check that found two permissions missing, each named; and Lantern Café is connected">
+</p>
+
+- The wizard is a state machine in
+  [`src/lib/setup/wizard.ts`](./src/lib/setup/wizard.ts), tested without a
+  browser. The project ID is saved on the cafe before each check; the step
+  and the last answer are kept in this browser; so an owner who leaves comes
+  back to the same step, and on another device to the access step.
+- **Check connection** asks a `ConnectionChecker`
+  ([`src/lib/setup/connection.ts`](./src/lib/setup/connection.ts)), whose
+  answer has the shape of `deployer check`'s: connected, no access, or each
+  missing permission with what it is for. Demo mode and the emulators
+  simulate it (a project ID ending in `-noaccess` or `-missing` shows those
+  answers); against the real platform it waits for the backend to run
+  `deployer check` (#28).
+- The deploy account's address comes from `NEXT_PUBLIC_DEPLOY_SERVICE_ACCOUNT`
+  (a `demo-` stand-in in demo mode and the emulators). The exact role to pick
+  and the screenshots of Google's consoles are marked `[[SPIKE #3: …]]` in
+  `messages/en.json` until the Phase 0 spike settles them; a test keeps every
+  such placeholder in that form.
 
 ### Three backends
 
@@ -195,7 +227,7 @@ npm run screenshot           # every page at 4 widths into .screenshots/; fails 
 npm run audit                # WCAG 2.1 A/AA with axe, in Chromium and WebKit
 
 Both look at the steps behind a page too (the form's problems, the accent
-warning, the email check), from demo states in
+warning, the email check, each onboarding step), from demo states in
 [`scripts/lib/demo-states.mjs`](./scripts/lib/demo-states.mjs) and the
 routes in `scripts/lib/server.mjs`.
 ```
