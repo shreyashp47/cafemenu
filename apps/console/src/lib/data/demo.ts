@@ -27,10 +27,10 @@ import {
   releaseChoiceProblems,
   startingMenuProblems,
 } from "../platform/validate";
+import { fromBase64, toBase64 } from "../bytes";
 import { simulatedSiteChecker } from "./checks";
 import {
   currentUser,
-  fromBase64,
   load,
   loadSetup,
   makeId,
@@ -38,7 +38,6 @@ import {
   onChange,
   passwordHash,
   saveSetup,
-  toBase64,
   type DemoState,
 } from "./demo-store";
 import {
