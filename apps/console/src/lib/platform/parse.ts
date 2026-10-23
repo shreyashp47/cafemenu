@@ -9,18 +9,22 @@ import {
   DEPLOYMENT_KINDS,
   DEPLOYMENT_STATUSES,
   DEPLOYMENT_TRIGGERS,
+  STARTING_MENU_SOURCES,
   STEP_STATUSES,
   type Cafe,
   type CafeRelease,
   type Deployment,
   type DeploymentStep,
   type Release,
+  type StartingMenu,
 } from "./model";
 import {
   isCafeStatus,
   isMinorLine,
   isPlainObject,
+  isRegionFormat,
   isReleaseChannel,
+  isStartingMenuItem,
   isVersion,
 } from "./validate";
 
@@ -83,6 +87,7 @@ export function parseCafe(id: string, data: unknown): Cafe | null {
     ownerEmail: data.ownerEmail,
     projectId: stringOrNull(data.projectId),
     site: data.site,
+    region: isRegionFormat(data.region) ? data.region : null,
     // The cafe app's own lenient read: a field that is missing or invalid
     // reads as its default, so an older record still opens.
     settings: parseCafeSettings(data.settings),
@@ -90,6 +95,24 @@ export function parseCafe(id: string, data: unknown): Cafe | null {
     status: data.status,
     createdAt,
     updatedAt: toMillis(data.updatedAt, now) ?? createdAt,
+  };
+}
+
+/** A stored starting menu, rows that do not have the shape dropped. */
+export function parseStartingMenu(data: unknown): StartingMenu | null {
+  if (!isPlainObject(data)) return null;
+  if (
+    !oneOf(STARTING_MENU_SOURCES, data.source) ||
+    typeof data.currency !== "string" ||
+    !Array.isArray(data.items)
+  ) {
+    return null;
+  }
+  return {
+    source: data.source,
+    template: stringOrNull(data.template),
+    currency: data.currency,
+    items: data.items.filter(isStartingMenuItem),
   };
 }
 

@@ -17,8 +17,11 @@ import {
   type User,
 } from "firebase/auth";
 import {
+  Bytes,
   collection,
+  deleteDoc,
   doc,
+  getDoc,
   getDocs,
   limit,
   onSnapshot,
@@ -36,15 +39,24 @@ import {
   parseCafe,
   parseDeployment,
   parseRelease,
+  parseStartingMenu,
 } from "../platform/parse";
-import { newCafeRecord } from "../platform/records";
+import {
+  logoRecord,
+  newCafeRecord,
+  startingMenuRecord,
+} from "../platform/records";
 import {
   CafeInputError,
+  SetupInputError,
   checkNewCafe,
   checkSettings,
   isProjectId,
+  logoProblems,
   releaseChoiceProblems,
+  startingMenuProblems,
 } from "../platform/validate";
+import { pendingSiteChecker, simulatedSiteChecker } from "./checks";
 import { getFirebase, type FirebaseHandles } from "./firebase";
 import {
   CodedError,
@@ -56,6 +68,7 @@ import {
   type DeploymentRepository,
   type ErrorListener,
   type ReleaseRepository,
+  type SetupRepository,
   type Unsubscribe,
 } from "./types";
 
@@ -238,6 +251,41 @@ export function firestoreCafeRepo(connect: Connect): CafeRepository {
   };
 }
 
+export function firestoreSetupRepo(connect: Connect): SetupRepository {
+  const setupDoc = async (cafeId: string, part: "logo" | "menu") =>
+    doc((await connect()).db, "cafes", cafeId, "setup", part);
+  return {
+    async saveLogo(cafeId, png) {
+      const problems = logoProblems(png);
+      if (problems.length) throw new SetupInputError(problems);
+      await setDoc(
+        await setupDoc(cafeId, "logo"),
+        logoRecord(Bytes.fromUint8Array(png), serverTimestamp()),
+      );
+    },
+    async removeLogo(cafeId) {
+      await deleteDoc(await setupDoc(cafeId, "logo"));
+    },
+    async getLogo(cafeId) {
+      const snap = await getDoc(await setupDoc(cafeId, "logo"));
+      const png: unknown = snap.data()?.png;
+      return png instanceof Bytes ? png.toUint8Array() : null;
+    },
+    async saveMenu(cafe, menu) {
+      const problems = startingMenuProblems(menu, cafe.settings);
+      if (problems.length) throw new SetupInputError(problems);
+      await setDoc(
+        await setupDoc(cafe.id, "menu"),
+        startingMenuRecord(menu, serverTimestamp()),
+      );
+    },
+    async getMenu(cafeId) {
+      const snap = await getDoc(await setupDoc(cafeId, "menu"));
+      return parseStartingMenu(snap.data());
+    },
+  };
+}
+
 export function firestoreReleaseRepo(connect: Connect): ReleaseRepository {
   return {
     async list() {
@@ -296,6 +344,10 @@ export function createFirebaseBundle(
   return {
     auth: firebaseAuthRepo(connect),
     cafes: firestoreCafeRepo(connect),
+    setup: firestoreSetupRepo(connect),
+    // The emulators know nothing of real Firebase's names either.
+    sites:
+      backend === "emulators" ? simulatedSiteChecker() : pendingSiteChecker,
     releases: firestoreReleaseRepo(connect),
     deployments: firestoreDeploymentRepo(connect),
     backend,

@@ -27,7 +27,11 @@ describe("toMillis", () => {
 describe("parseCafe", () => {
   const record = newCafeRecord(
     { uid: "u1", email: "owner@cafe.test" },
-    { site: "toe-cafe", settings: newCafeSettings({ name: "TOE" }) },
+    {
+      site: "toe-cafe",
+      region: "asia-south1",
+      settings: newCafeSettings({ name: "TOE" }),
+    },
     stamp(1000),
   );
 
@@ -38,6 +42,7 @@ describe("parseCafe", () => {
       ownerEmail: "owner@cafe.test",
       projectId: null,
       site: "toe-cafe",
+      region: "asia-south1",
       settings: newCafeSettings({ name: "TOE" }),
       release: {
         channel: "stable",

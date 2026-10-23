@@ -15,8 +15,8 @@ import { newCafeSettings, type CafeSettings } from "@cafemenu/shared";
 import { applyActionCode } from "firebase/auth";
 import { setLogLevel } from "firebase/firestore";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import type { Cafe, PlatformUser } from "../../platform/model";
-import { CafeInputError } from "../../platform/validate";
+import type { Cafe, PlatformUser, StartingMenu } from "../../platform/model";
+import { CafeInputError, SetupInputError } from "../../platform/validate";
 import {
   connectFirebase,
   type FirebaseHandles,
@@ -162,7 +162,11 @@ describe.runIf(PROJECT.startsWith("demo-"))("Firebase adapters", () => {
     });
 
     await expect(
-      alice.cafes.create({ site: "alices-cafe", settings: cafeSettings() }),
+      alice.cafes.create({
+        site: "alices-cafe",
+        region: "asia-south1",
+        settings: cafeSettings(),
+      }),
     ).rejects.toMatchObject({ code: "permission-denied" });
     await expect(alice.releases.list()).rejects.toMatchObject({
       code: "permission-denied",
@@ -185,6 +189,7 @@ describe.runIf(PROJECT.startsWith("demo-"))("Firebase adapters", () => {
   it("creates a draft cafe and sees it live", async () => {
     cafe = await alice.cafes.create({
       site: "alices-cafe",
+      region: "asia-south1",
       settings: cafeSettings(),
     });
     expect(cafe).toMatchObject({
@@ -207,9 +212,47 @@ describe.runIf(PROJECT.startsWith("demo-"))("Firebase adapters", () => {
     expect(mine[0]).toMatchObject({ id: cafe.id, site: "alices-cafe" });
   });
 
+  it("keeps the draft's logo and starting menu", async () => {
+    const png = new Uint8Array(1024);
+    png.set([137, 80, 78, 71, 13, 10, 26, 10]);
+    await alice.setup.saveLogo(cafe.id, png);
+    expect(await alice.setup.getLogo(cafe.id)).toEqual(png);
+
+    const menu: StartingMenu = {
+      source: "template",
+      template: "coffee-shop",
+      currency: "INR",
+      items: [
+        {
+          name: "Flat White",
+          category: "Coffee",
+          description: "",
+          price: 18000,
+          available: true,
+        },
+      ],
+    };
+    await alice.setup.saveMenu(cafe, menu);
+    expect(await alice.setup.getMenu(cafe.id)).toEqual(menu);
+
+    await alice.setup.removeLogo(cafe.id);
+    expect(await alice.setup.getLogo(cafe.id)).toBeNull();
+    // Checked before writing: not a PNG, and prices in the wrong currency.
+    await expect(
+      alice.setup.saveLogo(cafe.id, new Uint8Array(16)),
+    ).rejects.toBeInstanceOf(SetupInputError);
+    await expect(
+      alice.setup.saveMenu(cafe, { ...menu, currency: "USD" }),
+    ).rejects.toBeInstanceOf(SetupInputError);
+  });
+
   it("refuses a bad cafe before writing anything", async () => {
     await expect(
-      alice.cafes.create({ site: "Alice's Cafe", settings: cafeSettings() }),
+      alice.cafes.create({
+        site: "Alice's Cafe",
+        region: "asia-south1",
+        settings: cafeSettings(),
+      }),
     ).rejects.toBeInstanceOf(CafeInputError);
     await expect(
       alice.cafes.chooseRelease(cafe.id, { channel: "stable", pinned: "1.x" }),
@@ -352,10 +395,15 @@ describe.runIf(PROJECT.startsWith("demo-"))("Firebase adapters", () => {
     expect(res.ok).toBe(true);
     // Settings are still the owner's to edit…
     await alice.cafes.updateSettings(cafe.id, cafeSettings({ tagline: "Hi" }));
-    // …but not the project.
+    // …but not the project, nor what setup has already taken.
     await expect(
       alice.cafes.connectProject(cafe.id, "someone-elses-project"),
     ).rejects.toMatchObject({ code: "permission-denied" });
+    const png = new Uint8Array(64);
+    png.set([137, 80, 78, 71, 13, 10, 26, 10]);
+    await expect(alice.setup.saveLogo(cafe.id, png)).rejects.toMatchObject({
+      code: "permission-denied",
+    });
   });
 
   it("gives the admin claim to the account the backend marked", async () => {

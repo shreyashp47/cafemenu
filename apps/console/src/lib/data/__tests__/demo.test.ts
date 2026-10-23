@@ -6,10 +6,16 @@
 
 import { newCafeSettings, type CafeSettings } from "@cafemenu/shared";
 import { beforeEach, describe, expect, it } from "vitest";
-import type { Cafe, PlatformUser } from "../../platform/model";
-import { CafeInputError } from "../../platform/validate";
+import {
+  SETUP_LOGO_MAX_BYTES,
+  type Cafe,
+  type PlatformUser,
+  type StartingMenu,
+} from "../../platform/model";
+import { CafeInputError, SetupInputError } from "../../platform/validate";
 import { demoBundle, demoVerifyEmail } from "../demo";
 import {
+  DEMO_SETUP_PREFIX,
   DEMO_STORAGE_KEY,
   load,
   mutate,
@@ -19,7 +25,7 @@ import {
   seedState,
 } from "../demo-store";
 
-const { auth, cafes, releases, deployments } = demoBundle;
+const { auth, cafes, setup, sites, releases, deployments } = demoBundle;
 
 const cafeSettings = (fields: Partial<CafeSettings> = {}) =>
   newCafeSettings({ name: "Alice's", ...fields });
@@ -117,7 +123,11 @@ describe("demo cafes, under the same rules as Firestore", () => {
   it("an unverified account cannot create a cafe", async () => {
     await auth.signUp("alice@owner.test", "correct-horse");
     await expect(
-      cafes.create({ site: "alices-cafe", settings: cafeSettings() }),
+      cafes.create({
+        site: "alices-cafe",
+        region: "asia-south1",
+        settings: cafeSettings(),
+      }),
     ).rejects.toMatchObject({ code: "permission-denied" });
   });
 
@@ -125,6 +135,7 @@ describe("demo cafes, under the same rules as Firestore", () => {
     await verifiedOwner("alice@owner.test");
     const cafe = await cafes.create({
       site: "alices-cafe",
+      region: "asia-south1",
       settings: cafeSettings({ name: "Alice's" }),
       release: { channel: "beta" },
     });
@@ -141,6 +152,7 @@ describe("demo cafes, under the same rules as Firestore", () => {
     const error = await cafes
       .create({
         site: "alices-cafe",
+        region: "asia-south1",
         settings: { ...cafeSettings(), plan: "pro" as "free" },
       })
       .catch((e: unknown) => e);
@@ -149,7 +161,11 @@ describe("demo cafes, under the same rules as Firestore", () => {
 
   it("checks the input before anything else", async () => {
     await expect(
-      cafes.create({ site: "Alice's", settings: cafeSettings() }),
+      cafes.create({
+        site: "Alice's",
+        region: "asia-south1",
+        settings: cafeSettings(),
+      }),
     ).rejects.toBeInstanceOf(CafeInputError);
   });
 
@@ -160,7 +176,11 @@ describe("demo cafes, under the same rules as Firestore", () => {
       cafes.subscribeMine(alice.uid, l, e),
     );
     expect(seen.value).toEqual([]);
-    await cafes.create({ site: "alices-cafe", settings: cafeSettings() });
+    await cafes.create({
+      site: "alices-cafe",
+      region: "asia-south1",
+      settings: cafeSettings(),
+    });
     expect(seen.value).toHaveLength(1);
     stop();
 
@@ -183,6 +203,7 @@ describe("demo cafes, under the same rules as Firestore", () => {
       await verifiedOwner("alice@owner.test");
       cafe = await cafes.create({
         site: "alices-cafe",
+        region: "asia-south1",
         settings: cafeSettings(),
       });
     });
@@ -289,6 +310,131 @@ describe("demo cafes, under the same rules as Firestore", () => {
   });
 });
 
+describe("demo setup documents, under the same rules", () => {
+  const png = (size = 256) => {
+    const bytes = new Uint8Array(size);
+    bytes.set([137, 80, 78, 71, 13, 10, 26, 10]);
+    return bytes;
+  };
+  const menu = (fields: Partial<StartingMenu> = {}): StartingMenu => ({
+    source: "template",
+    template: "coffee-shop",
+    currency: "INR",
+    items: [
+      {
+        name: "Flat White",
+        category: "Coffee",
+        description: "",
+        price: 18000,
+        available: true,
+      },
+    ],
+    ...fields,
+  });
+  let cafe: Cafe;
+  beforeEach(async () => {
+    await verifiedOwner("alice@owner.test");
+    cafe = await cafes.create({
+      site: "alices-cafe",
+      region: "asia-south1",
+      settings: cafeSettings(),
+    });
+  });
+
+  it("keeps a draft's logo, and lets it go", async () => {
+    await setup.saveLogo(cafe.id, png());
+    expect(await setup.getLogo(cafe.id)).toEqual(png());
+    await setup.removeLogo(cafe.id);
+    expect(await setup.getLogo(cafe.id)).toBeNull();
+  });
+
+  it("refuses a logo that is not a PNG, or too big, before writing", async () => {
+    const notPng = await setup
+      .saveLogo(cafe.id, new Uint8Array(64))
+      .catch((e: unknown) => e);
+    expect(notPng).toBeInstanceOf(SetupInputError);
+    expect((notPng as SetupInputError).problems).toEqual(["logo-not-png"]);
+    await expect(
+      setup.saveLogo(cafe.id, png(SETUP_LOGO_MAX_BYTES + 1)),
+    ).rejects.toMatchObject({ problems: ["logo-too-big"] });
+  });
+
+  it("keeps the starting menu", async () => {
+    await setup.saveMenu(cafe, menu());
+    expect(await setup.getMenu(cafe.id)).toEqual(menu());
+    await setup.saveMenu(
+      cafe,
+      menu({ source: "blank", template: null, items: [] }),
+    );
+    expect(await setup.getMenu(cafe.id)).toMatchObject({ source: "blank" });
+  });
+
+  it("refuses a menu in the wrong currency, or one that does not add up", async () => {
+    await expect(
+      setup.saveMenu(cafe, menu({ currency: "USD" })),
+    ).rejects.toMatchObject({ problems: ["menu-currency"] });
+    // The caller's copy of the cafe says USD; the stored one says INR.
+    await expect(
+      setup.saveMenu(
+        { ...cafe, settings: { ...cafe.settings, currency: "USD" } },
+        menu({ currency: "USD" }),
+      ),
+    ).rejects.toMatchObject({ code: "permission-denied" });
+    await expect(
+      setup.saveMenu(cafe, menu({ source: "import" })),
+    ).rejects.toMatchObject({ problems: ["menu-template"] });
+    await expect(
+      setup.saveMenu(cafe, menu({ source: "blank", template: null })),
+    ).rejects.toMatchObject({ problems: ["menu-empty"] });
+  });
+
+  it("only while the cafe is a draft", async () => {
+    mutate((state) => {
+      state.cafes.find((c) => c.id === cafe.id)!.status = "provisioning";
+    });
+    await expect(setup.saveLogo(cafe.id, png())).rejects.toMatchObject({
+      code: "permission-denied",
+    });
+    await expect(setup.saveMenu(cafe, menu())).rejects.toMatchObject({
+      code: "permission-denied",
+    });
+  });
+
+  it("another owner can neither read nor write them", async () => {
+    await setup.saveMenu(cafe, menu());
+    await auth.signOut();
+    await verifiedOwner("bob@owner.test");
+    await expect(setup.getMenu(cafe.id)).rejects.toMatchObject({
+      code: "permission-denied",
+    });
+    await expect(setup.saveLogo(cafe.id, png())).rejects.toMatchObject({
+      code: "permission-denied",
+    });
+  });
+
+  it("are forgotten with the rest of the demo", async () => {
+    await setup.saveLogo(cafe.id, png());
+    resetDemo();
+    expect(
+      Object.keys(localStorage).filter((k) => k.startsWith(DEMO_SETUP_PREFIX)),
+    ).toEqual([]);
+  });
+});
+
+describe("demo web address check", () => {
+  it("calls a name in the stand-in list, or used by a demo cafe, taken", async () => {
+    expect(await sites.check("coffee")).toBe("taken");
+    expect(await sites.check("alices-cafe")).toBe("looks-free");
+    await verifiedOwner("alice@owner.test");
+    await cafes.create({
+      site: "alices-cafe",
+      region: "asia-south1",
+      settings: cafeSettings(),
+    });
+    expect(await sites.check("alices-cafe")).toBe("taken");
+  });
+});
+
 describe("demo releases and deployments", () => {
   it("releases need a verified account, and come newest first", async () => {
     await expect(releases.list()).rejects.toMatchObject({
@@ -308,6 +454,7 @@ describe("demo releases and deployments", () => {
     await verifiedOwner("alice@owner.test");
     const cafe = await cafes.create({
       site: "alices-cafe",
+      region: "asia-south1",
       settings: cafeSettings(),
     });
     const { seen, stop } = watch<{ id: string }[]>((l, e) =>
@@ -339,6 +486,7 @@ describe("demo releases and deployments", () => {
     await verifiedOwner("alice@owner.test");
     const cafe = await cafes.create({
       site: "alices-cafe",
+      region: "asia-south1",
       settings: cafeSettings(),
     });
     await auth.signOut();
@@ -370,6 +518,7 @@ describe("the demo store", () => {
     await verifiedOwner("alice@owner.test");
     await cafes.create({
       site: "alices-cafe",
+      region: "asia-south1",
       settings: cafeSettings({ name: "A" }),
     });
     const raw = localStorage.getItem(DEMO_STORAGE_KEY);

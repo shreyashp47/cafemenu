@@ -9,13 +9,13 @@
  */
 
 import en from "../../messages/en.json";
-import type { CafeProblem } from "./platform/validate";
+import type { CafeProblem, SetupProblem } from "./platform/validate";
 
 export const messages = en;
 export type Messages = typeof en;
 
 /** The words for a validation problem from src/lib/platform/validate.ts. */
-export function problemText(problem: CafeProblem): string {
+export function problemText(problem: CafeProblem | SetupProblem): string {
   return messages.problems[problem];
 }
 
