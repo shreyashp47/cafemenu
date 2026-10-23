@@ -1,15 +1,20 @@
 import { DEFAULT_SETTINGS, newCafeSettings } from "@cafemenu/shared";
 import { describe, expect, it } from "vitest";
+import { FIRESTORE_LOCATIONS, isFirestoreLocation } from "../locations";
+import type { StartingMenu } from "../model";
 import {
   checkNewCafe,
   checkSettings,
   isMinorLine,
   isProjectId,
+  isRegionFormat,
   isSiteName,
+  isStartingMenuItem,
   isVersion,
   minorLineOf,
   releaseChoiceOf,
   releaseChoiceProblems,
+  startingMenuProblems,
 } from "../validate";
 
 describe("site names (a hostname label, at most 30 characters)", () => {
@@ -151,5 +156,97 @@ describe("a new cafe", () => {
       ],
       settingsProblems: ['currency: must be an ISO 4217 code like "INR"'],
     });
+  });
+});
+
+describe("database regions", () => {
+  it("lists each location once, every one in the shape the rules take", () => {
+    const ids = FIRESTORE_LOCATIONS.map((l) => l.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const id of ids) expect(isRegionFormat(id)).toBe(true);
+  });
+
+  it("knows the multi-regions and the regions, and nothing else", () => {
+    for (const id of [
+      "nam5",
+      "eur3",
+      "asia-south1",
+      "northamerica-northeast1",
+    ]) {
+      expect(isFirestoreLocation(id)).toBe(true);
+    }
+    for (const id of ["asia-south9", "Asia-South1", "", "mars"]) {
+      expect(isFirestoreLocation(id)).toBe(false);
+    }
+    // A shape the rules would take, but not a location the console offers.
+    expect(isRegionFormat("asia-south9")).toBe(true);
+    expect(isRegionFormat("asia south1")).toBe(false);
+  });
+});
+
+describe("a starting menu", () => {
+  const item = {
+    name: "Flat White",
+    category: "Coffee",
+    description: "",
+    price: 18000,
+    available: true,
+  };
+  const menu = (fields: Partial<StartingMenu> = {}): StartingMenu => ({
+    source: "template",
+    template: "coffee-shop",
+    currency: "INR",
+    items: [item],
+    ...fields,
+  });
+  const inr = { currency: "INR" };
+
+  it("passes a starter, a pasted list and a blank menu", () => {
+    expect(startingMenuProblems(menu(), inr)).toEqual([]);
+    expect(
+      startingMenuProblems(menu({ source: "import", template: null }), inr),
+    ).toEqual([]);
+    expect(
+      startingMenuProblems(
+        menu({ source: "blank", template: null, items: [] }),
+        inr,
+      ),
+    ).toEqual([]);
+  });
+
+  it("names what does not add up", () => {
+    expect(startingMenuProblems(menu({ template: "steakhouse" }), inr)).toEqual(
+      ["menu-template"],
+    );
+    expect(startingMenuProblems(menu({ currency: "USD" }), inr)).toEqual([
+      "menu-currency",
+    ]);
+    expect(startingMenuProblems(menu({ items: [] }), inr)).toEqual([
+      "menu-empty",
+    ]);
+    expect(
+      startingMenuProblems(
+        menu({ items: Array.from({ length: 201 }, () => item) }),
+        inr,
+      ),
+    ).toEqual(["menu-too-long"]);
+    expect(
+      startingMenuProblems(menu({ items: [{ ...item, price: 0 }] }), inr),
+    ).toEqual(["menu-item"]);
+  });
+
+  it("checks each row as the cafe app's import would", () => {
+    expect(isStartingMenuItem(item)).toBe(true);
+    for (const bad of [
+      { ...item, name: "" },
+      { ...item, name: "x".repeat(61) },
+      { ...item, category: "x".repeat(41) },
+      { ...item, description: "x".repeat(201) },
+      { ...item, price: 4.5 },
+      { ...item, available: "yes" },
+      { ...item, image: "https://x.test/a.png" },
+    ]) {
+      expect(isStartingMenuItem(bad)).toBe(false);
+    }
   });
 });
