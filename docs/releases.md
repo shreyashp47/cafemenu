@@ -16,6 +16,8 @@ project. The plan behind this is in
 
 - The **minor line** is `X.Y`. An owner who picks "Stay on 1.4" gets every
   `1.4.x` patch automatically and nothing else until they press **Upgrade**.
+- A cafe **never moves down**: a version it already runs, or an older one
+  (a `1.4.3` patch after the cafe reached `1.5.0`), is skipped.
 - Versions follow [Semantic Versioning](https://semver.org/). A tag that
   matches `v*.*.*` but is anything else (`v1.2.3-alpha.1`, `v1.2.3+build`,
   `v1.02.3`) fails the release workflow at its first step, before anything is
@@ -23,6 +25,24 @@ project. The plan behind this is in
 - **A published version never changes.** Don't move, delete or re-push a tag
   once its release is published, and don't replace its assets: cafes may
   already run it. Fix it in the next patch or the next `beta.N`.
+
+## Rolling a release out
+
+Publishing a release doesn't touch any cafe. `deployer rollout --version
+<x.y.z> --cafes <cafes.json>`
+([packages/deployer](../packages/deployer/README.md#rollout-a-release-to-every-cafe-that-should-get-it))
+decides who gets it from the table above, then deploys in waves:
+
+1. **The canary**, the cafe marked `canary` (TOE).
+2. **Beta cafes**, in batches.
+3. **Stable cafes** and cafes pinned to the version's minor line, in batches.
+
+Each cafe is a full `deploy --version` with its smoke test, which rolls that
+cafe back if it fails. The rollout **pauses** before the next cafe when the
+canary fails, or when more than 1 in 5 of a batch has failed (both
+configurable), and `--resume <rollout-id>` carries on once someone has looked
+at why. A beta only ever reaches beta cafes; a patch reaches the cafes pinned
+to its line. `--dry-run` prints the plan without deploying anything.
 
 ## Cutting a release
 

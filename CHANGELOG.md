@@ -21,3 +21,10 @@ follow [Semantic Versioning](https://semver.org/).
   rolls the cafe back, recording both in the deploy log, if any check still
   fails after a few tries. The same checks run alone with
   `packages/deployer/bin/smoke.mjs`.
+- **Rollout waves, with a pause on failures** (#32, #33). `deployer rollout`
+  works out which cafes get a release from their channel and pin (a beta to
+  beta cafes, a patch also to cafes pinned to its minor line, never down), then
+  deploys the canary, the beta cafes and the stable cafes in batches, each with
+  its smoke test and automatic rollback. It pauses when the canary fails or
+  more than 1 in 5 of a batch does, and `--resume` carries on. `--dry-run`
+  prints the plan only.
