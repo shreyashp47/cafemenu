@@ -11,6 +11,7 @@ import { join } from "node:path";
 
 import { SUMS } from "../../../scripts/release/lib/layout.mjs";
 import {
+  compareVersions,
   packageFileName,
   parseVersion,
 } from "../../../scripts/release/lib/version.mjs";
@@ -20,7 +21,7 @@ import {
 } from "../../../scripts/release/verify.mjs";
 import { ActionNeededError, UsageError } from "./errors.mjs";
 
-export { VerifyError };
+export { VerifyError, compareVersions, parseVersion };
 
 export const RELEASES =
   "https://github.com/shreyashp47/cafemenu/releases/download";
