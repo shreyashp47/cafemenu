@@ -144,11 +144,11 @@ async function work(env, { id, by, deployment, cafe }) {
       if (d.kind === deployment.kind) deployerRecord = d;
     },
   });
-  const inputs = await cafeInputs(env, cafe);
   const fail = (explanation) =>
     endWith(env, deployment, cafe, explanation, failedSteps(progress.steps));
 
   try {
+    const inputs = await cafeInputs(env, cafe);
     if (!cafe.projectId) {
       return await endAfter(progress, () =>
         fail({

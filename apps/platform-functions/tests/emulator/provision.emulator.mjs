@@ -114,22 +114,45 @@ describe("on the emulators", () => {
       site: SITE,
       region: "asia-south1",
       settings: { ...SETTINGS, logo: "/logo.png" },
-      release: { channel: "stable", pinned: null, current: null, previous: null },
+      release: {
+        channel: "stable",
+        pinned: null,
+        current: null,
+        previous: null,
+      },
       status: "draft",
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now(),
     });
-    await ref.collection("setup").doc("logo").set({ png: solidPng(), updatedAt: Timestamp.now() });
-    await ref.collection("setup").doc("menu").set({
-      source: "template",
-      template: "coffee-shop",
-      currency: "INR",
-      items: [
-        { name: "Masala chai", category: "Tea", description: "", price: 6000, available: true },
-        { name: "Filter coffee", category: "Coffee", description: "", price: 8000, available: true },
-      ],
-      updatedAt: Timestamp.now(),
-    });
+    await ref
+      .collection("setup")
+      .doc("logo")
+      .set({ png: solidPng(), updatedAt: Timestamp.now() });
+    await ref
+      .collection("setup")
+      .doc("menu")
+      .set({
+        source: "template",
+        template: "coffee-shop",
+        currency: "INR",
+        items: [
+          {
+            name: "Masala chai",
+            category: "Tea",
+            description: "",
+            price: 6000,
+            available: true,
+          },
+          {
+            name: "Filter coffee",
+            category: "Coffee",
+            description: "",
+            price: 8000,
+            available: true,
+          },
+        ],
+        updatedAt: Timestamp.now(),
+      });
   });
 
   after(async () => {
@@ -158,7 +181,11 @@ describe("on the emulators", () => {
   let provisioning;
 
   it("sets a brand-new cafe up while the progress document fills in", async () => {
-    const { result, error } = await callFunction("startProvisioning", { cafeId }, owner);
+    const { result, error } = await callFunction(
+      "startProvisioning",
+      { cafeId },
+      owner,
+    );
     assert.ok(result, JSON.stringify(error));
     provisioning = result.deploymentId;
 
@@ -166,9 +193,15 @@ describe("on the emulators", () => {
     const seen = [];
     const stop = db.doc(`deployments/${provisioning}`).onSnapshot((snap) => {
       const d = snap.data();
-      seen.push({ status: d.status, steps: d.steps.map((s) => s.status), detail: d.detail });
+      seen.push({
+        status: d.status,
+        steps: d.steps.map((s) => s.status),
+        detail: d.detail,
+      });
     });
-    const d = await until("the setup to finish", finished(provisioning), { seconds: 150 });
+    const d = await until("the setup to finish", finished(provisioning), {
+      seconds: 150,
+    });
     stop();
 
     assert.equal(d.status, "succeeded", d.error);
@@ -180,7 +213,10 @@ describe("on the emulators", () => {
       seen.some((s) => s.steps.includes("running")),
       "the wizard saw a step running",
     );
-    assert.ok(seen.some((s) => s.detail), "and what it was doing");
+    assert.ok(
+      seen.some((s) => s.detail),
+      "and what it was doing",
+    );
 
     const cafe = (await db.doc(`cafes/${cafeId}`).get()).data();
     assert.equal(cafe.status, "live");
@@ -191,7 +227,10 @@ describe("on the emulators", () => {
 
     const { state } = fake;
     assert.ok(state.sites.has(SITE));
-    assert.equal(decodeFields(state.docs.get("config/site")).name, SETTINGS.name);
+    assert.equal(
+      decodeFields(state.docs.get("config/site")).name,
+      SETTINGS.name,
+    );
     assert.deepEqual(
       [...state.docs.keys()].filter((p) => p.startsWith("menu/")).sort(),
       ["menu/start-001", "menu/start-002"],
@@ -201,7 +240,9 @@ describe("on the emulators", () => {
     assert.equal(state.emails.length, 1);
 
     // The deploy record is there, for the backend only.
-    const record = (await db.doc(`cafes/${cafeId}/private/deployRecord`).get()).data();
+    const record = (
+      await db.doc(`cafes/${cafeId}/private/deployRecord`).get()
+    ).data();
     assert.equal(record.current.version, "1.1.0");
   });
 
@@ -215,24 +256,41 @@ describe("on the emulators", () => {
     });
     await publish(fake.google, await releasePackage("1.2.0"));
 
-    const up = await callFunction("requestUpgrade", { cafeId, version: "1.2.0" }, owner);
+    const up = await callFunction(
+      "requestUpgrade",
+      { cafeId, version: "1.2.0" },
+      owner,
+    );
     assert.ok(up.result, JSON.stringify(up.error));
-    const again = await callFunction("requestUpgrade", { cafeId, version: "1.2.0" }, owner);
+    const again = await callFunction(
+      "requestUpgrade",
+      { cafeId, version: "1.2.0" },
+      owner,
+    );
     assert.equal(again.error.status, "FAILED_PRECONDITION");
     const d = await until("the upgrade", finished(up.result.deploymentId));
     assert.equal(d.status, "succeeded", d.error);
     let cafe = (await db.doc(`cafes/${cafeId}`).get()).data();
-    assert.deepEqual([cafe.release.current, cafe.release.previous], ["1.2.0", "1.1.0"]);
+    assert.deepEqual(
+      [cafe.release.current, cafe.release.previous],
+      ["1.2.0", "1.1.0"],
+    );
 
     const back = await callFunction("requestRollback", { cafeId }, owner);
     assert.ok(back.result, JSON.stringify(back.error));
     const r = await until("the rollback", finished(back.result.deploymentId));
     assert.equal(r.status, "succeeded", r.error);
     cafe = (await db.doc(`cafes/${cafeId}`).get()).data();
-    assert.deepEqual([cafe.release.current, cafe.release.previous], ["1.1.0", null]);
+    assert.deepEqual(
+      [cafe.release.current, cafe.release.previous],
+      ["1.1.0", null],
+    );
 
     const sync = await callFunction("requestSyncBranding", { cafeId }, owner);
-    const s = await until("the branding sync", finished(sync.result.deploymentId));
+    const s = await until(
+      "the branding sync",
+      finished(sync.result.deploymentId),
+    );
     assert.equal(s.status, "succeeded", s.error);
     assert.equal(s.kind, "branding");
   });

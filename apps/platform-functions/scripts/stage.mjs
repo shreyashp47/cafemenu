@@ -27,9 +27,14 @@ const APP = join(here, "..");
 const ROOT = join(APP, "../..");
 
 /** Test folders and build output don't belong in what is deployed. */
-const wanted = (src) => !/[\\/](__tests__|tests|node_modules)([\\/]|$)/.test(src);
+const wanted = (src) =>
+  !/[\\/](__tests__|tests|node_modules)([\\/]|$)/.test(src);
 
-export async function stage({ app = APP, root = ROOT, out = join(app, ".deploy") } = {}) {
+export async function stage({
+  app = APP,
+  root = ROOT,
+  out = join(app, ".deploy"),
+} = {}) {
   await rm(out, { recursive: true, force: true });
   const copy = async (from, to) => {
     await mkdir(dirname(join(out, to)), { recursive: true });
@@ -37,9 +42,18 @@ export async function stage({ app = APP, root = ROOT, out = join(app, ".deploy")
   };
 
   await copy(join(app, "src"), "src");
-  await copy(join(root, "packages/deployer/package.json"), "vendor/packages/deployer/package.json");
-  await copy(join(root, "packages/deployer/src"), "vendor/packages/deployer/src");
-  await copy(join(root, "packages/shared/package.json"), "vendor/packages/shared/package.json");
+  await copy(
+    join(root, "packages/deployer/package.json"),
+    "vendor/packages/deployer/package.json",
+  );
+  await copy(
+    join(root, "packages/deployer/src"),
+    "vendor/packages/deployer/src",
+  );
+  await copy(
+    join(root, "packages/shared/package.json"),
+    "vendor/packages/shared/package.json",
+  );
   await copy(join(root, "packages/shared/src"), "vendor/packages/shared/src");
   await copy(join(root, "scripts/release"), "vendor/scripts/release");
 
@@ -57,7 +71,10 @@ export async function stage({ app = APP, root = ROOT, out = join(app, ".deploy")
       "@cafemenu/shared": "file:vendor/packages/shared",
     },
   };
-  await writeFile(join(out, "package.json"), `${JSON.stringify(staged, null, 2)}\n`);
+  await writeFile(
+    join(out, "package.json"),
+    `${JSON.stringify(staged, null, 2)}\n`,
+  );
   return { out, package: staged };
 }
 

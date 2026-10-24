@@ -28,3 +28,13 @@ follow [Semantic Versioning](https://semver.org/).
   its smoke test and automatic rollback. It pauses when the canary fails or
   more than 1 in 5 of a batch does, and `--resume` carries on. `--dry-run`
   prints the plan only.
+- **The platform's backend** (#28), `apps/platform-functions`: Cloud Functions
+  that set a brand-new cafe up (`check`, `provision`, the first `deploy`, the
+  starting menu, the owner's account and set-password email) while writing each
+  step's progress to its `deployments/{id}`, and that run the console's Check
+  connection, Upgrade, Roll back and Save branding with the deployer. Runs are
+  safe to repeat, carry on where they stopped, retry transient errors and fail
+  in plain words with what to do next. The console calls them when
+  `NEXT_PUBLIC_BACKEND_FUNCTIONS` is set. Tested on the Functions, Firestore and
+  Auth emulators against the deployer's fake Google; not yet run against real
+  Google (`[[SPIKE #3]]`).

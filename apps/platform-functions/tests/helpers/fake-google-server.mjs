@@ -13,7 +13,10 @@ import {
 
 const JSON_OR_FORM = /json|x-www-form-urlencoded/;
 
-export async function startFakeGoogle({ port = 8399, state = freshState() } = {}) {
+export async function startFakeGoogle({
+  port = 8399,
+  state = freshState(),
+} = {}) {
   const google = createFakeGoogle({ state });
   const server = createServer(async (req, res) => {
     try {
@@ -22,7 +25,8 @@ export async function startFakeGoogle({ port = 8399, state = freshState() } = {}
       const buffer = Buffer.concat(chunks);
       const type = req.headers["content-type"] ?? "";
       let body;
-      if (buffer.length) body = JSON_OR_FORM.test(type) ? buffer.toString() : buffer;
+      if (buffer.length)
+        body = JSON_OR_FORM.test(type) ? buffer.toString() : buffer;
       const response = await google.fetchImpl(req.headers["x-cafemenu-url"], {
         method: req.method,
         headers: req.headers,
