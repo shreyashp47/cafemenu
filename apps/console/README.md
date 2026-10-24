@@ -9,10 +9,11 @@ they live in the owner's project ([PLAN.md](../../PLAN.md#how-it-fits-together))
 Today it has the landing page ([#25](https://github.com/shreyashp47/cafemenu/issues/25)),
 the sign-up form and email check ([#26](https://github.com/shreyashp47/cafemenu/issues/26)),
 onboarding ([#27](https://github.com/shreyashp47/cafemenu/issues/27)), the
-owner area ([#29](https://github.com/shreyashp47/cafemenu/issues/29)), and the
-platform's data model, sign-in and security rules
+owner area ([#29](https://github.com/shreyashp47/cafemenu/issues/29)), the
+platform admin ([#30](https://github.com/shreyashp47/cafemenu/issues/30)), and
+the platform's data model, sign-in and security rules
 ([#24](https://github.com/shreyashp47/cafemenu/issues/24)), which automatic
-setup (#28) and admin (#30) build on.
+setup (#28) builds on.
 
 Same stack as the cafe app, on the same versions: Next.js 15 (static export),
 React 19, TypeScript, Tailwind CSS v4, Firebase 12, Vitest.
@@ -256,6 +257,65 @@ platform service account, which Firestore does not hold to the rules. It is
 the only writer of releases, deployments, a cafe's status, its plan and
 `release.current`/`previous`. Upgrade and Roll back (#29) will be requests to
 it, not client writes.
+
+## The platform admin
+
+`/admin` is the maintainer's page: not linked from anywhere, and a sign-in form
+for everyone but an account with the `admin: true` claim (the rules are what
+keep the data from anyone else; the page only declines to ask). It shows:
+
+<p align="center">
+  <img src="docs/screens/admin-phone.jpg" width="816" alt="The platform admin on a phone, four views: Cafes filtered to those that need a look, with Orchard Tea House's rolled-back deployment, its failed smoke test and its error; Publish a release with the version 1.1.1 refused as already published; Published releases with a rollout running, one completed and two not started; and the Audit log of deployments with who asked, what, when, and each smoke test">
+</p>
+
+- **Cafes.** One card per cafe: how it is doing (healthy, in progress, needs a
+  look, paused, not set up), which release it runs and the one before, whether
+  it follows stable, beta or stays on a line, its latest deployment, the last
+  **smoke test** it had and when, the error if something failed, the owner and
+  the address. Cafes that need a look come first; a search (name, address,
+  owner's email) and filters (needs a look, in progress, on beta, staying on a
+  version) narrow them. Health is worked out in
+  [`src/lib/admin/overview.ts`](./src/lib/admin/overview.ts) from the cafe's
+  status and its newest deployment, and the smoke result from the deployment's
+  `smoke` step, the one the deployer records. Cards, not a table, so a phone
+  has nothing to scroll sideways.
+- **Releases.** Publish a release record (version, channel, notes, database
+  schema), checked here for the mistakes that can be seen from here (a bad
+  or already-published version, a pre-release going to stable, no notes) and
+  then **asked of the backend** (`AdminRequests.publishRelease`; the
+  `TODO(#28)` says the backend verifies the package on GitHub against what was
+  entered and only then writes `releases/{version}`). Below, the published
+  releases with a **Start / Pause / Resume** button for each one's rollout:
+  a stub for v1.1's rollout waves ([#32](https://github.com/shreyashp47/cafemenu/issues/32)),
+  which only records the state until the backend runs `deployer rollout` (the
+  `TODO(#32)` names the commands and says the rollouts become `rollouts/{id}`
+  documents, with rules for the admin to read them).
+- **Audit log.** The latest 200 deployments of every cafe, newest first: what
+  (setup, deploy and from which version, rollback, branding sync), the cafe,
+  how it went, who asked (the owner's email, a rollout, or the admin), when,
+  its smoke test and error. Narrowed to one cafe, or to those that didn't go
+  through, 25 at a time.
+
+What it deliberately lacks: **no way to sign in as an owner** (the
+authentication repository has no such call, and a test keeps it so) **and no way
+to read a cafe's orders**: they live in the owner's own project, and no path in
+the platform database leads to them (the rules test tries `/orders`, `/staff`
+and `/rollouts`, and is refused). Cafes are read-only: the admin cannot edit
+one, move it to another owner, withdraw a release or start a deploy from a
+browser, only ask the backend, which writes with its own account.
+
+**The latest 200.** One query feeds the log and each cafe's last deploy
+(`DeploymentRepository.subscribeRecent`: newest first, no filter, which only the
+admin's claim lets through). A cafe whose newest deployment is older than the
+latest 200 reads as having none, which is fine for dozens of cafes and is the
+place to start if there are ever thousands (a `lastDeployment` on the cafe,
+written by the backend).
+
+**Demo mode** has an admin of its own, made on first sign-in: `admin@cafemenu.demo`
+with the password `demo-admin` (the page says so). It sees seven sample cafes in
+every state, with their deployments, written once into the demo store and
+belonging to no account; an owner in the same browser never sees them. Nobody
+can sign up as it.
 
 ## Checks
 

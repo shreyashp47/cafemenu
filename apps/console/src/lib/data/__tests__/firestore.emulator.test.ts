@@ -15,7 +15,12 @@ import { newCafeSettings, type CafeSettings } from "@cafemenu/shared";
 import { applyActionCode } from "firebase/auth";
 import { setLogLevel } from "firebase/firestore";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import type { Cafe, PlatformUser, StartingMenu } from "../../platform/model";
+import type {
+  Cafe,
+  Deployment,
+  PlatformUser,
+  StartingMenu,
+} from "../../platform/model";
 import { CafeInputError, SetupInputError } from "../../platform/validate";
 import {
   connectFirebase,
@@ -465,6 +470,30 @@ describe.runIf(PROJECT.startsWith("demo-"))("Firebase adapters", () => {
       (cafes) => cafes.length > 0,
     );
     expect(all.map((c) => c.id)).toContain(cafe.id);
+
+    // The admin page's other read: the latest deployments of every cafe.
+    const recent = await next<Deployment[]>(
+      (l, e) => admin.bundle.deployments.subscribeRecent(10, l, e),
+      (list) => list.length > 0,
+    );
+    expect(recent.map((d) => d.cafeId)).toContain(cafe.id);
+    const times = recent.map((d) => d.createdAt);
+    expect(times).toEqual([...times].sort((a, b) => b - a));
+    // An owner's query for them all is refused, not quietly narrowed. (Dana
+    // has read no deployment yet: the SDK would answer Alice's own, kept from
+    // earlier, from its cache before the server refused.)
+    const dana = await owner("dana", "dana@owner.test");
+    apps.push(dana.handles);
+    await expect(
+      next(
+        (l, e) => dana.bundle.deployments.subscribeRecent(10, l, e),
+        () => true,
+      ),
+    ).rejects.toMatchObject({ code: "permission-denied" });
+    // The real platform has no backend to ask yet.
+    await expect(
+      admin.bundle.admin.rollout("1.1.0", "pause"),
+    ).rejects.toMatchObject({ code: "admin-pending" });
   });
 
   it("signs out", async () => {

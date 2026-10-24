@@ -4,6 +4,7 @@
     "title": "CafeMenu · QR table ordering for small cafes",
     "description": "Customers scan the code on their table and order from their phone. Staff see orders arrive live. Your menu, orders and data stay in your own free Firebase project.",
     "signupTitle": "Sign up",
+    "adminTitle": "Platform admin",
     "setupTitle": "Set up your cafe",
     "notFoundTitle": "Page not found",
     "cafeTitle": "Your cafe"
@@ -883,6 +884,203 @@
     "text": "The address may be mistyped, or the page may have moved.",
     "back": "Back to the home page"
   },
+  "admin": {
+    "loading": "Loading…",
+    "signIn": {
+      "title": "Platform admin",
+      "text": "For CafeMenu's maintainer. Sign in with the admin account."
+    },
+    "demo": "Demo mode has a sample admin: sign in as `admin@cafemenu.demo` with the password `demo-admin` to see sample cafes. Nothing here is real, and nothing leaves this browser.",
+    "notAdmin": {
+      "title": "This page is for CafeMenu's maintainer",
+      "text": "You're signed in as **{email}**, which isn't the platform admin. [Back to the home page](/).",
+      "signOut": "Sign out"
+    },
+    "eyebrow": "Platform admin",
+    "title": "Every cafe",
+    "lead": "How each cafe is doing, what has been deployed to it, and the releases. Cafes are read-only here: a change goes through the backend. There is no way to sign in as an owner or to see a cafe's orders from this page; those stay in the owner's own project.",
+    "account": {
+      "signedIn": "Signed in as **{email}**.",
+      "signOut": "Sign out"
+    },
+    "nav": {
+      "label": "On this page",
+      "cafes": "Cafes",
+      "releases": "Releases",
+      "audit": "Audit log"
+    },
+    "cafes": {
+      "title": "Cafes",
+      "summary": "{total} cafes · {live} live · {attention} need a look · {busy} in progress",
+      "search": {
+        "label": "Find a cafe",
+        "hint": "By name, web address or the owner's email."
+      },
+      "filter": {
+        "label": "Show",
+        "all": "All",
+        "attention": "Needs a look",
+        "busy": "In progress",
+        "beta": "On beta",
+        "pinned": "Staying on a version"
+      },
+      "loading": "Loading the cafes…",
+      "error": "What went wrong: {error}",
+      "none": "No cafes yet.",
+      "noMatch": "No cafe matches.",
+      "count": "Showing {shown} of {total}.",
+      "field": {
+        "health": "Health",
+        "owner": "Owner",
+        "site": "Address",
+        "version": "Version",
+        "follows": "Follows",
+        "last": "Last deploy",
+        "smoke": "Smoke test"
+      },
+      "version": {
+        "none": "Not deployed yet",
+        "previous": "(before: {version})"
+      },
+      "follows": {
+        "stable": "Stable",
+        "beta": "Beta",
+        "pinned": "Stays on {line}"
+      },
+      "last": {
+        "none": "No deployment on record",
+        "text": "{what}: {status}, {when}"
+      },
+      "health": {
+        "ok": "Healthy",
+        "busy": "In progress",
+        "attention": "Needs a look",
+        "paused": "Paused",
+        "unknown": "Unknown",
+        "not-live": "Not set up"
+      },
+      "reason": {
+        "healthy": "Its latest deployment went through.",
+        "running": "A deployment is running.",
+        "failed": "Its latest deployment failed.",
+        "rolled-back": "Its latest deployment failed its check and was rolled back.",
+        "no-deploys": "No deployment is on record for it.",
+        "draft": "The owner hasn't finished setup.",
+        "provisioning": "Its project is being set up.",
+        "setup-failed": "Setting it up failed.",
+        "disconnected": "The owner removed CafeMenu's access. The site keeps running on its last release.",
+        "suspended": "Paused by the admin."
+      },
+      "smokeResult": {
+        "passed": "Passed",
+        "failed": "Failed",
+        "not-run": "Didn't run",
+        "none": "None yet"
+      },
+      "smokeAt": "{result}, {when}"
+    },
+    "releases": {
+      "title": "Releases",
+      "lead": "Publish a release's record once its package is on GitHub. The backend checks the package against what you enter before it writes anything. Owners then see the notes, and the rollout can pick it up.",
+      "form": {
+        "title": "Publish a release",
+        "version": {
+          "label": "Version",
+          "hint": "Like `1.4.2`, or `1.5.0-beta.1`."
+        },
+        "channel": {
+          "label": "Publish to",
+          "beta": "Beta",
+          "betaText": "Beta cafes get it first.",
+          "stable": "Stable",
+          "stableText": "Every cafe following stable can get it."
+        },
+        "schema": {
+          "label": "Database schema",
+          "hint": "The schema version the release expects in each cafe's database: its release.json says."
+        },
+        "notes": {
+          "label": "Release notes",
+          "hint": "Markdown: headings, bullets, **bold**, `code` and links. Owners read these before they upgrade."
+        },
+        "submit": "Publish release",
+        "submitting": "Publishing…",
+        "fixFields": "Fix the fields marked first."
+      },
+      "published": "Published {version}. It reaches cafes when a rollout starts.",
+      "problems": {
+        "version-format": "Use three numbers like 1.4.2, with an optional pre-release like -beta.1.",
+        "version-taken": "That version is already published.",
+        "prerelease-stable": "A pre-release can only go to beta.",
+        "channel-unknown": "Choose beta or stable.",
+        "notes-empty": "Write what changed, for the owners who read it.",
+        "notes-long": "Keep the notes under 20,000 characters.",
+        "schema-invalid": "Use a whole number from 1."
+      },
+      "list": {
+        "title": "Published releases",
+        "none": "No releases are published yet.",
+        "loading": "Loading the releases…",
+        "error": "The releases couldn't be loaded.",
+        "refresh": "Refresh the list",
+        "published": "Published {date}",
+        "schema": "schema {schema}",
+        "withdrawn": "Withdrawn",
+        "channel": {
+          "stable": "Stable",
+          "beta": "Beta"
+        }
+      },
+      "rollout": {
+        "label": "Rollout",
+        "status": {
+          "none": "Not started",
+          "running": "Running",
+          "paused": "Paused",
+          "completed": "Completed"
+        },
+        "start": "Start the rollout of {version}",
+        "pause": "Pause the rollout of {version}",
+        "resume": "Resume the rollout of {version}",
+        "stub": "Starting and pausing by hand is a stub for the rollout waves (#32): until the backend runs them, nothing is sent to a cafe.",
+        "done": "Asked."
+      }
+    },
+    "audit": {
+      "title": "Audit log",
+      "lead": "Every setup, deploy, rollback and branding sync: who asked, what, when and how it went. The latest {limit} are loaded.",
+      "filter": {
+        "cafe": "Cafe",
+        "all": "All cafes",
+        "problems": "Only those that didn't go through"
+      },
+      "loading": "Loading the log…",
+      "error": "What went wrong: {error}",
+      "none": "Nothing to show.",
+      "count": "Showing {shown} of {total}.",
+      "more": "Show more",
+      "what": {
+        "provision": "Setup",
+        "deploy": "Deploy {version}",
+        "deployFrom": "Deploy {version}, from {from}",
+        "rollback": "Roll back to {version}",
+        "branding": "Branding sync"
+      },
+      "who": {
+        "owner": "Asked by {email}",
+        "rollout": "A rollout",
+        "admin": "The admin"
+      },
+      "status": {
+        "queued": "Waiting",
+        "running": "Running",
+        "succeeded": "Done",
+        "failed": "Failed",
+        "rolled-back": "Rolled back"
+      },
+      "smoke": "Smoke test: {result}"
+    }
+  },
   "locations": {
     "groups": {
       "multi": "Several regions",
@@ -958,6 +1156,8 @@
     "auth/too-many-requests": "Too many tries. Wait a minute and try again.",
     "auth/network-request-failed": "No connection. Check the internet and try again.",
     "permission-denied": "You can't do that here. If you just verified your email, reload the page.",
+    "already-exists": "That version is already published.",
+    "admin-pending": "The backend doesn't take this yet. Nothing was changed.",
     "unauthenticated": "Sign in first.",
     "not-found": "That cafe no longer exists.",
     "unimplemented": "Checking isn't switched on yet. Your project ID is saved, and CafeMenu's maintainer will check the connection for you.",

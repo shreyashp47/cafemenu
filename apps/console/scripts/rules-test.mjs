@@ -42,6 +42,8 @@ import {
   getDoc,
   getDocs,
   getFirestore,
+  limit,
+  orderBy,
   query,
   serverTimestamp,
   setDoc,
@@ -1263,6 +1265,70 @@ await t(
       schemaVersion: 1,
       withdrawn: false,
     }),
+  ),
+);
+// What the admin page (#30) asks for: the latest deployments of every cafe.
+const latestDeployments = (c, n = 5) =>
+  getDocs(
+    query(
+      collection(c.db, "deployments"),
+      orderBy("createdAt", "desc"),
+      limit(n),
+    ),
+  );
+await t(
+  "the admin lists the latest deployments of every cafe, newest first",
+  allowed(async () => {
+    const snap = await latestDeployments(erin);
+    expect(
+      snap.size >= 2,
+      `expected both cafes' deployments, got ${snap.size}`,
+    );
+  }),
+);
+await t(
+  "an owner cannot run that query: it is not theirs alone",
+  denied(() => latestDeployments(alice)),
+);
+await t(
+  "…nor can an unverified account with the claim",
+  denied(() => latestDeployments(frank)),
+);
+await t(
+  "the admin cannot start a deploy from a browser",
+  denied(() =>
+    setDoc(deploy(erin, "dep-from-admin"), {
+      ...deployment(BOB, "cafe-b"),
+      createdAt: serverTimestamp(),
+    }),
+  ),
+);
+await t(
+  "the admin cannot withdraw a release from a browser",
+  denied(() => updateDoc(release(erin, "1.1.0"), { withdrawn: true })),
+);
+await t(
+  "the admin cannot edit an owner's settings",
+  denied(() =>
+    edit(erin, "cafe-b", { settings: settings({ name: "Taken over" }) }),
+  ),
+);
+await t(
+  "the admin cannot move a cafe to another owner",
+  denied(() => edit(erin, "cafe-b", { ownerUid: ERIN.uid })),
+);
+// The admin sees the platform's records and nothing else: a cafe's orders
+// are in the owner's own project, and no path here leads to them.
+for (const path of ["orders", "staff", "rollouts"]) {
+  await t(
+    `the admin cannot read or write /${path}: nothing is kept there`,
+    denied(() => getDocs(collection(erin.db, path))),
+  );
+}
+await t(
+  "…nor write a rollout from a browser",
+  denied(() =>
+    setDoc(doc(erin.db, "rollouts", "1.2.0-20261024"), { status: "paused" }),
   ),
 );
 await t(
