@@ -262,8 +262,12 @@ Done once, by the maintainer. **All of this waits for the platform project and
    variables). `firebase.json` stages first: `scripts/stage.mjs` copies the
    functions into `.deploy/` with the deployer, `@cafemenu/shared` and
    `scripts/release/` beside them, as a package of its own, because Firebase
-   uploads one folder and Cloud Build has no repository. CI checks that the
-   staged package installs and loads on its own.
+   uploads one folder and Cloud Build has no repository. It also cuts a
+   `package-lock.json` for it out of the repository's
+   (`scripts/prune-lock.mjs`), so Cloud Build runs `npm ci` on the versions the
+   tests ran on: npm 10 crashes resolving this repository's tree from nothing
+   ([CONTRIBUTING.md](../../CONTRIBUTING.md)). CI runs `npm ci` and `npm ls` in
+   the staged package and loads the functions from it.
 
    `CAFEMENU_REGION` must be the **location of the platform's Firestore
    database**, which Firestore triggers require `[[SPIKE #3]]`.

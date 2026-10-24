@@ -10,6 +10,9 @@
  *   .deploy/package.json            the functions' dependencies, with
  *                                   @cafemenu/deployer and @cafemenu/shared
  *                                   as file: dependencies on vendor/
+ *   .deploy/package-lock.json       the repository's lockfile cut down to
+ *                                   them (prune-lock.mjs), so Cloud Build
+ *                                   runs `npm ci`
  *   .deploy/src/                    this app's src/
  *   .deploy/vendor/packages/deployer
  *   .deploy/vendor/packages/shared
@@ -19,8 +22,10 @@
  * with `npm run stage`.
  */
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { pruneLock } from "./prune-lock.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const APP = join(here, "..");
@@ -43,25 +48,44 @@ export async function stage({
 
   await copy(join(app, "src"), "src");
   await copy(
-    join(root, "packages/deployer/package.json"),
-    "vendor/packages/deployer/package.json",
-  );
-  await copy(
     join(root, "packages/deployer/src"),
     "vendor/packages/deployer/src",
   );
-  await copy(
-    join(root, "packages/shared/package.json"),
-    "vendor/packages/shared/package.json",
-  );
   await copy(join(root, "packages/shared/src"), "vendor/packages/shared/src");
   await copy(join(root, "scripts/release"), "vendor/scripts/release");
+
+  // Their manifests, without the scripts and development dependencies (vitest
+  // among them) that npm would otherwise try to resolve for a linked package,
+  // which is what crashes it (CONTRIBUTING.md).
+  const vendored = {};
+  for (const name of ["deployer", "shared"]) {
+    const manifest = JSON.parse(
+      await readFile(join(root, `packages/${name}/package.json`), "utf8"),
+    );
+    const { version, license, type, exports, engines, dependencies } = manifest;
+    const path = `vendor/packages/${name}`;
+    const trimmed = {
+      name: manifest.name,
+      version,
+      license,
+      type,
+      exports,
+      engines,
+      dependencies,
+    };
+    await writeFile(
+      join(out, path, "package.json"),
+      `${JSON.stringify(trimmed, null, 2)}\n`,
+    );
+    vendored[manifest.name] = { path, manifest: trimmed };
+  }
 
   const pkg = JSON.parse(await readFile(join(app, "package.json"), "utf8"));
   const staged = {
     name: pkg.name,
     version: pkg.version,
     private: true,
+    license: pkg.license,
     type: pkg.type,
     main: pkg.main,
     engines: pkg.engines,
@@ -74,6 +98,17 @@ export async function stage({
   await writeFile(
     join(out, "package.json"),
     `${JSON.stringify(staged, null, 2)}\n`,
+  );
+
+  // The versions the repository's own lockfile holds, so that what is
+  // deployed is what was tested, and `npm ci` installs it.
+  const lock = JSON.parse(
+    await readFile(join(root, "package-lock.json"), "utf8"),
+  );
+  const workspace = relative(root, app).split(sep).join("/");
+  await writeFile(
+    join(out, "package-lock.json"),
+    `${JSON.stringify(pruneLock(lock, { workspace, staged, vendored }), null, 2)}\n`,
   );
   return { out, package: staged };
 }
