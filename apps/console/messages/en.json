@@ -547,7 +547,8 @@
       "live": "It's live at **{site}.web.app**.",
       "failed": "Setting it up didn't finish. CafeMenu's maintainer is looking at why.",
       "disconnected": "CafeMenu's access to its project was removed. To connect it again, add the member back and ask the maintainer to check.",
-      "suspended": "It is paused by CafeMenu's maintainer."
+      "suspended": "It is paused by CafeMenu's maintainer.",
+      "manage": "[Open your cafe's page](/cafe?cafe={id}) for its updates, branding and access."
     },
     "project": {
       "eyebrow": "Step 3 of 5 · your Firebase project",
@@ -808,7 +809,9 @@
           "too-long": "Keep it to 80 characters."
         },
         "needsConfirm": "Tick the box to confirm."
-      }
+      },
+      "unrequested": "Saved on CafeMenu, but your site wasn't asked to update: {error}",
+      "retry": "Ask my site to update again"
     },
     "access": {
       "title": "Access",
