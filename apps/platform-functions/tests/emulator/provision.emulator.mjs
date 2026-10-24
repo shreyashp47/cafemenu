@@ -294,4 +294,104 @@ describe("on the emulators", () => {
     assert.equal(s.status, "succeeded", s.error);
     assert.equal(s.kind, "branding");
   });
+
+  // -- emails (#34, #35) ---------------------------------------------------------
+  // MAIL_PROVIDER is unset, so the emulated functions log their emails and send
+  // them to nobody. What shows they sent them is the record of each one in
+  // `cafes/{id}/private/mail`, which is claimed before sending.
+
+  const sentOf = (id) => async () => {
+    const mail = (await db.doc(`cafes/${id}/private/mail`).get()).data();
+    return mail?.sent ? mail : null;
+  };
+  const sentKeys = (mail) => Object.keys(mail.sent);
+
+  it("tells a cafe that stays on a version about a newer line, and one on a dropped line to upgrade", async () => {
+    const ref = (id) => db.doc(`cafes/${id}`);
+    // The cafe set up above stays on 1.1, which the next release drops;
+    // another stays on 1.2, which it doesn't.
+    await ref(cafeId).update({ "release.pinned": "1.1" });
+    const second = db.collection("cafes").doc();
+    const first = (await ref(cafeId).get()).data();
+    await second.set({
+      ...first,
+      site: "second-cafe",
+      status: "live",
+      release: {
+        channel: "stable",
+        pinned: "1.2",
+        current: "1.2.0",
+        previous: null,
+      },
+    });
+
+    await db.doc("releases/1.3.0").set({
+      channel: "stable",
+      notes: "",
+      publishedAt: Timestamp.now(),
+      schemaVersion: 1,
+      withdrawn: false,
+    });
+
+    const dropped = await until("the upgrade notice", sentOf(cafeId));
+    assert.equal(sentKeys(dropped).length, 1);
+    assert.match(
+      sentKeys(dropped)[0],
+      /^upgrade-required:1\.1:\d{4}-\d{2}-\d{2}$/,
+    );
+    const news = await until("the release email", sentOf(second.id));
+    assert.deepEqual(sentKeys(news), ["release-available:1.3.0"]);
+    assert.ok(news.token, "with the cafe's own unsubscribe token");
+
+    // The unsubscribe link: a GET asks, a POST does it.
+    const link = `${FUNCTIONS}/unsubscribe?c=${second.id}&t=${news.token}`;
+    const page = await fetch(link);
+    assert.equal(page.status, 200);
+    assert.match(
+      page.headers.get("content-security-policy"),
+      /default-src 'none'/,
+    );
+    assert.match(await page.text(), /Stop emails about new versions\?/);
+    assert.equal((await ref(second.id).get()).data().emails, undefined);
+
+    const done = await fetch(link, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: "action=unsubscribe",
+    });
+    assert.match(await done.text(), /You're unsubscribed/);
+    assert.deepEqual((await ref(second.id).get()).data().emails, {
+      releaseNotices: false,
+    });
+    const wrong = await fetch(`${FUNCTIONS}/unsubscribe?c=${second.id}&t=nope`);
+    assert.equal(wrong.status, 404);
+  });
+
+  it("tells the owner when a deployment ends rolled back", async () => {
+    const ref = db.collection("deployments").doc();
+    await ref.set({
+      cafeId,
+      ownerUid: owner.uid,
+      kind: "deploy",
+      version: "1.3.0",
+      fromVersion: "1.1.0",
+      status: "succeeded", // finished, so the worker leaves it alone
+      trigger: "rollout",
+      steps: [],
+      error: null,
+      createdAt: Timestamp.now(),
+      finishedAt: Timestamp.now(),
+    });
+    await ref.update({
+      status: "rolled-back",
+      error: "The new version didn't pass its checks.",
+    });
+    const mail = await until("the failure email", async () => {
+      const m = (await db.doc(`cafes/${cafeId}/private/mail`).get()).data();
+      return sentKeys(m ?? { sent: {} }).includes(`deploy-failed:${ref.id}`)
+        ? m
+        : null;
+    });
+    assert.ok(mail.sent[`deploy-failed:${ref.id}`]);
+  });
 });

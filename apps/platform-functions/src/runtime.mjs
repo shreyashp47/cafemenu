@@ -6,6 +6,7 @@
  *   store       the platform's data (store-firestore.mjs)
  *   google      {clientEmail(), contextFor(project, {write, readFile, deployLog})}
  *               contextFor makes the deployer's command context
+ *   mail        {sender, consoleUrl, unsubscribeUrl}: how emails go out (mail/)
  *   loadShared  @cafemenu/shared, with its icons (Node 22.18+ imports its TypeScript)
  *   now, sleep, log
  */
@@ -107,6 +108,7 @@ async function build() {
   const { getAuth } = await import("firebase-admin/auth");
   const { logger } = await import("firebase-functions/logger");
   const { createFirestoreStore } = await import("./store-firestore.mjs");
+  const { createMail } = await import("./mail/setup.mjs");
 
   const app = getApps()[0] ?? initializeApp();
   const db = getFirestore(app);
@@ -130,12 +132,14 @@ async function build() {
           clientEmail: metadataServiceAccount(),
         }),
   });
+  const log = (level, message, fields) => logger[level](message, fields);
   return {
     store: createFirestoreStore({ db, auth: getAuth(app) }),
     google,
+    mail: createMail(process.env, { log }),
     loadShared: loadRealShared,
     now,
     sleep,
-    log: (level, message, fields) => logger[level](message, fields),
+    log,
   };
 }

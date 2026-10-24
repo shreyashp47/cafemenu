@@ -9,12 +9,19 @@
  *   listReleases() / getRelease(version)
  *   getLogo(cafeId) / getStartingMenu(cafeId) / getOwnerName(uid)
  *   getRecord(cafeId) / setRecord(cafeId, record)
+ *   listPinnedCafes()                 live cafes with release.pinned set
+ *   getOwnerEmail(uid, fallback)      owners.emails, else the fallback
+ *   ensureMailToken(cafeId) / checkMailToken(cafeId, token)
+ *   claimMail(cafeId, key, now) → whether it was free / unclaimMail(cafeId, key)
+ *   setEmailPreference(cafeId, {releaseNotices})
  *   getDeployment(id)                 with `createdAt` in ms
  *   updateDeployment(id, patch)       a shallow merge
  *   transactDeployment(id, fn)        fn(current) → {patch, result}; returns result
  *   queueDeployment(cafeId, decide, now)   decide({cafe, active}) →
  *                                     {deployment, expire, cafeStatus}; returns the new id
  */
+import { newToken, sameSecret } from "../../src/mail/token.mjs";
+
 export function createMemoryStore() {
   const data = {
     cafes: new Map(),
@@ -23,6 +30,8 @@ export function createMemoryStore() {
     menus: new Map(),
     records: new Map(),
     owners: new Map(), // uid → display name
+    emails: new Map(), // uid → account email (absent: the owner's account is gone)
+    mail: new Map(), // cafeId → {token, sent: {key: when}}
     deployments: new Map(),
   };
   let counter = 0;
@@ -71,6 +80,38 @@ export function createMemoryStore() {
     },
     async getStartingMenu(cafeId) {
       return data.menus.get(cafeId) ?? null;
+    },
+    async listPinnedCafes() {
+      return [...data.cafes.values()]
+        .filter((cafe) => cafe.release?.pinned && cafe.status === "live")
+        .map(withRelease);
+    },
+    async getOwnerEmail(uid, fallback = null) {
+      return data.emails.get(uid) ?? fallback;
+    },
+    async ensureMailToken(cafeId) {
+      const mail = data.mail.get(cafeId) ?? { sent: {} };
+      mail.token ??= newToken();
+      data.mail.set(cafeId, mail);
+      return mail.token;
+    },
+    async checkMailToken(cafeId, token) {
+      const saved = data.mail.get(cafeId)?.token;
+      return Boolean(saved) && sameSecret(saved, token);
+    },
+    async claimMail(cafeId, key, now) {
+      const mail = data.mail.get(cafeId) ?? { sent: {} };
+      data.mail.set(cafeId, mail);
+      if (mail.sent[key]) return false;
+      mail.sent[key] = ms(now);
+      return true;
+    },
+    async unclaimMail(cafeId, key) {
+      delete data.mail.get(cafeId)?.sent[key];
+    },
+    async setEmailPreference(cafeId, { releaseNotices }) {
+      const cafe = data.cafes.get(cafeId);
+      cafe.emails = { ...cafe.emails, releaseNotices };
     },
     async getOwnerName(uid) {
       return data.owners.get(uid) ?? null;

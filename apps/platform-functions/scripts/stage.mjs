@@ -14,6 +14,7 @@
  *                                   them (prune-lock.mjs), so Cloud Build
  *                                   runs `npm ci`
  *   .deploy/src/                    this app's src/
+ *   .deploy/.env, .env.<project>    the maintainer's settings, if there are any
  *   .deploy/vendor/packages/deployer
  *   .deploy/vendor/packages/shared
  *   .deploy/vendor/scripts/release  (the deployer imports it as ../../../scripts/release)
@@ -21,7 +22,7 @@
  * Run by `firebase deploy` itself (firebase.json, predeploy); also by hand
  * with `npm run stage`.
  */
-import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -47,6 +48,15 @@ export async function stage({
   };
 
   await copy(join(app, "src"), "src");
+  // The maintainer's settings (`.env`, `.env.<project>`: the mail provider and
+  // the links in emails, see README.md). Firebase reads them from the folder
+  // it uploads. Not the emulator's, which is for the emulators alone, and
+  // not `.env.example`.
+  for (const name of await readdir(app)) {
+    if (/^\.env(\.(?!demo-|example$).+)?$/.test(name)) {
+      await copy(join(app, name), name);
+    }
+  }
   await copy(
     join(root, "packages/deployer/src"),
     "vendor/packages/deployer/src",

@@ -1,7 +1,15 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, readdir, stat } from "node:fs/promises";
+import {
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 
 import { stage } from "../../scripts/stage.mjs";
@@ -86,5 +94,23 @@ describe("the staged copy that firebase deploy uploads", () => {
       "packages",
       "scripts",
     ]);
+  });
+
+  it("carries the maintainer's settings along, and not the emulator's", async () => {
+    const app = join(dirname(fileURLToPath(import.meta.url)), "../..");
+    const mine = join(app, ".env.stage-test");
+    await writeFile(mine, "MAIL_PROVIDER=log\n");
+    try {
+      const out = join(await mkdtemp(join(tmpdir(), "stage-")), ".deploy");
+      await stage({ out });
+      assert.equal(
+        await readFile(join(out, ".env.stage-test"), "utf8"),
+        "MAIL_PROVIDER=log\n",
+      );
+      assert.equal(await exists(join(out, ".env.demo-cafemenu")), false);
+      assert.equal(await exists(join(out, ".env.example")), false);
+    } finally {
+      await rm(mine, { force: true });
+    }
   });
 });

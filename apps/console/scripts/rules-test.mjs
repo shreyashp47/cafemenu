@@ -806,6 +806,10 @@ await t(
   denied(() => edit(alice, "cafe-a", { ownerEmail: "someone@else.test" })),
 );
 await t(
+  "owner A cannot switch the release emails off or on (the backend's unsubscribe link does)",
+  denied(() => edit(alice, "cafe-a", { emails: { releaseNotices: false } })),
+);
+await t(
   "owner A cannot rewrite createdAt",
   denied(() => edit(alice, "cafe-a", { createdAt: serverTimestamp() })),
 );
