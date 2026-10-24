@@ -98,8 +98,9 @@ does and where it can be removed.
   answer has the shape of `deployer check`'s: connected, no access, or each
   missing permission with what it is for. Demo mode and the emulators
   simulate it (a project ID ending in `-noaccess` or `-missing` shows those
-  answers); against the real platform it waits for the backend to run
-  `deployer check` (#28).
+  answers); against the real platform it waits for the backend's
+  `checkConnection` function, which runs `deployer check` (#28, see the
+  backend switch above).
 - The deploy account's address comes from `NEXT_PUBLIC_DEPLOY_SERVICE_ACCOUNT`
   (a `demo-` stand-in in demo mode and the emulators). The exact role to pick
   and the screenshots of Google's consoles are marked `[[SPIKE #3: …]]` in
@@ -181,6 +182,15 @@ fail on permissions. It sends no verification email: `demoVerifyEmail()` in
 
 The emulators' ports (Auth 9199, Firestore 8180, UI 4010) differ from the cafe
 app's, so both can run at once.
+
+**The platform's backend** (`apps/platform-functions`, #28) is a switch on top
+of the last two modes: with `NEXT_PUBLIC_BACKEND_FUNCTIONS=1`, Check
+connection, Upgrade, Roll back and Save branding call its Cloud Functions
+([`src/lib/data/callables.ts`](./src/lib/data/callables.ts)) instead of
+answering from a stand-in or saying the backend is not there yet. Against the
+emulators, start that app's `npm run emulators` in place of this one's: it
+serves the same Auth and Firestore ports, plus Functions on 5101. Without the
+switch (and always in demo mode) nothing changes.
 
 ## The platform database
 

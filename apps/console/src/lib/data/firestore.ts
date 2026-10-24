@@ -56,13 +56,16 @@ import {
   releaseChoiceProblems,
   startingMenuProblems,
 } from "../platform/validate";
+import { useBackendFunctions } from "../config";
 import {
   pendingConnectionChecker,
   simulatedConnectionChecker,
 } from "../setup/connection";
+import { callableConnectionChecker, callableDeployRequests } from "./callables";
 import { pendingSiteChecker, simulatedSiteChecker } from "./checks";
 import { pendingDeployRequests } from "./deploys";
 import { getFirebase, type FirebaseHandles } from "./firebase";
+import { firebaseCall } from "./functions";
 import {
   CodedError,
   DEPLOYMENT_HISTORY,
@@ -345,7 +348,13 @@ export function firestoreDeploymentRepo(
 export function createFirebaseBundle(
   connect: Connect,
   backend: Exclude<Backend, "demo">,
+  { functions = useBackendFunctions }: { functions?: boolean } = {},
 ): DataBundle {
+  // With the backend's functions on, the connection check and the deploy
+  // requests are theirs; otherwise the stand-ins below.
+  const call = functions
+    ? firebaseCall(connect, backend === "emulators")
+    : null;
   return {
     auth: firebaseAuthRepo(connect),
     cafes: firestoreCafeRepo(connect),
@@ -354,14 +363,16 @@ export function createFirebaseBundle(
     sites:
       backend === "emulators" ? simulatedSiteChecker() : pendingSiteChecker,
     // The emulators cannot reach Google's IAM either.
-    connection:
-      backend === "emulators"
+    connection: call
+      ? callableConnectionChecker(call)
+      : backend === "emulators"
         ? simulatedConnectionChecker(600)
         : pendingConnectionChecker,
     releases: firestoreReleaseRepo(connect),
     deployments: firestoreDeploymentRepo(connect),
-    // Neither the emulators nor the real platform can run the deployer yet.
-    deploys: pendingDeployRequests,
+    // Without the backend's functions, neither the emulators nor the real
+    // platform can run the deployer.
+    deploys: call ? callableDeployRequests(call) : pendingDeployRequests,
     backend,
   };
 }

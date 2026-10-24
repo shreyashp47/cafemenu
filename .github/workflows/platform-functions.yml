@@ -1,0 +1,132 @@
+name: Platform functions
+
+# apps/platform-functions, and what it is built from: the deployer it runs,
+# the shared settings package, the release scripts the deployer imports, the
+# platform's Firestore rules (the emulators load a copy) and the lockfile.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/platform-functions/**"
+      - "apps/console/firestore.rules"
+      - "apps/console/firestore.indexes.json"
+      - "packages/deployer/**"
+      - "packages/shared/**"
+      - "scripts/release/**"
+      - "package-lock.json"
+      - ".github/workflows/platform-functions.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "apps/platform-functions/**"
+      - "apps/console/firestore.rules"
+      - "apps/console/firestore.indexes.json"
+      - "packages/deployer/**"
+      - "packages/shared/**"
+      - "scripts/release/**"
+      - "package-lock.json"
+      - ".github/workflows/platform-functions.yml"
+
+# Only one run per branch; a new push cancels the run it supersedes.
+concurrency:
+  group: platform-functions-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # The unit tests run against the deployer's fake Google and need nothing
+  # from Firebase, so they run on the repository's own Node (20), like
+  # `npm run verify` at the root.
+  test:
+    name: unit tests · formatting
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      # Installed once at the root, because this is an npm workspace.
+      - name: Install
+        run: npm ci
+
+      - name: Test and check formatting
+        run: npm run verify -w @cafemenu/platform-functions
+
+  # The real functions on the Auth, Firestore and Functions emulators, with
+  # the deployer's fake Google behind them. firebase-admin needs Node 22, and
+  # @cafemenu/shared's TypeScript needs 22.18 or later to be imported as it is.
+  emulator:
+    name: provisioning on the emulators
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      # The Firestore emulator is a Java program, and current firebase-tools
+      # refuses to run it on anything below 21.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install
+        run: npm ci
+
+      - name: Provision a cafe on the emulators
+        run: npm run test:emulator -w @cafemenu/platform-functions
+
+  # What `firebase deploy` uploads is not the workspace: it is the staged copy
+  # that Cloud Build installs on its own. Make it, install it as Cloud Build
+  # will, and load the functions from it.
+  staged:
+    name: the staged package installs and loads
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Stage
+        run: npm run stage -w @cafemenu/platform-functions
+
+      # With the lockfile staging cuts from the repository's (npm 10 crashes
+      # resolving this tree from nothing, and Cloud Build would too).
+      - name: Install the staged package on its own
+        working-directory: apps/platform-functions/.deploy
+        run: |
+          npm ci --omit=dev --no-audit --no-fund
+          npm ls --omit=dev
+
+      - name: Load the functions from it
+        working-directory: apps/platform-functions/.deploy
+        run: |
+          node --input-type=module -e '
+            const functions = await import("./src/index.mjs");
+            const names = Object.keys(functions).sort();
+            console.log(names.join(", "));
+            if (names.length !== 6) throw new Error("expected 6 functions");
+            const { loadShared } = await import("@cafemenu/deployer");
+            const shared = await loadShared();
+            if (typeof shared.validateCafeSettings !== "function") throw new Error("shared did not load");
+          '

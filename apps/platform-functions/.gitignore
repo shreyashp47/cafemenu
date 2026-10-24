@@ -1,0 +1,4 @@
+.deploy/
+.emulator/
+node_modules/
+*.log

@@ -330,6 +330,14 @@ const deployment = (owner, cafeId, o = {}) => ({
 });
 await seed("deployments/dep-a", deployment(ALICE, "cafe-a"));
 await seed("deployments/dep-b", deployment(BOB, "cafe-b"));
+// What apps/platform-functions keeps about a cafe's releases (hosting versions,
+// rules): the backend's, with no rule that lets anyone else near it.
+await seed("cafes/cafe-a/private/deployRecord", {
+  site: "cafe-a",
+  current: null,
+  previous: null,
+  schemaFloor: 1,
+});
 
 // -- helpers ------------------------------------------------------------------
 
@@ -1217,6 +1225,23 @@ await t(
 await t(
   "owner B cannot read owner A's deployment",
   denied(() => getDoc(deploy(bob, "dep-a"))),
+);
+
+// -- the backend's deploy record ---------------------------------------------------
+
+console.log("\n the deploy record (backend only)");
+const record = (c) => doc(c.db, "cafes", "cafe-a", "private", "deployRecord");
+await t(
+  "owner A cannot read their cafe's deploy record",
+  denied(() => getDoc(record(alice))),
+);
+await t(
+  "owner A cannot write it",
+  denied(() => setDoc(record(alice), { site: "cafe-a", schemaFloor: 1 })),
+);
+await t(
+  "the admin cannot read it from a browser",
+  denied(() => getDoc(record(erin))),
 );
 
 // -- the admin --------------------------------------------------------------------
