@@ -28,6 +28,19 @@ follow [Semantic Versioning](https://semver.org/).
   its smoke test and automatic rollback. It pauses when the canary fails or
   more than 1 in 5 of a batch does, and `--resume` carries on. `--dry-run`
   prints the plan only.
+- **Owner emails** (#34), in `apps/platform-functions`: a new version for the
+  cafes that stay on one, an upgrade required by a date, and a deploy that
+  failed or was rolled back. A `MailSender` that logs by default and sends
+  through Resend when configured (no secrets in the repository); plain-text and
+  HTML templates; each email sent once per cafe per thing; the optional ones
+  carry an unsubscribe link (`emails.releaseNotices` on the cafe), the
+  essential ones (failures, required upgrades) always go.
+- **The support window** (#35): only the latest two minor lines are supported.
+  A cafe that stays on an older line sees a notice with the date to upgrade by
+  in the owner area and gets an email, and `deployer rollout` moves it, and its
+  pin, to the new line once that date has passed, recording why. One function
+  in `@cafemenu/shared/support-window` does the maths for all three; the policy
+  is in `docs/releases.md` and the terms.
 - **The platform's backend** (#28), `apps/platform-functions`: Cloud Functions
   that set a brand-new cafe up (`check`, `provision`, the first `deploy`, the
   starting menu, the owner's account and set-password email) while writing each
