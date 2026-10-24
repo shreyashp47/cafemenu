@@ -97,3 +97,13 @@ export const deployAccount: string | null =
 
 /** The public repository, for "read the code" and "run it yourself" links. */
 export const REPO_URL = "https://github.com/shreyashp47/cafemenu";
+
+/**
+ * Demo mode's platform admin, so /admin has someone to sign in as. The real
+ * admin is an account the backend marks with the `admin: true` claim; the
+ * demo's only exists in this browser and sees sample cafes.
+ */
+export const DEMO_ADMIN = {
+  email: "admin@cafemenu.demo",
+  password: "demo-admin",
+} as const;
