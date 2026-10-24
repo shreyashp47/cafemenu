@@ -47,6 +47,32 @@ describe("the staged copy that firebase deploy uploads", () => {
     ]) {
       assert.ok(await exists(join(out, path)), `${path} is staged`);
     }
+    // A lockfile cut from the repository's, so Cloud Build runs `npm ci`, and
+    // manifests for the linked packages without the development dependencies
+    // that crash npm's resolver.
+    const lock = JSON.parse(
+      await readFile(join(out, "package-lock.json"), "utf8"),
+    );
+    assert.equal(lock.lockfileVersion, 3);
+    assert.deepEqual(lock.packages[""].dependencies, pkg.dependencies);
+    assert.equal(
+      lock.packages["node_modules/firebase-functions"].version.split(".")[0],
+      "7",
+    );
+    assert.deepEqual(lock.packages["node_modules/@cafemenu/shared"], {
+      resolved: "vendor/packages/shared",
+      link: true,
+    });
+    for (const name of ["deployer", "shared"]) {
+      const vendored = JSON.parse(
+        await readFile(
+          join(out, `vendor/packages/${name}/package.json`),
+          "utf8",
+        ),
+      );
+      assert.equal(vendored.devDependencies, undefined);
+      assert.equal(vendored.scripts, undefined);
+    }
     // Tests and the other apps stay behind.
     assert.equal(
       await exists(join(out, "vendor/packages/deployer/tests")),

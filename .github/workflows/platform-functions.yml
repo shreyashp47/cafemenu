@@ -110,9 +110,13 @@ jobs:
       - name: Stage
         run: npm run stage -w @cafemenu/platform-functions
 
+      # With the lockfile staging cuts from the repository's (npm 10 crashes
+      # resolving this tree from nothing, and Cloud Build would too).
       - name: Install the staged package on its own
         working-directory: apps/platform-functions/.deploy
-        run: npm install --omit=dev --no-audit --no-fund
+        run: |
+          npm ci --omit=dev --no-audit --no-fund
+          npm ls --omit=dev
 
       - name: Load the functions from it
         working-directory: apps/platform-functions/.deploy
