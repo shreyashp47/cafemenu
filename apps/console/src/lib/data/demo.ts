@@ -6,7 +6,8 @@
  * cafes, only a verified account writes, `release.current`, `previous`, the
  * status and the plan are never the owner's to set, and the project is fixed
  * once setup has started; the logo and starting menu are the owner's to
- * write only while the cafe is a draft. No email is sent; demoVerifyEmail()
+ * write only while the cafe is a draft (the logo also while it is live). No
+ * email is sent; demoVerifyEmail()
  * stands in for the link.
  */
 
@@ -30,6 +31,11 @@ import {
 import { fromBase64, toBase64 } from "../bytes";
 import { simulatedConnectionChecker } from "../setup/connection";
 import { simulatedSiteChecker } from "./checks";
+import {
+  demoDeployRequests,
+  demoGoLive as goLive,
+  resumeDemoRuns,
+} from "./demo-deploys";
 import {
   currentUser,
   load,
@@ -81,6 +87,16 @@ function ownCafe(state: DemoState, cafeId: string): Cafe {
 function ownDraft(state: DemoState, cafeId: string): Cafe {
   const cafe = ownCafe(state, cafeId);
   if (cafe.status !== "draft") throw denied();
+  return cafe;
+}
+
+/**
+ * The caller's own cafe while it is a draft or live: the logo's rules. A live
+ * cafe may replace its logo, which the backend then puts on its site.
+ */
+function ownLogoCafe(state: DemoState, cafeId: string): Cafe {
+  const cafe = ownCafe(state, cafeId);
+  if (cafe.status !== "draft" && cafe.status !== "live") throw denied();
   return cafe;
 }
 
@@ -265,11 +281,11 @@ export const demoSetupRepo: SetupRepository = {
   async saveLogo(cafeId, png) {
     const problems = logoProblems(png);
     if (problems.length) throw new SetupInputError(problems);
-    ownDraft(load(), cafeId);
+    ownLogoCafe(load(), cafeId);
     saveSetup(cafeId, "logo", logoRecord(toBase64(png), Date.now()));
   },
   async removeLogo(cafeId) {
-    ownDraft(load(), cafeId);
+    ownLogoCafe(load(), cafeId);
     saveSetup(cafeId, "logo", null);
   },
   async getLogo(cafeId) {
@@ -304,6 +320,8 @@ export const demoReleaseRepo: ReleaseRepository = {
 export const demoDeploymentRepo: DeploymentRepository = {
   subscribeForCafe(cafe, listener, onError) {
     let failed = false;
+    // A run left going by an earlier visit carries on.
+    resumeDemoRuns();
     return live(
       (state) => {
         if (currentUser(state)?.uid !== cafe.ownerUid) return null;
@@ -323,6 +341,15 @@ export const demoDeploymentRepo: DeploymentRepository = {
   },
 };
 
+/** Upgrade, Roll back and Save branding, simulated (demo-deploys.ts). */
+export const demoDeploys = demoDeployRequests(ownCafe);
+
+/**
+ * Demo mode's stand-in for the backend finishing a cafe's setup (#28), so
+ * the owner area has a live cafe to show. Not part of any repository.
+ */
+export const demoGoLive = (cafeId: string) => goLive(ownCafe, cafeId);
+
 export const demoBundle: DataBundle = {
   auth: demoAuthRepo,
   cafes: demoCafeRepo,
@@ -333,5 +360,6 @@ export const demoBundle: DataBundle = {
   connection: simulatedConnectionChecker(600),
   releases: demoReleaseRepo,
   deployments: demoDeploymentRepo,
+  deploys: demoDeploys,
   backend: "demo",
 };

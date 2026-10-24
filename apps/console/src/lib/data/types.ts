@@ -132,6 +132,51 @@ export interface DeploymentRepository {
 /** How many deployments a cafe's history shows. */
 export const DEPLOYMENT_HISTORY = 20;
 
+/** The record a request creates: where its progress shows up. */
+export interface DeployReceipt {
+  deploymentId: string;
+}
+
+/**
+ * What an owner asks the backend to do to their cafe (#29). The console never
+ * deploys anything itself: a request becomes a `queued` record in
+ * `deployments/{id}` (kind, version, trigger "owner"), and the backend picks
+ * it up, runs the deployer, and writes the steps and the result back, along
+ * with `release.current` and `previous`. The page watches that record through
+ * DeploymentRepository.
+ *
+ * Each call fails with a Firebase-style code before queueing anything:
+ *   permission-denied    not the owner's cafe, or an unverified account
+ *   failed-precondition  the cafe is not live, another deployment is queued
+ *                        or running, or there is nothing to roll back to
+ *   invalid-argument     not a release the cafe may be moved to
+ *   backend-pending      the backend does not take requests yet (see below)
+ */
+export interface DeployRequests {
+  /**
+   * Deploy `version` now: the Upgrade button.
+   * TODO(#28): the backend runs `deployer deploy --version <version>
+   * --project <projectId> --site <site> --settings <the cafe's settings>`.
+   * A cafe that stays on a minor line is moved to the new version's line, so
+   * the next patch of the old one does not undo it.
+   */
+  upgrade(cafe: Pick<Cafe, "id">, version: string): Promise<DeployReceipt>;
+  /**
+   * Go back to the version before the current one: the Roll back button.
+   * TODO(#28): the backend runs `deployer rollback --project <projectId>
+   * --site <site>`.
+   */
+  rollback(cafe: Pick<Cafe, "id">): Promise<DeployReceipt>;
+  /**
+   * Put the cafe's saved settings (and logo) on its site. The owner has
+   * already saved them on the cafe's record; this asks for them to go live.
+   * TODO(#28): the backend runs `deployer sync-branding --project
+   * <projectId> --site <site> --settings <the cafe's settings> --logo <the
+   * cafe's setup/logo, when there is one>`.
+   */
+  syncBranding(cafe: Pick<Cafe, "id">): Promise<DeployReceipt>;
+}
+
 /** Where the data comes from. */
 export type Backend = "demo" | "emulators" | "firebase";
 
@@ -144,6 +189,8 @@ export interface DataBundle {
   connection: ConnectionChecker;
   releases: ReleaseRepository;
   deployments: DeploymentRepository;
+  /** Upgrade, Roll back and Save branding in the owner area. */
+  deploys: DeployRequests;
   backend: Backend;
 }
 

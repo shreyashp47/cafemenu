@@ -61,6 +61,7 @@ import {
   simulatedConnectionChecker,
 } from "../setup/connection";
 import { pendingSiteChecker, simulatedSiteChecker } from "./checks";
+import { pendingDeployRequests } from "./deploys";
 import { getFirebase, type FirebaseHandles } from "./firebase";
 import {
   CodedError,
@@ -359,6 +360,8 @@ export function createFirebaseBundle(
         : pendingConnectionChecker,
     releases: firestoreReleaseRepo(connect),
     deployments: firestoreDeploymentRepo(connect),
+    // Neither the emulators nor the real platform can run the deployer yet.
+    deploys: pendingDeployRequests,
     backend,
   };
 }
