@@ -8,7 +8,11 @@
   "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
-    "./icons": "./src/icons/index.ts"
+    "./icons": "./src/icons/index.ts",
+    "./support-window": {
+      "types": "./src/support-window.d.mts",
+      "default": "./src/support-window.mjs"
+    }
   },
   "engines": {
     "node": ">=20.9.0"
