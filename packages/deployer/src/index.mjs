@@ -3,6 +3,7 @@
  * and anything else that shouldn't shell out to the CLI.
  */
 export { createTokenProvider, loadServiceAccountKey } from "./auth.mjs";
+export { createJsonCafeDirectory, parseCafeList } from "./cafe-directory.mjs";
 export { main } from "./cli.mjs";
 export { check } from "./commands/check.mjs";
 export { deploy } from "./commands/deploy.mjs";
@@ -11,6 +12,7 @@ export { owner } from "./commands/owner.mjs";
 export { deployRelease, syncBranding } from "./commands/release.mjs";
 export { REQUIRED_APIS, provision } from "./commands/provision.mjs";
 export { rollback } from "./commands/rollback.mjs";
+export { rollout } from "./commands/rollout.mjs";
 export { createJsonDeployLog } from "./deploy-log.mjs";
 export * from "./errors.mjs";
 export { createGoogleClient } from "./http.mjs";
@@ -22,3 +24,5 @@ export {
   readDataSchema,
 } from "./migrations.mjs";
 export { PERMISSIONS, permissionsFor } from "./permissions.mjs";
+export { crossesThreshold, planRollout, skipReason } from "./rollout-plan.mjs";
+export { createJsonRolloutStore } from "./rollout-store.mjs";
