@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { errorText, messages } from "../../messages";
 import type { Release } from "../../platform/model";
 import {
   MAX_NOTES_LENGTH,
@@ -10,6 +11,7 @@ import {
   releaseInputProblems,
   schemaOf,
   type ReleaseForm,
+  type ReleaseProblem,
 } from "../release-form";
 
 const published = (version: string, schemaVersion: number): Release => ({
@@ -142,5 +144,29 @@ describe("the request", () => {
         schemaVersion: 1,
       }),
     ).toEqual(["version-format", "channel-unknown"]);
+  });
+});
+
+describe("the words", () => {
+  it("has some for every problem, and for what the backend answers", () => {
+    const codes: ReleaseProblem[] = [
+      "version-format",
+      "version-taken",
+      "prerelease-stable",
+      "channel-unknown",
+      "notes-empty",
+      "notes-long",
+      "schema-invalid",
+    ];
+    for (const code of codes) {
+      expect(messages.admin.releases.problems[code]).toMatch(/\w/);
+    }
+    for (const code of [
+      "already-exists",
+      "admin-pending",
+      "permission-denied",
+    ]) {
+      expect(errorText({ code })).not.toBe(messages.errors.unknown);
+    }
   });
 });
