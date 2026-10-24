@@ -1029,12 +1029,51 @@ await t(
   ),
 );
 await t(
-  "once setup has started they are fixed (live cafe: logo)",
-  denied(() => putLogo(alice, "cafe-a")),
+  "once setup has started the menu is fixed (live cafe: menu)",
+  denied(() => putMenu(alice, "cafe-a")),
+);
+// The owner area replaces a live cafe's logo, for the backend to deploy.
+await t(
+  "…but a live cafe's logo can be replaced",
+  allowed(() => putLogo(alice, "cafe-a")),
 );
 await t(
-  "…(live cafe: menu)",
-  denied(() => putMenu(alice, "cafe-a")),
+  "…and dropped",
+  allowed(() => deleteDoc(setupDoc(alice, "cafe-a", "logo"))),
+);
+await t(
+  "…and the logo is still checked (not text)",
+  denied(() => putLogo(alice, "cafe-a", { png: "not bytes" })),
+);
+await t(
+  "…and still has to be stamped with the server time",
+  denied(() => putLogo(alice, "cafe-a", { updatedAt: Timestamp.now() })),
+);
+await t(
+  "owner B cannot replace owner A's live cafe's logo",
+  denied(() => putLogo(bob, "cafe-a")),
+);
+await t(
+  "…nor drop it",
+  denied(() => deleteDoc(setupDoc(bob, "cafe-a", "logo"))),
+);
+for (const status of ["provisioning", "failed", "disconnected", "suspended"]) {
+  await seed(
+    `cafes/cafe-a-${status}`,
+    cafeRecord(ALICE, { site: `alice-${status}`, status }),
+  );
+  await t(
+    `a ${status} cafe's logo is fixed`,
+    denied(() => putLogo(alice, `cafe-a-${status}`)),
+  );
+}
+await t(
+  "…and so is dropping it",
+  denied(() => deleteDoc(setupDoc(alice, "cafe-a-suspended", "logo"))),
+);
+await t(
+  "an unverified owner cannot replace a live cafe's logo",
+  denied(() => putLogo(lapsed, "cafe-l")),
 );
 await t(
   "not for a cafe that does not exist",
