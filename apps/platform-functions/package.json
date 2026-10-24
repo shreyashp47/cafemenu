@@ -11,8 +11,8 @@
   },
   "scripts": {
     "test": "node --test",
-    "test:emulator": "npx --yes firebase-tools emulators:exec --config firebase.emulators.json --only auth,firestore,functions --project demo-cafemenu \"node --test tests/emulator/*.emulator.mjs\"",
-    "emulators": "npx --yes firebase-tools emulators:start --config firebase.emulators.json --only auth,firestore,functions --project demo-cafemenu",
+    "test:emulator": "node scripts/copy-rules.mjs && npx --yes firebase-tools emulators:exec --config firebase.emulators.json --only auth,firestore,functions --project demo-cafemenu \"node --test tests/emulator/*.emulator.mjs\"",
+    "emulators": "node scripts/copy-rules.mjs && npx --yes firebase-tools emulators:start --config firebase.emulators.json --only auth,firestore,functions --project demo-cafemenu",
     "stage": "node scripts/stage.mjs",
     "deploy": "node scripts/stage.mjs && npx --yes firebase-tools deploy --only functions",
     "format": "prettier --write .",

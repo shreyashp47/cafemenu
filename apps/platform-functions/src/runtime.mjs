@@ -117,7 +117,7 @@ async function build() {
     ...(fake
       ? {
           fetchImpl: proxyFetch(fake),
-          getToken: async () => "fake-token",
+          getToken: async () => "fake-token-1",
           clientEmail: "deploy@demo-cafemenu.iam.gserviceaccount.com",
         }
       : {
