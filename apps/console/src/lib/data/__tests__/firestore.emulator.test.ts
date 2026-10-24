@@ -406,6 +406,36 @@ describe.runIf(PROJECT.startsWith("demo-"))("Firebase adapters", () => {
     });
   });
 
+  it("lets an owner replace a live cafe's logo, for the backend to deploy", async () => {
+    // As the deployer would: only the status changes.
+    const setStatus = (status: string) =>
+      fetch(
+        `${FS}/v1/projects/${PROJECT}/databases/(default)/documents/cafes/${cafe.id}?updateMask.fieldPaths=status`,
+        {
+          method: "PATCH",
+          headers: ADMIN,
+          body: JSON.stringify({ fields: { status: str(status) } }),
+        },
+      );
+    expect((await setStatus("live")).ok).toBe(true);
+    const png = new Uint8Array(64);
+    png.set([137, 80, 78, 71, 13, 10, 26, 10]);
+    await alice.setup.saveLogo(cafe.id, png);
+    expect(await alice.setup.getLogo(cafe.id)).toEqual(png);
+    await alice.setup.removeLogo(cafe.id);
+    expect(await alice.setup.getLogo(cafe.id)).toBeNull();
+    // The menu is still only for a draft.
+    await expect(
+      alice.setup.saveMenu(cafe, {
+        source: "blank",
+        template: null,
+        currency: cafe.settings.currency,
+        items: [],
+      }),
+    ).rejects.toMatchObject({ code: "permission-denied" });
+    expect((await setStatus("provisioning")).ok).toBe(true);
+  });
+
   it("gives the admin claim to the account the backend marked", async () => {
     const admin = await owner("erin", "erin@platform.test");
     apps.push(admin.handles);
