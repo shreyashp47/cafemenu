@@ -102,15 +102,14 @@ export function simulatedConnectionChecker(delayMs = 0): ConnectionChecker {
 }
 
 /**
- * Against the real platform.
- *
- * TODO(#28): ask the backend to run `deployer check --project <projectId>`
- * with the platform's service account, for this cafe's owner only (a
- * callable Cloud Function, or a request document it answers), and turn its
- * JSON into a result with fromDeployerCheck; its ActionNeededError for a
- * project the account cannot see is "no-access". The provisioning job runs
- * the same check before it starts, so a cafe is never set up half-allowed.
- * Until then this refuses with "unimplemented", and the page says the
+ * Against the real platform when the backend's functions are not switched on
+ * (NEXT_PUBLIC_BACKEND_FUNCTIONS, config.ts). With the switch on, the
+ * `checkConnection` function (apps/platform-functions) runs `deployer check
+ * --project <projectId>` with the platform's service account, for this
+ * cafe's owner only, and answers in this shape (its "no access" is the
+ * deployer's ActionNeededError). The provisioning job runs the same check
+ * before it starts, so a cafe is never set up half-allowed.
+ * Without the switch this refuses with "unimplemented", and the page says the
  * maintainer will check by hand; the project ID is saved on the cafe
  * either way.
  */

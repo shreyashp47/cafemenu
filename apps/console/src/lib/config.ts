@@ -26,6 +26,8 @@ export const EMULATOR_HOSTS = {
   host: "127.0.0.1",
   authPort: 9199,
   firestorePort: 8180,
+  /** apps/platform-functions' emulator, when the functions switch is on. */
+  functionsPort: 5101,
 } as const;
 
 const useEmulators = ["1", "true"].includes(
@@ -54,6 +56,21 @@ export const firebaseConfig: Record<string, string> | null = firebaseKeysFilled
       appId: read(process.env.NEXT_PUBLIC_FIREBASE_APP_ID),
     }
   : null;
+
+/**
+ * Whether Check connection, Upgrade, Roll back and Save branding call the
+ * platform's Cloud Functions (apps/platform-functions) instead of answering
+ * from a stand-in (the emulators) or saying the backend is not there yet
+ * (the real platform). Off unless set, and it changes nothing in demo mode,
+ * which always simulates its backend.
+ */
+export const useBackendFunctions = ["1", "true"].includes(
+  read(process.env.NEXT_PUBLIC_BACKEND_FUNCTIONS).toLowerCase(),
+);
+
+/** The region the platform's functions are deployed to (CAFEMENU_REGION there). */
+export const functionsRegion =
+  read(process.env.NEXT_PUBLIC_FUNCTIONS_REGION) || "us-central1";
 
 /** Emulators win over a real config, so a stray .env.local cannot leak in. */
 export const backend: Backend = useEmulators
