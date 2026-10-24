@@ -13,6 +13,7 @@ import type {
   Deployment,
   PlatformUser,
   Release,
+  ReleaseChannel,
   StartingMenu,
 } from "../platform/model";
 import type { NewCafeInput, ReleaseChoice } from "../platform/validate";
@@ -127,6 +128,16 @@ export interface DeploymentRepository {
     listener: Listener<Deployment[]>,
     onError?: ErrorListener,
   ): Unsubscribe;
+  /**
+   * The latest deployments of every cafe, live, newest first, at most
+   * `limit`. Admin only: the rules refuse an owner's query that does not
+   * name their own cafe.
+   */
+  subscribeRecent(
+    limit: number,
+    listener: Listener<Deployment[]>,
+    onError?: ErrorListener,
+  ): Unsubscribe;
 }
 
 /** How many deployments a cafe's history shows. */
@@ -177,11 +188,72 @@ export interface DeployRequests {
   syncBranding(cafe: Pick<Cafe, "id">): Promise<DeployReceipt>;
 }
 
+/** What the admin sends to publish a release record (#30). */
+export interface PublishReleaseInput {
+  /** "1.4.2", or a pre-release such as "1.5.0-beta.1". */
+  version: string;
+  /** The channel it is published to: beta first, then stable. */
+  channel: ReleaseChannel;
+  /** Release notes, as Markdown. */
+  notes: string;
+  /** The cafe database schema the release expects. */
+  schemaVersion: number;
+}
+
+/**
+ * Where a release is on its way to every cafe that should have it. The
+ * deployer's own rollout states (packages/deployer, `rollout`): it
+ * pauses by itself when a canary or too much of a batch fails.
+ */
+export type RolloutStatus = "running" | "paused" | "completed";
+
+export type RolloutAction = "start" | "pause";
+
+/**
+ * What only the platform admin asks of the backend (#30). Like
+ * DeployRequests, these are requests: the backend writes `releases/` and
+ * the rollouts, and the page watches the result. Each call fails before
+ * changing anything with:
+ *   permission-denied  not the admin
+ *   already-exists     that version is already published
+ *   backend-pending    the backend does not take requests yet
+ */
+export interface AdminRequests {
+  /**
+   * Publish the release record `releases/{version}` for a release package
+   * that is already on GitHub, so owners can read its notes and the rollout
+   * can pick it up.
+   * TODO(#28): the backend fetches `v<version>` from GitHub, checks it with
+   * verifyPackage (scripts/release/verify.mjs) against `version`, `channel`
+   * and `schemaVersion`, and only then writes the record.
+   */
+  publishRelease(input: PublishReleaseInput): Promise<void>;
+  /**
+   * The rollout of each version that has one, live. A stub for v1.1's
+   * rollout waves (#32): until the backend keeps them, none.
+   */
+  subscribeRollouts(
+    listener: Listener<Record<string, RolloutStatus>>,
+    onError?: ErrorListener,
+  ): Unsubscribe;
+  /**
+   * Start a version's rollout, or pause it. Starting one that is paused
+   * resumes it.
+   * TODO(#32): the backend runs `deployer rollout --version <version>
+   * --cafes <the cafes collection>` to start, and `deployer rollout --resume
+   * <rollout-id>` to resume; a pause holds the next cafe back. Each rollout
+   * becomes a `rollouts/{id}` document the admin reads (add its rules then).
+   */
+  rollout(version: string, action: RolloutAction): Promise<void>;
+}
+
 /** Where the data comes from. */
 export type Backend = "demo" | "emulators" | "firebase";
 
 export interface DataBundle {
   auth: AuthRepository;
+  /** Publishing a release and its rollout: the platform admin's. */
+  admin: AdminRequests;
   cafes: CafeRepository;
   setup: SetupRepository;
   sites: SiteNameChecker;

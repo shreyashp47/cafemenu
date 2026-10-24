@@ -60,6 +60,7 @@ import {
   pendingConnectionChecker,
   simulatedConnectionChecker,
 } from "../setup/connection";
+import { pendingAdminRequests } from "./admin";
 import { pendingSiteChecker, simulatedSiteChecker } from "./checks";
 import { pendingDeployRequests } from "./deploys";
 import { getFirebase, type FirebaseHandles } from "./firebase";
@@ -339,6 +340,28 @@ export function firestoreDeploymentRepo(
         onError,
       );
     },
+    subscribeRecent(max, listener, onError) {
+      return whenReady(
+        connect,
+        ({ db }) =>
+          onSnapshot(
+            // No owner filter: only the admin's claim lets this through.
+            query(
+              collection(db, "deployments"),
+              orderBy("createdAt", "desc"),
+              limit(max),
+            ),
+            (snap) =>
+              listener(
+                snap.docs
+                  .map((d) => parseDeployment(d.id, d.data()))
+                  .filter((d) => d !== null),
+              ),
+            (error) => onError?.(error),
+          ),
+        onError,
+      );
+    },
   };
 }
 
@@ -348,6 +371,8 @@ export function createFirebaseBundle(
 ): DataBundle {
   return {
     auth: firebaseAuthRepo(connect),
+    // Neither the emulators nor the real platform has a backend to ask yet.
+    admin: pendingAdminRequests,
     cafes: firestoreCafeRepo(connect),
     setup: firestoreSetupRepo(connect),
     // The emulators know nothing of real Firebase's names either.

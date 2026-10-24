@@ -30,7 +30,10 @@ import {
 } from "../platform/validate";
 import { fromBase64, toBase64 } from "../bytes";
 import { simulatedConnectionChecker } from "../setup/connection";
+import { DEMO_ADMIN } from "../config";
 import { simulatedSiteChecker } from "./checks";
+import { seedSample } from "./demo-sample";
+import { releaseInputProblems } from "../admin/release-form";
 import {
   demoDeployRequests,
   demoGoLive as goLive,
@@ -50,6 +53,7 @@ import {
 import {
   CodedError,
   DEPLOYMENT_HISTORY,
+  type AdminRequests,
   type AuthRepository,
   type CafeRepository,
   type DataBundle,
@@ -57,7 +61,6 @@ import {
   type Listener,
   type ReleaseRepository,
   type SetupRepository,
-  type Unsubscribe,
 } from "./types";
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -72,6 +75,12 @@ function writer(state: DemoState): PlatformUser {
   const user = currentUser(state);
   if (!user || !user.emailVerified) throw denied();
   return user;
+}
+
+/** The platform admin, as the rules' isAdmin(): verified, with the claim. */
+function isAdminUser(state: DemoState): boolean {
+  const user = currentUser(state);
+  return user !== null && user.emailVerified && user.isAdmin;
 }
 
 /** The caller's own cafe, or a refusal, exactly like the update rule. */
@@ -127,9 +136,11 @@ export const demoAuthRepo: AuthRepository = {
       throw new CodedError("auth/weak-password");
     }
     mutate((state) => {
-      const taken = state.accounts.some(
-        (a) => a.email.toLowerCase() === address.toLowerCase(),
-      );
+      const taken =
+        address.toLowerCase() === DEMO_ADMIN.email ||
+        state.accounts.some(
+          (a) => a.email.toLowerCase() === address.toLowerCase(),
+        );
       if (taken) throw new CodedError("auth/email-already-in-use");
       const uid = makeId("owner");
       state.accounts.push({
@@ -144,6 +155,27 @@ export const demoAuthRepo: AuthRepository = {
   async signIn(email, password) {
     const address = email.trim();
     mutate((state) => {
+      // The demo's own admin: made on its first sign-in, with the sample
+      // cafes it has to look at. Nobody can sign up as it.
+      if (
+        address.toLowerCase() === DEMO_ADMIN.email &&
+        password === DEMO_ADMIN.password
+      ) {
+        let admin = state.accounts.find((a) => a.isAdmin);
+        if (!admin) {
+          admin = {
+            uid: makeId("admin"),
+            email: DEMO_ADMIN.email,
+            passwordHash: passwordHash(DEMO_ADMIN.email, DEMO_ADMIN.password),
+            emailVerified: true,
+            isAdmin: true,
+          };
+          state.accounts.push(admin);
+        }
+        seedSample(state);
+        state.session = admin.uid;
+        return;
+      }
       const account = state.accounts.find(
         (a) => a.email.toLowerCase() === address.toLowerCase(),
       );
@@ -216,10 +248,20 @@ export const demoCafeRepo: CafeRepository = {
       },
     );
   },
-  subscribeAll(_listener, onError): Unsubscribe {
-    // Only the platform admin may list every cafe, and demo mode has none.
-    onError?.(denied());
-    return () => {};
+  subscribeAll(listener, onError) {
+    let failed = false;
+    return live(
+      (state) =>
+        // Only the platform admin may list every cafe.
+        isAdminUser(state) ? [...state.cafes].sort(byCreated) : null,
+      (cafes) => {
+        if (cafes) listener(cafes);
+        else if (!failed) {
+          failed = true;
+          onError?.(denied());
+        }
+      },
+    );
   },
   async create(input) {
     const check = checkNewCafe(input);
@@ -339,6 +381,79 @@ export const demoDeploymentRepo: DeploymentRepository = {
       },
     );
   },
+  subscribeRecent(limit, listener, onError) {
+    let failed = false;
+    return live(
+      (state) =>
+        isAdminUser(state)
+          ? [...state.deployments]
+              .sort((a, b) => b.createdAt - a.createdAt)
+              .slice(0, limit)
+          : null,
+      (deployments) => {
+        if (deployments) listener(deployments);
+        else if (!failed) {
+          failed = true;
+          onError?.(denied());
+        }
+      },
+    );
+  },
+};
+
+/**
+ * The platform admin's requests, in demo mode: the checks the backend will
+ * make (admin only, a new version), then the change it will write. Rollouts
+ * are a stub for #32: this only remembers which are running or paused.
+ */
+export const demoAdminRepo: AdminRequests = {
+  async publishRelease(input) {
+    const problems = releaseInputProblems(input);
+    if (problems.length) throw new CodedError("invalid-argument", problems[0]);
+    mutate((state) => {
+      if (!isAdminUser(state)) throw denied();
+      if (state.releases.some((r) => r.version === input.version)) {
+        throw new CodedError("already-exists", "Already published.");
+      }
+      state.releases.push({
+        version: input.version,
+        channel: input.channel,
+        notes: input.notes,
+        publishedAt: Date.now(),
+        schemaVersion: input.schemaVersion,
+        withdrawn: false,
+      });
+    });
+  },
+  subscribeRollouts(listener, onError) {
+    let failed = false;
+    return live(
+      (state) => (isAdminUser(state) ? { ...state.rollouts } : null),
+      (rollouts) => {
+        if (rollouts) listener(rollouts);
+        else if (!failed) {
+          failed = true;
+          onError?.(denied());
+        }
+      },
+    );
+  },
+  async rollout(version, action) {
+    mutate((state) => {
+      if (!isAdminUser(state)) throw denied();
+      if (!state.releases.some((r) => r.version === version && !r.withdrawn)) {
+        throw new CodedError("not-found", "No such release.");
+      }
+      const status = state.rollouts[version];
+      if (status === "completed") {
+        throw new CodedError("failed-precondition", "Already completed.");
+      }
+      if (action === "pause" && status !== "running") {
+        throw new CodedError("failed-precondition", "Not running.");
+      }
+      state.rollouts[version] = action === "start" ? "running" : "paused";
+    });
+  },
 };
 
 /** Upgrade, Roll back and Save branding, simulated (demo-deploys.ts). */
@@ -352,6 +467,7 @@ export const demoGoLive = (cafeId: string) => goLive(ownCafe, cafeId);
 
 export const demoBundle: DataBundle = {
   auth: demoAuthRepo,
+  admin: demoAdminRepo,
   cafes: demoCafeRepo,
   setup: demoSetupRepo,
   // Every demo cafe is in this browser, whoever signed it up.
