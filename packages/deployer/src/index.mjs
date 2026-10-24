@@ -3,7 +3,9 @@
  * and anything else that shouldn't shell out to the CLI.
  */
 export { createTokenProvider, loadServiceAccountKey } from "./auth.mjs";
+export * as firestore from "./apis/firestore.mjs";
 export { createJsonCafeDirectory, parseCafeList } from "./cafe-directory.mjs";
+export { loadShared } from "./cafe-files.mjs";
 export { main } from "./cli.mjs";
 export { check } from "./commands/check.mjs";
 export { deploy } from "./commands/deploy.mjs";
@@ -24,5 +26,6 @@ export {
   readDataSchema,
 } from "./migrations.mjs";
 export { PERMISSIONS, permissionsFor } from "./permissions.mjs";
+export { compareVersions, parseVersion } from "./release-package.mjs";
 export { crossesThreshold, planRollout, skipReason } from "./rollout-plan.mjs";
 export { createJsonRolloutStore } from "./rollout-store.mjs";

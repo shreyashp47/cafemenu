@@ -1,0 +1,30 @@
+{
+  "name": "@cafemenu/platform-functions",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The platform project's backend: Cloud Functions that set cafes up and run their deploys, rollbacks and branding syncs with @cafemenu/deployer.",
+  "license": "MIT",
+  "type": "module",
+  "main": "src/index.mjs",
+  "engines": {
+    "node": "22"
+  },
+  "scripts": {
+    "test": "node --test",
+    "test:emulator": "npx --yes firebase-tools emulators:exec --config firebase.emulators.json --only auth,firestore,functions --project demo-cafemenu \"node --test tests/emulator/*.emulator.mjs\"",
+    "emulators": "npx --yes firebase-tools emulators:start --config firebase.emulators.json --only auth,firestore,functions --project demo-cafemenu",
+    "stage": "node scripts/stage.mjs",
+    "deploy": "node scripts/stage.mjs && npx --yes firebase-tools deploy --only functions",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "verify": "npm test && npm run format:check"
+  },
+  "dependencies": {
+    "@cafemenu/deployer": "*",
+    "firebase-admin": "^14.5.0",
+    "firebase-functions": "^7.4.0"
+  },
+  "devDependencies": {
+    "prettier": "^3.6.2"
+  }
+}
