@@ -690,6 +690,21 @@
         "none": "Nothing yet. The first version goes on when setup finishes.",
         "before": "The version before it was **{version}**."
       },
+      "support": {
+        "title": "{line} is no longer supported",
+        "text": "Your cafe stays on **{line}**. CafeMenu supports the latest two versions ({supported}), so {line} no longer gets fixes, security fixes included.",
+        "soon": "Please upgrade by **{date}** ({left}). After that day CafeMenu moves your cafe to the newest version itself. Your menu, orders and staff stay as they are.",
+        "dayLeft": "1 day left",
+        "daysLeft": "{count} days left",
+        "noDate": "CafeMenu will tell you here, and by email, the date to upgrade by.",
+        "due": "The date to upgrade by, **{date}**, has passed. CafeMenu moves your cafe to the newest version in its next update. You can upgrade now instead.",
+        "action": "**Upgrade to {version}** below.",
+        "noAction": "Switch to following the stable updates below, and CafeMenu keeps you up to date from then on."
+      },
+      "policy": {
+        "text": "CafeMenu supports the latest two versions{now}. If your cafe stays on an older one, you get an email and a notice here at least {days} days ahead, with the date to upgrade by. After that date CafeMenu moves your cafe to a supported version. [How it works](https://github.com/shreyashp47/cafemenu/blob/main/docs/releases.md#the-support-window)",
+        "now": ", now {lines}"
+      },
       "choice": {
         "legend": "How your cafe is updated",
         "stable": {

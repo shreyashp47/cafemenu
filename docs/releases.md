@@ -26,6 +26,69 @@ project. The plan behind this is in
   once its release is published, and don't replace its assets: cafes may
   already run it. Fix it in the next patch or the next `beta.N`.
 
+## The support window
+
+Only the **latest two minor lines** are supported: only they get fixes,
+security fixes included. A cafe that stays on an older line ("Stay on 1.3")
+gets a notice and an email with a date to upgrade by, and is moved on the day
+after it.
+
+For example, 1.3.0, 1.4.0 and 1.5.0 are the first stable releases of their
+lines:
+
+- Once 1.5.0 is out, the supported lines are **1.5** and **1.4**.
+- 1.5.0 came out on 10 October, so 1.3 stopped being supported that day. A cafe
+  pinned to 1.3 is emailed and shown the notice, and may upgrade itself until
+  the **end of 9 November**.
+- A `deployer rollout` of a stable release of 1.5 or 1.4 that runs on 10
+  November or later moves the cafes still pinned to 1.3 to it, and they stay on
+  its line from then on.
+
+The rules, which one function applies
+([`packages/shared/src/support-window.mjs`](../packages/shared/src/support-window.mjs)),
+so the console, the emails and the rollout always agree:
+
+- **What counts as a line.** `X.Y` with at least one published, stable,
+  not-withdrawn release. A beta or rc never counts, so a beta of 1.6 does not
+  push 1.4 out. Lines compare as numbers: 1.10 is newer than 1.9, and 2.0 than
+  1.99.
+- **When a line stops being supported.** When the second newer line has had its
+  first stable release. If a beta is promoted to stable later, that is the day
+  it counts.
+- **The date.** 30 days after that, rounded up to a whole day, in UTC
+  (`NOTICE_DAYS` in the same file; the
+  [terms](legal/terms-of-service.md#4-updates-and-the-support-window) leave the
+  number to decide). That day is the **last day to upgrade** and runs to its
+  end, so the notice is never shorter than 30 days. It is the same date in the
+  console and in the email. Where a release carries no `publishedAt` and the
+  date can't be worked out, the line is unsupported but has no date, and
+  nothing is moved.
+- **Who is affected.** Only cafes with a pin. A cafe that follows the stable or
+  beta channel is already on the newest line. Patches of a dropped line are not
+  made, so a pinned cafe has nothing to wait for.
+- **Where the owner is told.**
+  - In the console, in the **Updates** section: which line, the supported
+    ones, the date, the days left, and the Upgrade button below it. Every cafe
+    sees the policy in two sentences.
+  - By email, once per line and date, when the release that dropped the line is
+    written (and again by any later release write, if the first email failed):
+    [owner emails](../apps/platform-functions/README.md#emails). It can't be
+    switched off.
+- **How it is carried out.** `deployer rollout --version <x.y.z>` of a stable
+  release of a **supported** line also moves every live cafe pinned to a line
+  whose last day has passed: it deploys that version, then moves the cafe's
+  pin to the new line (otherwise the next patch of `1.5` would skip it for
+  being a release of another line). The rollout's state, log and summary say
+  why for each such cafe (`forced` in `cafemenu-rollouts.json`), and before the
+  date a dry run says "moves from 2026-11-10". It reads the published releases
+  from GitHub, or `--releases <file>`; if it can't, it warns and moves nobody.
+  The cafes go in the stable wave, in batches, with the smoke test and
+  rollback of every deploy.
+
+Nothing starts a rollout by itself yet: on or after the day, run `deployer
+rollout --version <the newest stable> --cafes <cafes.json>`. Every cafe that
+already runs it is skipped, so only the ones that are due are touched.
+
 ## Rolling a release out
 
 Publishing a release doesn't touch any cafe. `deployer rollout --version
@@ -42,7 +105,9 @@ cafe back if it fails. The rollout **pauses** before the next cafe when the
 canary fails, or when more than 1 in 5 of a batch has failed (both
 configurable), and `--resume <rollout-id>` carries on once someone has looked
 at why. A beta only ever reaches beta cafes; a patch reaches the cafes pinned
-to its line. `--dry-run` prints the plan without deploying anything.
+to its line; and a stable release of a supported line also moves the cafes
+pinned to a line that is [no longer supported](#the-support-window), once their
+date has passed. `--dry-run` prints the plan without deploying anything.
 
 ## Cutting a release
 

@@ -87,10 +87,15 @@ You must be [[TO DECIDE: minimum age, for example 18]] or older to sign up.
   deployed to **every** connected cafe, including cafes that chose to stay on
   an older version. You agree to this as part of the service.
 - **Support window.** Only the latest two minor release lines (for example 1.4
-  and 1.5) are supported. If your cafe stays on an older line, we'll show a
-  "please upgrade by…" notice with a date at least
-  [[TO DECIDE: notice period, for example 30 days]] ahead. After that date we
-  may move your cafe to a supported release.
+  and 1.5) are supported, and only they get fixes, security fixes included. If
+  your cafe stays on an older line, we'll tell you by email and with a notice
+  in the console, with a date to upgrade by that is at least
+  [[TO DECIDE: notice period, for example 30 days]] after that line stopped
+  being supported. The date is the last day you have to upgrade yourself. From
+  the day after it, we may move your cafe to the newest supported release
+  without asking, and from then on it stays on that line. Until you upgrade or
+  we move your cafe, it keeps running, but we make no fixes for its line. The
+  details are in [releases.md](../releases.md#the-support-window).
 - **Data changes.** Some releases change how your data is stored. We migrate it
   for you, in a way designed to keep the previous release working so a rollback
   is safe.
