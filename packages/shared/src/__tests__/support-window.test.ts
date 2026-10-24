@@ -117,8 +117,9 @@ describe("the date to upgrade by", () => {
     expect(new Date(standing.upgradeBy!).toISOString()).toBe(
       "2026-11-09T00:00:00.000Z",
     );
+    expect(standing.moveAt).toBe(at("2026-11-10"));
     expect(standing.due).toBe(false);
-    expect(standing.daysLeft).toBe(16);
+    expect(standing.daysLeft).toBe(17);
   });
 
   it("rounds up to the next midnight UTC, so the notice is never short", () => {
@@ -146,21 +147,40 @@ describe("the date to upgrade by", () => {
     expect(standing.upgradeBy! - standing.droppedAt!).toBe(30 * DAY);
   });
 
-  it("is due from the first moment of the day, not before", () => {
-    const day = at("2026-11-09");
-    expect(lineSupport(window, "1.3", day - 1).due).toBe(false);
-    expect(lineSupport(window, "1.3", day - 1).daysLeft).toBe(1);
-    expect(lineSupport(window, "1.3", day).due).toBe(true);
-    expect(lineSupport(window, "1.3", day).daysLeft).toBe(0);
-    expect(lineSupport(window, "1.3", day + 40 * DAY).due).toBe(true);
-    expect(lineSupport(window, "1.3", day + 40 * DAY).daysLeft).toBe(0);
+  it("runs to the end of its last day, and is due from the next midnight", () => {
+    const last = at("2026-11-09");
+    const next = at("2026-11-10");
+    expect(lineSupport(window, "1.3", last).due).toBe(false);
+    expect(lineSupport(window, "1.3", last).daysLeft).toBe(1);
+    expect(lineSupport(window, "1.3", next - 1).due).toBe(false);
+    expect(lineSupport(window, "1.3", next - 1).daysLeft).toBe(1);
+    expect(lineSupport(window, "1.3", next).due).toBe(true);
+    expect(lineSupport(window, "1.3", next).daysLeft).toBe(0);
+    expect(lineSupport(window, "1.3", next + 40 * DAY).due).toBe(true);
+    expect(lineSupport(window, "1.3", next + 40 * DAY).daysLeft).toBe(0);
+  });
+
+  it("gives the full 30 days even when the release came out late in the day", () => {
+    const late = supportWindow([
+      rel("1.3.0", "2026-06-01"),
+      rel("1.4.0", "2026-08-01"),
+      {
+        version: "1.5.0",
+        channel: "stable",
+        publishedAt: at("2026-10-10T23:00:00Z"),
+      },
+    ]);
+    const standing = lineSupport(late, "1.3", now);
+    expect(standing.moveAt! - standing.droppedAt!).toBeGreaterThanOrEqual(
+      30 * DAY,
+    );
   });
 
   it("counts whole days left, rounding up", () => {
-    const day = at("2026-11-09");
-    expect(lineSupport(window, "1.3", day - 3 * DAY).daysLeft).toBe(3);
-    expect(lineSupport(window, "1.3", day - 3 * DAY + 1).daysLeft).toBe(3);
-    expect(lineSupport(window, "1.3", day - 3 * DAY - 1).daysLeft).toBe(4);
+    const next = at("2026-11-10");
+    expect(lineSupport(window, "1.3", next - 3 * DAY).daysLeft).toBe(3);
+    expect(lineSupport(window, "1.3", next - 3 * DAY + 1).daysLeft).toBe(3);
+    expect(lineSupport(window, "1.3", next - 3 * DAY - 1).daysLeft).toBe(4);
   });
 
   it("starts the clock when the second newer line appeared, not the first", () => {
@@ -226,6 +246,7 @@ describe("the date to upgrade by", () => {
       supported: false,
       droppedAt: null,
       upgradeBy: null,
+      moveAt: null,
       due: false,
       daysLeft: null,
     });
@@ -253,6 +274,7 @@ describe("a supported line", () => {
         supported: true,
         droppedAt: null,
         upgradeBy: null,
+        moveAt: null,
         due: false,
         daysLeft: null,
       });
@@ -274,7 +296,7 @@ describe("the notice for a cafe", () => {
 
   it("is for a cafe pinned to an unsupported line", () => {
     const notice = supportNotice({ pinned: "1.3" }, history, now);
-    expect(notice).toMatchObject({ line: "1.3", daysLeft: 16, due: false });
+    expect(notice).toMatchObject({ line: "1.3", daysLeft: 17, due: false });
   });
 
   it("is overdue after the date, until the cafe is moved", () => {
