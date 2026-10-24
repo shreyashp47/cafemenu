@@ -56,6 +56,7 @@ export function forcedMove(cafe, version, support) {
   return {
     line: pinned,
     upgradeBy: standing.upgradeBy,
+    moveAt: standing.moveAt,
     droppedAt: standing.droppedAt,
   };
 }
@@ -94,7 +95,7 @@ export function assess(cafe, version, support) {
           skip:
             `pinned to ${pinned}, and ${version} is a release of ${wanted.line}` +
             (standing && !standing.supported && standing.upgradeBy
-              ? `; ${pinned} is no longer supported, so it moves from ${day(standing.upgradeBy)}`
+              ? `; ${pinned} is no longer supported, so it moves from ${day(standing.moveAt)}`
               : ""),
           forced,
         };

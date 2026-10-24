@@ -65,20 +65,21 @@ describe("which cafes are moved off a line", () => {
     assert.equal(forcedMove(old, "1.5.1", support), null);
     assert.match(
       skipReason(old, "1.5.1", support),
-      /pinned to 1\.3, and 1\.5\.1 is a release of 1\.5; 1\.3 is no longer supported, so it moves from 2026-11-09/,
+      /pinned to 1\.3, and 1\.5\.1 is a release of 1\.5; 1\.3 is no longer supported, so it moves from 2026-11-10/,
     );
   });
 
-  it("is on the day itself, not the day before", () => {
+  it("waits until the upgrade-by day is over", () => {
     const support = (iso) => ({
       window: supportWindow(NOTICE),
       now: new Date(iso),
     });
+    // 9 November is the last day to upgrade; the move is from the 10th.
     assert.equal(
-      forcedMove(old, "1.5.1", support("2026-11-08T23:59:59Z")),
+      forcedMove(old, "1.5.1", support("2026-11-09T23:59:59Z")),
       null,
     );
-    assert.ok(forcedMove(old, "1.5.1", support("2026-11-09T00:00:00Z")));
+    assert.ok(forcedMove(old, "1.5.1", support("2026-11-10T00:00:00Z")));
   });
 
   it("leaves a cafe on a supported line alone, as before", () => {
@@ -228,7 +229,7 @@ describe("a rollout before the date", () => {
     const result = await h.run({ version: "1.5.1" });
     assert.deepEqual(h.deployed, ["toe"]);
     assert.equal(result.rollout.cafes.old.status, "skipped");
-    assert.match(result.rollout.cafes.old.reason, /moves from 2026-11-09/);
+    assert.match(result.rollout.cafes.old.reason, /moves from 2026-11-10/);
   });
 });
 

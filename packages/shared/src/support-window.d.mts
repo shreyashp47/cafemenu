@@ -38,7 +38,10 @@ export interface LineSupport {
   line: string;
   supported: boolean;
   droppedAt: number | null;
+  /** The last day to upgrade, as that day's midnight UTC. */
   upgradeBy: number | null;
+  /** When cafes still on the line are moved: the midnight after `upgradeBy`. */
+  moveAt: number | null;
   due: boolean;
   daysLeft: number | null;
 }
