@@ -5,7 +5,8 @@
     "description": "Customers scan the code on their table and order from their phone. Staff see orders arrive live. Your menu, orders and data stay in your own free Firebase project.",
     "signupTitle": "Sign up",
     "setupTitle": "Set up your cafe",
-    "notFoundTitle": "Page not found"
+    "notFoundTitle": "Page not found",
+    "cafeTitle": "Your cafe"
   },
   "nav": {
     "label": "Main",
@@ -257,7 +258,10 @@
     "licence": "Open source under the MIT licence.",
     "linksLabel": "Project",
     "links": [
-      { "label": "GitHub", "href": "https://github.com/shreyashp47/cafemenu" },
+      {
+        "label": "GitHub",
+        "href": "https://github.com/shreyashp47/cafemenu"
+      },
       {
         "label": "Plan and roadmap",
         "href": "https://github.com/shreyashp47/cafemenu/blob/main/PLAN.md"
@@ -619,6 +623,258 @@
       "back": "Check again, or use another project"
     }
   },
+  "cafe": {
+    "loading": "Loading…",
+    "signIn": {
+      "title": "Sign in to manage your cafe",
+      "text": "Sign in with the email and password you signed up with."
+    },
+    "unverified": {
+      "title": "Confirm your email first",
+      "text": "Your cafe's page opens once the link we emailed to **{email}** is clicked. [Go back to that step](/signup)."
+    },
+    "noCafe": {
+      "title": "No cafe yet",
+      "text": "You're signed in as **{email}**, with no cafe yet. [Sign up a cafe](/signup) to start."
+    },
+    "unavailable": "Your cafes couldn't be loaded. Reload the page, and sign out and in again if that doesn't help.",
+    "draft": {
+      "title": "{name} isn't set up yet",
+      "text": "Finish the setup steps first, then updates, branding and access are here. [Carry on with setup](/setup?cafe={id}).",
+      "demoSkip": "Demo mode has no backend to set your project up.",
+      "demoGo": "Pretend setup finished"
+    },
+    "pick": "Your cafes:",
+    "account": {
+      "signedIn": "Signed in as **{email}**.",
+      "signOut": "Sign out"
+    },
+    "nav": {
+      "label": "On this page",
+      "updates": "Updates",
+      "branding": "Branding and locale",
+      "access": "Access"
+    },
+    "header": {
+      "eyebrow": "Your cafe",
+      "statusLabel": "Status",
+      "status": {
+        "draft": "Not set up yet",
+        "provisioning": "Being set up",
+        "live": "Live",
+        "failed": "Setup failed",
+        "disconnected": "Disconnected",
+        "suspended": "Paused"
+      },
+      "notes": {
+        "provisioning": "CafeMenu is setting your project up now. Updates and branding open once it's live.",
+        "failed": "Setting it up didn't finish. CafeMenu's maintainer is looking at why. Nothing here can be changed until it's live.",
+        "disconnected": "CafeMenu's access to your project was removed, so it can't update your cafe. Your site keeps running on its last release. To connect again, add the member back (see Access) and ask CafeMenu's maintainer to check.",
+        "suspended": "CafeMenu's maintainer has paused your cafe. Your site keeps running as it is, and updates are on hold."
+      },
+      "dashboard": {
+        "title": "Your cafe's own dashboard",
+        "text": "Your menu, tables, orders and staff are managed there, in your own project.",
+        "open": "Open your dashboard",
+        "demo": "In demo mode there is no real site. Your dashboard would be at `{url}`.",
+        "site": "Your customers' address: `{site}.web.app`."
+      }
+    },
+    "updates": {
+      "title": "Updates",
+      "lead": "CafeMenu keeps your cafe's site up to date. An update never touches your menu, orders or staff: they stay in your own project.",
+      "running": {
+        "label": "Running now",
+        "none": "Nothing yet. The first version goes on when setup finishes.",
+        "before": "The version before it was **{version}**."
+      },
+      "choice": {
+        "legend": "How your cafe is updated",
+        "stable": {
+          "title": "Update automatically (stable)",
+          "text": "Every new version once it has been tried out. Recommended."
+        },
+        "beta": {
+          "title": "Update automatically (beta)",
+          "text": "New versions first, before they're called stable. Some may have rough edges."
+        },
+        "pinned": {
+          "title": "Stay on {line}",
+          "text": "No new features. Fixes to {line} still apply, and so do security fixes.",
+          "none": "Available once your cafe has a version running."
+        },
+        "save": "Save choice",
+        "saving": "Saving…",
+        "saved": "Saved."
+      },
+      "offer": {
+        "title": "{version} is available",
+        "beta": "(beta)",
+        "published": "Published {date}.",
+        "movesLine": "You stay on {line} now. Upgrading moves that to {next}, so the fixes you get from then on are for {next}.",
+        "upgrade": "Upgrade to {version}",
+        "upToDate": "You're up to date.",
+        "none": "Nothing to upgrade yet."
+      },
+      "notes": {
+        "show": "What's new in {version}",
+        "none": "There are no notes for this version.",
+        "loading": "Loading notes…"
+      },
+      "rollback": {
+        "title": "Go back one version",
+        "text": "Puts your site back on **{version}**, the version before this one. Your menu and orders are kept. You can go back one version at a time.",
+        "none": "There is no earlier version to go back to yet.",
+        "button": "Roll back to {version}",
+        "confirm": "Roll back to {version}?",
+        "confirmText": "Your site goes back to {version} within a minute or two.",
+        "yes": "Yes, roll back",
+        "cancel": "Cancel"
+      },
+      "request": {
+        "sent": "Asked. Progress is just below.",
+        "busy": "An update is already on its way. You can ask for another when it has finished.",
+        "notLive": "Updates open once your cafe is live."
+      },
+      "history": {
+        "title": "What CafeMenu did to your cafe",
+        "latest": "Latest",
+        "show": "Earlier ({count})",
+        "none": "Nothing yet.",
+        "stepsLabel": "Steps",
+        "kind": {
+          "provision": "Setup",
+          "deploy": "Upgrade to {version}",
+          "deployFrom": "Upgrade from {from} to {version}",
+          "rollback": "Roll back to {version}",
+          "branding": "Branding and locale put on your site"
+        },
+        "trigger": {
+          "owner": "You asked",
+          "rollout": "Automatic update",
+          "admin": "CafeMenu's maintainer"
+        },
+        "status": {
+          "queued": "Waiting to start",
+          "running": "Running",
+          "succeeded": "Done",
+          "failed": "Failed",
+          "rolled-back": "Went back, because it didn't pass its check"
+        },
+        "step": {
+          "pending": "waiting",
+          "running": "running",
+          "done": "done",
+          "failed": "failed"
+        },
+        "failed": "What went wrong: {error}"
+      }
+    },
+    "branding": {
+      "title": "Branding and locale",
+      "lead": "How your cafe looks and reads to customers. Saving puts the change on your site within a minute or two; your menu and orders aren't touched.",
+      "closed": "You can change these once your cafe is live.",
+      "name": {
+        "label": "Cafe name"
+      },
+      "tagline": {
+        "label": "Tagline",
+        "hint": "The line under your name. Optional."
+      },
+      "locale": {
+        "label": "Language and number format",
+        "hint": "How prices, numbers and dates are written."
+      },
+      "logo": {
+        "now": "Your site has a logo now. Choose a file to replace it.",
+        "none": "Your site uses the theme's own artwork.",
+        "remove": "Remove my logo and use the theme's artwork",
+        "where": "Saved with your other changes, then put on your site."
+      },
+      "currency": {
+        "title": "Changing the currency doesn't convert your prices.",
+        "text": "Your menu prices aren't converted: {before} on your menu would read {after}. Update them in your dashboard after saving. Orders already taken keep the prices they had.",
+        "confirm": "I'll update my menu prices myself"
+      },
+      "save": "Save and update my site",
+      "saving": "Saving…",
+      "discard": "Discard changes",
+      "fixFields": "Fix the fields marked first.",
+      "saved": "Saved. Your site is being updated: see Updates, below, for how far it has got.",
+      "savedPending": "Saved on CafeMenu. Your site will pick the change up once updates from here are switched on.",
+      "nothing": "Nothing to save: it's as you have it now.",
+      "problems": {
+        "tagline": {
+          "too-long": "Keep it to 80 characters."
+        },
+        "needsConfirm": "Tick the box to confirm."
+      }
+    },
+    "access": {
+      "title": "Access",
+      "lead": "CafeMenu sets your project up and keeps it updated through one member you added to it: its deploy account, which is a robot account rather than a person. What it can do is below, with how to check it and how to remove it.",
+      "account": {
+        "label": "The deploy account",
+        "none": "Its address isn't set up on this site yet. CafeMenu's maintainer will send it to you."
+      },
+      "roles": "Its role in your project is [[SPIKE #3: the exact IAM roles, settled by the Phase 0 spike]].",
+      "can": {
+        "title": "What that allows",
+        "text": "Close to admin. It can set up and change almost everything your cafe needs, and it **can technically read your orders**. It can't see your Google account, your other projects or your billing details, and it can't delete your project. [[SPIKE #3: confirm these limits once the roles are known]]"
+      },
+      "will": {
+        "title": "What CafeMenu will do",
+        "items": [
+          "Set your cafe up, then deploy the releases you choose.",
+          "Deploy **security fixes** to every cafe, even one that chose to stay on an older version.",
+          "Run data migrations, using code that's public on GitHub.",
+          "Check each deploy works, and roll it back if it doesn't.",
+          "Look at a problem in your project **when you ask**, and only at what that problem needs."
+        ]
+      },
+      "wont": {
+        "title": "What it won't do",
+        "items": [
+          "Read your orders, staff list or customers' data for its own purposes.",
+          "Sell, share or analyse your data, or use it for advertising.",
+          "Change your menu, prices or tables unless you ask (apart from loading your starting menu once, at setup).",
+          "Touch your billing or your other Google projects."
+        ]
+      },
+      "check": {
+        "title": "How to check it",
+        "lead": "The Firebase console doesn't list robot accounts among a project's members, so you won't see CafeMenu there, even when it's connected. Use the Google Cloud IAM page:",
+        "steps": [
+          "Open the [Google Cloud IAM page]({url}), signed in with the Google account that owns your cafe's project.",
+          "Make sure your cafe's project is picked at the top of the page.",
+          "On the **View by principals** tab, find the deploy account. The **Role** column shows what it has."
+        ],
+        "open": "Open the IAM page",
+        "more": "If it has any role that isn't listed above, tell CafeMenu's maintainer: it shouldn't. What it has done in your project is in **Logging** → **Logs Explorer** on the same console."
+      },
+      "remove": {
+        "title": "How to remove it",
+        "steps": [
+          "On the same IAM page, tick the box next to the deploy account.",
+          "Press **Remove access**, then confirm."
+        ]
+      },
+      "leaving": {
+        "title": "What happens if you leave",
+        "lead": "From the moment you remove it:",
+        "items": [
+          "CafeMenu can't reach your project at all.",
+          "Updates **and security fixes** stop.",
+          "Your site keeps running on its last release, and your data stays in your project, where it always was."
+        ],
+        "back": "Changed your mind? Add the member again, and ask CafeMenu's maintainer to check the connection.",
+        "delete": "To delete your CafeMenu account as well, see [Leaving](https://github.com/shreyashp47/cafemenu/blob/main/docs/legal/privacy-policy.md#7-leaving-and-deleting-your-console-data)."
+      },
+      "full": "[Read the full explanation](https://github.com/shreyashp47/cafemenu/blob/main/docs/legal/access-explained.md)",
+      "copy": "Copy",
+      "copied": "Copied"
+    }
+  },
   "notFound": {
     "title": "That page isn't here.",
     "text": "The address may be mistyped, or the page may have moved.",
@@ -702,6 +958,9 @@
     "unauthenticated": "Sign in first.",
     "not-found": "That cafe no longer exists.",
     "unimplemented": "Checking isn't switched on yet. Your project ID is saved, and CafeMenu's maintainer will check the connection for you.",
+    "failed-precondition": "That can't be done right now: another update may be running, or the cafe isn't live. Try again in a minute.",
+    "invalid-argument": "That version can't be deployed to your cafe.",
+    "backend-pending": "Changes from here aren't switched on yet. Nothing was changed on your site.",
     "unknown": "Something went wrong. Try again."
   }
 }
