@@ -26,6 +26,9 @@ which is the account every owner adds to their own project
 | `requestRollback`     | **Roll back**                      | queues `deployer rollback`                                                                    |
 | `requestSyncBranding` | **Save branding**                  | queues `deployer sync-branding`, with the cafe's settings and `setup/logo`                    |
 | `runDeploymentJob`    | a `deployments/{id}` being created | does the work of whatever was queued, and writes its progress and result to the same document |
+| `notifyOnRelease`     | a `releases/{version}` write       | emails the owners who stay on a version, and those whose line is no longer supported          |
+| `notifyOnDeployment`  | a `deployments/{id}` update        | emails the owner when it ended `failed` or `rolled-back`                                      |
+| `unsubscribe`         | the link in an email (HTTP)        | switches the release emails off (or on again) for one cafe                                    |
 
 The console reaches the first five through
 [`apps/console/src/lib/data/callables.ts`](../console/src/lib/data/callables.ts),
@@ -179,6 +182,77 @@ platform that is `cafes/{id}/private/deployRecord`, written through
 browser can read or write it (a case in
 [`apps/console/scripts/rules-test.mjs`](../console/scripts/rules-test.mjs)).
 
+## Emails
+
+Owners are emailed by the platform, never by their own project (which only
+sends sign-in emails). Three emails, each triggered by a write the backend
+already makes ([`src/mail/`](./src/mail)):
+
+| Email               | Sent when                                                                                                                                                  | To                                                                                 | Can be switched off |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ------------------- |
+| `release-available` | a release is written that is stable, not withdrawn and on a newer line than the cafe's pin (also when a beta is promoted)                                  | live cafes that stay on a line (`release.pinned`)                                  | yes                 |
+| `upgrade-required`  | any release write, for each pinned cafe whose line the [support window](../../docs/releases.md#the-support-window) has dropped and whose date has not come | the same, once per line and date; with the date and what the cafe will be moved to | no                  |
+| `deploy-failed`     | a deployment goes to `failed` or `rolled-back` (a deploy, rollback, branding sync or setup, whoever queued it)                                             | the cafe's owner, with `error` as the deployment wrote it                          | no                  |
+
+A patch of the line a cafe stays on isn't announced: it is applied by itself.
+A cafe that is told to upgrade isn't also told about the release. The
+window's maths is one function, shared with the console and the deployer
+([`packages/shared/src/support-window.mjs`](../../packages/shared/src/support-window.mjs));
+the backend only decides who to tell.
+
+- **Once per thing.** Before sending, the backend records a key such as
+  `deploy-failed:<deployment id>` in `cafes/{id}/private/mail` (a transaction),
+  so an event delivered twice, or a later release write that checks the same
+  cafes, sends nothing twice. A send that fails gives its key back, so the next
+  write tries again. One cafe's failure never stops the others; each outcome is
+  logged.
+- **Unsubscribe.** The emails that can be switched off carry a link and a
+  `List-Unsubscribe` header (with the one-click `List-Unsubscribe-Post`). The
+  link is `UNSUBSCRIBE_URL?c=<cafe>&t=<token>`, the token being a random
+  string of the cafe's own in `cafes/{id}/private/mail`, which no browser can
+  read. A GET shows a page with a button and changes nothing, because mail
+  scanners fetch every link; a POST sets `emails.releaseNotices` on the cafe to
+  `false` (and to `true` again, for the button on that page). Without `UNSUBSCRIBE_URL` those emails are not
+  sent at all. The essential emails ignore the setting.
+- **The address** is the one on the owner's account, else the one the cafe was
+  made with.
+
+### The mail provider
+
+Behind a small `MailSender` ([`src/mail/sender.mjs`](./src/mail/sender.mjs)):
+`send({to, subject, text, html, headers})`. There are two:
+
+- **`log`**, the default: each email is written to the function's log, to
+  nobody. The emulators and a platform with no provider use it, and the
+  emulator test sends all three this way.
+- **`resend`**, [Resend](https://resend.com)'s HTTP API (its free tier is a few
+  thousand emails a month). SendGrid would be another thirty lines.
+
+Nothing secret is in the repository. The settings are environment variables
+in `.env.<platform-project>` next to `package.json` (git ignores it; see
+[`.env.example`](./.env.example); staging copies it to what Firebase uploads),
+except the API key, which is a Secret Manager secret:
+
+| Variable          | Meaning                                                                                  |
+| ----------------- | ---------------------------------------------------------------------------------------- |
+| `MAIL_PROVIDER`   | `log` (default) or `resend`                                                              |
+| `MAIL_FROM`       | with `resend`: `CafeMenu <hello@your-domain>`, on a domain verified with Resend          |
+| `RESEND_API_KEY`  | with `resend`: **the secret**, `npx firebase-tools functions:secrets:set RESEND_API_KEY` |
+| `CONSOLE_URL`     | the console's address, for the "open Updates" link                                       |
+| `UNSUBSCRIBE_URL` | the deployed `unsubscribe` function's address, which `firebase deploy` prints            |
+
+The secret is bound to the two notify functions only when `MAIL_PROVIDER` is
+`resend` at deploy time, so a platform that sends nothing deploys without one.
+A setting that doesn't add up (Resend with no key) doesn't break the deploys:
+it is logged, and every email then fails with the reason. **Nothing here has
+sent a real email yet** `[[SPIKE #3]]`: the Resend request is checked against
+its documented shape in tests, the deploy-time reading of `.env` and the
+secret binding wait for the platform project.
+
+The templates ([`src/mail/templates.mjs`](./src/mail/templates.mjs)) are plain
+text and a simple HTML page with inline styles, no images or scripts, with
+everything an owner typed (the cafe's name) escaped.
+
 ## Running it locally
 
 ```bash
@@ -214,6 +288,9 @@ It serves the console's ports (Auth 9199, Firestore 8180) and Functions on
 5101, with a copy of the console's rules. A setup needs the fake Google
 running too (`startFakeGoogle` in `tests/helpers/fake-google-server.mjs`); Check
 connection and the request callables don't.
+
+Emails show up in the emulators' log (`MAIL_PROVIDER` unset), with the links
+pointing at `localhost:3100` and the local `unsubscribe` function.
 
 > Installing under Node 20 skips firebase-admin's optional Firestore package,
 > which wants Node 22. `npm ci` on Node 22 installs it.
@@ -274,9 +351,15 @@ Done once, by the maintainer. **All of this waits for the platform project and
 
 5. **The admin claim.** The maintainer's account needs `admin: true`, set with
    the Admin SDK; nothing sets it yet (#30).
-6. **Firestore rules and indexes** are the console's: `firebase deploy --only
+6. **Emails** (optional). Copy `.env.example` to `.env.<platform-project>`;
+   with Resend, verify a sending domain there, set `MAIL_FROM`, store the key
+   with `firebase functions:secrets:set RESEND_API_KEY`, and set
+   `MAIL_PROVIDER=resend` before deploying. Deploy once, copy the `unsubscribe`
+   function's address into `UNSUBSCRIBE_URL` (and the console's into
+   `CONSOLE_URL`) and deploy again. [Emails](#emails) says what is sent.
+7. **Firestore rules and indexes** are the console's: `firebase deploy --only
 firestore` from `apps/console`. The functions need no new index.
-7. **Console.** Build it with `NEXT_PUBLIC_BACKEND_FUNCTIONS=1`, and
+8. **Console.** Build it with `NEXT_PUBLIC_BACKEND_FUNCTIONS=1`, and
    `NEXT_PUBLIC_FUNCTIONS_REGION` if the region isn't `us-central1`.
 
 ## Not done here
@@ -291,3 +374,8 @@ firestore` from `apps/console`. The functions need no new index.
 - `checkConnection` is not rate-limited.
 - Everything marked `UNVERIFIED` in the deployer, which is most of what the
   functions call; and `[[SPIKE #3]]` above.
+- **No reminders.** `upgrade-required` goes out when a release is written and
+  again on any later release write while the date is ahead; nothing sends "one
+  week left" on its own. A scheduled function over `listPinnedCafes` could.
+- **No switch in the console** for the release emails: unsubscribing is the
+  link, and `emails.releaseNotices` on the cafe is there for a toggle to read.

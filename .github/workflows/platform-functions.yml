@@ -125,8 +125,10 @@ jobs:
             const functions = await import("./src/index.mjs");
             const names = Object.keys(functions).sort();
             console.log(names.join(", "));
-            if (names.length !== 6) throw new Error("expected 6 functions");
+            if (names.length !== 9) throw new Error("expected 9 functions");
             const { loadShared } = await import("@cafemenu/deployer");
             const shared = await loadShared();
             if (typeof shared.validateCafeSettings !== "function") throw new Error("shared did not load");
+            const { supportWindow } = await import("@cafemenu/shared/support-window");
+            if (typeof supportWindow !== "function") throw new Error("the support window did not load");
           '
