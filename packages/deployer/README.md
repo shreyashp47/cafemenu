@@ -38,7 +38,7 @@ deployer deploy    --project <id> --rules firestore.rules --indexes firestore.in
 deployer migrate   --project <id> --to <n>
 deployer rollback  --project <id> --site <name>
 deployer sync-branding --project <id> --site <name> --settings <cafe-settings.json> [--logo <png>]
-deployer rollout   --version <x.y.z> --cafes <cafes.json> [--batch-size <n>] [--failure-threshold <percent>]
+deployer rollout   --version <x.y.z> --cafes <cafes.json> [--batch-size <n>] [--failure-threshold <percent>] [--releases <file>]
 deployer rollout   --resume <rollout-id> --cafes <cafes.json>
 deployer owner     --project <id> --email <email> --name <name>
 ```
@@ -414,12 +414,38 @@ deployer rollout --resume 1.5.0-20261024T101500Z --cafes cafes.json
 **Who gets it.** Each cafe's `release` says what it follows (PLAN.md,
 [Releases](../../PLAN.md#releases-versions)):
 
-| Version                       | Gets it                                                                                           |
-| ----------------------------- | ------------------------------------------------------------------------------------------------- |
-| a beta or rc (`1.5.0-beta.1`) | Beta cafes only. Stable cafes and pinned ones never see it.                                       |
-| a stable minor (`1.5.0`)      | Stable and beta cafes. A cafe pinned to `1.4` stays on it.                                        |
-| a stable patch (`1.4.3`)      | The same, and cafes pinned to `1.4`, since it is a release of their line.                         |
-| any version                   | Never a cafe whose `current` is the version or newer: a cafe never moves down. Only `live` cafes. |
+| Version                              | Gets it                                                                                                                                                       |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| a beta or rc (`1.5.0-beta.1`)        | Beta cafes only. Stable cafes and pinned ones never see it.                                                                                                   |
+| a stable minor (`1.5.0`)             | Stable and beta cafes. A cafe pinned to `1.4` stays on it.                                                                                                    |
+| a stable patch (`1.4.3`)             | The same, and cafes pinned to `1.4`, since it is a release of their line.                                                                                     |
+| a stable release of a supported line | Also a cafe pinned to a line that is no longer supported, once its upgrade-by date has passed: the [support window](#the-support-window-and-the-forced-move). |
+| any version                          | Never a cafe whose `current` is the version or newer: a cafe never moves down. Only `live` cafes.                                                             |
+
+#### The support window and the forced move
+
+Only the latest two minor lines are supported
+([docs/releases.md](../../docs/releases.md#the-support-window)). A cafe pinned
+to an older one is told to upgrade by a date, and a stable rollout of a
+supported line moves it once that date is over (the day after the last day to
+upgrade, in UTC). Such a cafe is deployed like any other, in the stable wave,
+and then **its pin moves to the new line** (`recordRelease(id, {current,
+previous, pinned})`), or the next patch would skip it for being a release of
+another line. The plan marks it, the rollout state keeps why in the cafe's
+`forced` (`{from, upgradeBy, reason}`), and the log and the closing summary say
+it ("Moved off an unsupported line"). Before the date, the cafe is skipped and
+its reason says when it will move; `--dry-run` shows both.
+
+The window is worked out from the published releases, by
+`@cafemenu/shared/support-window` (the function the console and the backend use
+too): GitHub's
+releases by default (`src/release-list.mjs`, no token), or `--releases <file>`,
+a JSON list of `{version, channel, publishedAt, withdrawn}` such as the
+platform's `releases` collection exports. It is read only when some live cafe
+is pinned to another line and the version is stable. When it can't be read, the
+rollout warns, moves nobody off a line and goes on. A beta never moves a
+pinned cafe, and neither does a version of a line that is itself out of the
+window.
 
 **In what order.** The canary first: the cafe marked `"canary": true`, which
 is TOE. Then the beta cafes, then the stable and pinned cafes, the last two in
