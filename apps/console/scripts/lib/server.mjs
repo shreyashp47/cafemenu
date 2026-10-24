@@ -70,6 +70,21 @@ export const ROUTES = [
   { path: "/setup", name: "setup-project", demo: "project" },
   { path: "/setup", name: "setup-access", demo: "access" },
   { path: "/setup", name: "setup-connected", demo: "connected" },
+  { path: "/cafe", name: "cafe-signin" },
+  { path: "/cafe", name: "cafe", demo: "owner" },
+  { path: "/cafe", name: "cafe-running", demo: "ownerRunning" },
+  {
+    path: "/cafe",
+    name: "cafe-errors",
+    demo: "owner",
+    // An empty name, and a currency changed without the box ticked.
+    act: async (page) => {
+      await page.getByLabel("Cafe name").fill("");
+      await page.getByLabel("Currency").selectOption("USD");
+      await page.getByRole("button", { name: /save and update/i }).click();
+      await page.getByText("Give your cafe's name.").waitFor();
+    },
+  },
 ];
 
 /** Opens `route` in `page`: its demo state, the page, then its action. */

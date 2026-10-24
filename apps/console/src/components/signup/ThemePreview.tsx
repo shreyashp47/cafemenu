@@ -16,6 +16,7 @@ export function ThemePreview({
   accent,
   name,
   logo,
+  siteLogo = false,
   item,
 }: {
   theme: string;
@@ -23,6 +24,11 @@ export function ThemePreview({
   name: string;
   /** A data: URL of the stored PNG. */
   logo: string | null;
+  /**
+   * The cafe's site has a logo that is not shown here, so the initials the
+   * preview draws are not what customers see: no note about initials.
+   */
+  siteLogo?: boolean;
   /** One item of the menu, as customers would see it. */
   item: { name: string; price: string | null };
 }) {
@@ -91,7 +97,9 @@ export function ThemePreview({
           </span>
         </div>
       </div>
-      {!logo && <p className="text-muted mt-2 text-sm">{preview.monogram}</p>}
+      {!logo && !siteLogo && (
+        <p className="text-muted mt-2 text-sm">{preview.monogram}</p>
+      )}
     </figure>
   );
 }

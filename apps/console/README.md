@@ -8,10 +8,11 @@ they live in the owner's project ([PLAN.md](../../PLAN.md#how-it-fits-together))
 
 Today it has the landing page ([#25](https://github.com/shreyashp47/cafemenu/issues/25)),
 the sign-up form and email check ([#26](https://github.com/shreyashp47/cafemenu/issues/26)),
-onboarding ([#27](https://github.com/shreyashp47/cafemenu/issues/27)), and the
+onboarding ([#27](https://github.com/shreyashp47/cafemenu/issues/27)), the
+owner area ([#29](https://github.com/shreyashp47/cafemenu/issues/29)), and the
 platform's data model, sign-in and security rules
 ([#24](https://github.com/shreyashp47/cafemenu/issues/24)), which automatic
-setup (#28), the owner area (#29) and admin (#30) build on.
+setup (#28) and admin (#30) build on.
 
 Same stack as the cafe app, on the same versions: Next.js 15 (static export),
 React 19, TypeScript, Tailwind CSS v4, Firebase 12, Vitest.
@@ -105,6 +106,66 @@ does and where it can be removed.
   `messages/en.json` until the Phase 0 spike settles them; a test keeps every
   such placeholder in that form.
 
+### The owner area
+
+`/cafe` is where an owner manages a cafe that is past setup (`?cafe=` picks
+one of several; sign-up and `/setup` link to it). It shows the cafe's name and
+state, a link to the cafe's own dashboard at `https://<site>.web.app/admin`
+(menu, tables, orders and staff are managed there, in the owner's project;
+in demo mode the address is shown, not linked, because there is no real site),
+and three sections:
+
+<p align="center">
+  <img src="docs/screens/cafe-phone.jpg" width="816" alt="The owner area on a phone, four views: Updates, with the version running, the three ways to follow releases (stable, beta, stay on 1.1) and 1.1.1 available; an upgrade under way, with the deployer's steps and the third one running; Branding and locale, with a change of currency to US dollars and the warning that it doesn't convert prices, with the box to tick; and Access, with the deploy account's address, its Copy button and what that allows">
+</p>
+
+- **Updates.** The version running, and how the cafe follows releases: every
+  new stable version, every new beta, or **Stay on 1.4** (patches of that line
+  still apply, so security fixes reach everyone). That choice is saved on the
+  cafe's record, which the rules let the owner write
+  (`release.channel` and `release.pinned`). **Upgrade** offers the newest
+  release the cafe follows that is newer than its own, with its notes from
+  `releases/{version}`; **Roll back** goes to `release.previous`, after asking.
+  A cafe that stays on a line and upgrades past it moves the line it stays on,
+  or the next patch of the old one would undo the upgrade. Below them is what
+  CafeMenu has done to the cafe, from `deployments/`: the latest in full, with
+  the deployer's steps while it runs or if it failed.
+- **Branding and locale.** Name, tagline, logo, theme, accent (with the shared
+  contrast guard, as at sign-up), currency, time zone and language. Save writes
+  the cafe's settings, and a new logo, on the platform, then asks for them to
+  go on the site. Changing the currency says that prices are not converted
+  and wants a tick first. The tables, order cap, address on the QR cards,
+  money unit and plan are not edited here and carry over.
+- **Access.** What CafeMenu can do in the owner's project, how to check it on
+  the Google Cloud IAM page (linked with their project picked), how to remove
+  it, and what leaving means. The words are
+  [docs/legal/access-explained.md](../../docs/legal/access-explained.md)'s, and
+  wait for the same things: the deploy account's role is a `[[SPIKE #3: …]]`.
+
+**Requests to the backend.** The console never deploys anything. Upgrade,
+Roll back and Save in Branding are calls on `DeployRequests`
+([`src/lib/data/types.ts`](./src/lib/data/types.ts)); each becomes a `queued`
+record in `deployments/` that the backend (#28) picks up, runs the deployer for
+(`deployer deploy --version`, `deployer rollback`, `deployer sync-branding`),
+and writes the steps, the result and `release.current`/`previous` back to. The
+page watches that record. Until the backend exists the real platform answers
+`backend-pending` (src/lib/data/deploys.ts, the `TODO(#28)`s name each
+command), and the page says nothing was changed, or that the branding is saved
+and waits. Demo mode simulates the backend
+([`src/lib/data/demo-deploys.ts`](./src/lib/data/demo-deploys.ts)): the
+deployer's own steps, one at a time, then the new version; the demo has no
+backend to finish setup, so a draft cafe in `/cafe` has a "Pretend setup
+finished" button. One request runs at a time per cafe, and the buttons wait.
+
+**The logo.** The rules let an owner replace `cafes/{id}/setup/logo` while the
+cafe is `draft` or `live` (`provisioning`, `failed`, `disconnected` and
+`suspended` cafes' logos are fixed, and the starting menu stays draft-only).
+The backend reads it for `deployer sync-branding --logo`.
+
+What the sections decide is plain data in
+[`src/lib/owner/`](./src/lib/owner) and [`src/lib/notes.ts`](./src/lib/notes.ts)
+(release notes: a small, safe part of Markdown), tested without a browser.
+
 ### Three backends
 
 | Mode          | How                                                           | What it talks to                                                                   |
@@ -126,12 +187,12 @@ app's, so both can run at once.
 Types in [`src/lib/platform/model.ts`](./src/lib/platform/model.ts), rules in
 [`firestore.rules`](./firestore.rules).
 
-| Path                 | What                                                       | Written by                                      | Read by                      |
-| -------------------- | ---------------------------------------------------------- | ----------------------------------------------- | ---------------------------- |
-| `cafes/{cafeId}`     | one per cafe                                               | its owner (some fields), the backend (the rest) | its owner, the admin         |
-| `releases/{version}` | one per published release, id `1.4.2`                      | the backend only                                | any verified account         |
-| `deployments/{id}`   | one per setup, deploy, rollback or branding sync of a cafe | the backend only                                | that cafe's owner, the admin |
-| `cafes/{id}/setup/…` | the logo and starting menu from sign-up                    | its owner, while the cafe is a draft            | its owner, the admin         |
+| Path                 | What                                                       | Written by                                                      | Read by                      |
+| -------------------- | ---------------------------------------------------------- | --------------------------------------------------------------- | ---------------------------- |
+| `cafes/{cafeId}`     | one per cafe                                               | its owner (some fields), the backend (the rest)                 | its owner, the admin         |
+| `releases/{version}` | one per published release, id `1.4.2`                      | the backend only                                                | any verified account         |
+| `deployments/{id}`   | one per setup, deploy, rollback or branding sync of a cafe | the backend only                                                | that cafe's owner, the admin |
+| `cafes/{id}/setup/…` | the logo and starting menu from sign-up                    | its owner, while the cafe is a draft (the logo also while live) | its owner, the admin         |
 
 A cafe:
 

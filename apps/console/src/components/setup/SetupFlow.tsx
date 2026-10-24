@@ -102,7 +102,7 @@ export function SetupFlow() {
   );
 }
 
-/** A cafe past these steps: where it is now. #29 gives it its own page. */
+/** A cafe past these steps: where it is now, and the page it goes on at. */
 function Started({ cafe }: { cafe: Cafe }) {
   const words = setup.started;
   const status = cafe.status === "draft" ? "provisioning" : cafe.status;
@@ -114,6 +114,9 @@ function Started({ cafe }: { cafe: Cafe }) {
       />
       <p className="text-text">
         <Rich text={fill(words[status], { site: cafe.site })} />
+      </p>
+      <p className="text-text">
+        <Rich text={fill(words.manage, { id: encodeURIComponent(cafe.id) })} />
       </p>
     </Card>
   );

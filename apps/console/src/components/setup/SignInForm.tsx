@@ -12,7 +12,16 @@ import { Card } from "./Card";
 const { signIn: text } = messages.setup;
 
 /** For an owner who left and comes back signed out, or on another device. */
-export function SignInForm({ data }: { data: DataBundle }) {
+export function SignInForm({
+  data,
+  title = text.title,
+  lead = text.text,
+}: {
+  data: DataBundle;
+  /** Wording for a page other than setup. */
+  title?: string;
+  lead?: string;
+}) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -33,8 +42,8 @@ export function SignInForm({ data }: { data: DataBundle }) {
 
   return (
     <Card>
-      <StageHeading title={text.title} focus={false} />
-      <p className="text-text">{text.text}</p>
+      <StageHeading title={title} focus={false} />
+      <p className="text-text">{lead}</p>
       <form noValidate onSubmit={send} className="space-y-5">
         <Field id="signin-email" label={text.email}>
           <input
