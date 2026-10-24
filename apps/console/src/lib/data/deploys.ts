@@ -1,18 +1,15 @@
 /**
- * DeployRequests (types.ts) against the real platform, until the backend
- * (#28) takes requests: every call says so, plainly, and changes nothing.
+ * DeployRequests (types.ts) against the real platform when the backend's
+ * functions are not switched on (NEXT_PUBLIC_BACKEND_FUNCTIONS, config.ts):
+ * every call says so, plainly, and changes nothing.
  *
- * TODO(#28): replace with a callable Cloud Function per request that checks
- * the caller owns the cafe and that it is live and idle, writes a `queued`
- * `deployments/{id}` (trigger "owner"), and returns its id. A worker then
- * runs the deployer for it, and writes steps, result, `release.current` and
- * `release.previous` back:
+ * With the switch on, callables.ts takes over: a callable Cloud Function per
+ * request (apps/platform-functions) checks the caller owns the cafe and that
+ * it is live and idle, writes a `queued` `deployments/{id}` (trigger
+ * "owner"), and returns its id. A worker then runs the deployer for it, and
+ * writes steps, result, `release.current` and `release.previous` back.
  *
- *   upgrade        deployer deploy --version <version> --project <id> --site <site> --settings <file>
- *   rollback       deployer rollback --project <id> --site <site>
- *   syncBranding   deployer sync-branding --project <id> --site <site> --settings <file> [--logo <png>]
- *
- * The emulators cannot run the deployer either, so they use this too.
+ * The emulators use this too, unless the functions emulator is on.
  */
 
 import { CodedError, type DeployRequests } from "./types";
