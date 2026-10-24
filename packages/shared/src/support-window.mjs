@@ -18,10 +18,11 @@
  *     1.9). The supported ones are the newest `supportedLines` (2) of them.
  *   - A line stops being supported the moment the second newer line has had
  *     its first stable release. That time is when it was displaced.
- *   - The owner may upgrade until `upgradeBy`: the displacement time plus
- *     `noticeDays` (30), rounded up to the next midnight UTC, so the notice is
- *     never shorter than that. The day it falls on is the day CafeMenu moves
- *     cafes still on the line: `due` is true from its first moment (00:00 UTC).
+ *   - The owner has until `upgradeBy`: the displacement time plus
+ *     `noticeDays` (30), rounded up to a whole day (a midnight UTC). That date
+ *     is the last day to upgrade, and runs to its end, so the notice is never
+ *     shorter than 30 days. CafeMenu moves cafes still on the line from the
+ *     next midnight, `moveAt`: `due` is true from then.
  *   - A line nobody published a release of is judged the same way, so a cafe
  *     pinned to a line whose releases were all withdrawn still gets a date.
  *   - With too few dates to know (a release without `publishedAt`), a line is
@@ -102,9 +103,11 @@ export function supportWindow(
  *   line,
  *   supported,   false once `supportedLines` newer lines exist
  *   droppedAt,   when it stopped being supported (ms), or null: supported, or no date to tell
- *   upgradeBy,   the midnight UTC (ms) on which cafes still on it are moved, or null
- *   due,         `now` is at or past upgradeBy
- *   daysLeft,    whole days left until upgradeBy (0 on the day, or after it), or null
+ *   upgradeBy,   the last day to upgrade, as its midnight UTC (ms), or null
+ *   moveAt,      when cafes still on the line are moved: a day after upgradeBy, or null
+ *   due,         `now` is at or past moveAt
+ *   daysLeft,    whole days left until moveAt, counting today (1 on the last day,
+ *                0 once due), or null
  * }
  */
 export function lineSupport(window, line, now) {
@@ -116,6 +119,7 @@ export function lineSupport(window, line, now) {
       supported: true,
       droppedAt: null,
       upgradeBy: null,
+      moveAt: null,
       due: false,
       daysLeft: null,
     };
@@ -132,19 +136,22 @@ export function lineSupport(window, line, now) {
       supported: false,
       droppedAt,
       upgradeBy: null,
+      moveAt: null,
       due: false,
       daysLeft: null,
     };
   }
   const upgradeBy =
     Math.ceil((droppedAt + window.noticeDays * DAY) / DAY) * DAY;
+  const moveAt = upgradeBy + DAY;
   return {
     line,
     supported: false,
     droppedAt,
     upgradeBy,
-    due: at >= upgradeBy,
-    daysLeft: Math.max(0, Math.ceil((upgradeBy - at) / DAY)),
+    moveAt,
+    due: at >= moveAt,
+    daysLeft: Math.max(0, Math.ceil((moveAt - at) / DAY)),
   };
 }
 
