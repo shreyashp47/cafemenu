@@ -4,9 +4,12 @@
  * A CafeDirectory has two methods:
  *
  *   list() → Cafe[]
- *   recordRelease(id, {current, previous}) → void
+ *   recordRelease(id, {current, previous, pinned?}) → void
  *       The cafe now runs `current` (a version string), with `previous`
  *       (or null) to go back to. Called after a deploy or a roll back.
+ *       `pinned`, when given, is the minor line it now stays on: a cafe moved
+ *       off an unsupported line by a rollout (the support window) stays on
+ *       the new one.
  *
  * Cafe {
  *   id, name,
@@ -156,12 +159,17 @@ export function createJsonCafeDirectory(path) {
         base: dirname(resolve(path)),
       });
     },
-    async recordRelease(id, { current, previous }) {
+    async recordRelease(id, { current, previous, pinned }) {
       // The file is the person's, so only the cafe's release fields change.
       const data = await readJson(path);
       const entry = data.cafes?.find((cafe) => cafe?.id === id);
       if (!entry) throw new Error(`${path} doesn't list the cafe "${id}".`);
-      entry.release = { ...entry.release, current, previous };
+      entry.release = {
+        ...entry.release,
+        current,
+        previous,
+        ...(pinned !== undefined && { pinned }),
+      };
       const tmp = `${path}.${process.pid}.${randomUUID()}.tmp`;
       await writeFile(tmp, `${JSON.stringify(data, null, 2)}\n`);
       await rename(tmp, path);

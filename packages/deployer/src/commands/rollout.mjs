@@ -11,17 +11,30 @@
  * are tried again, in the plan's order.
  *
  * ctx: {log, dryRun, now, directory (CafeDirectory), store (RolloutStore),
- *       deployCafe(cafe, {version, write}) → Promise}. `deployCafe` throws
+ *       listReleases() → Promise<[{version, channel, publishedAt, withdrawn}]>
+ *       (optional), deployCafe(cafe, {version, write}) → Promise}. `deployCafe` throws
  * when the cafe's deploy fails; a SmokeTestError with `rolledBackTo` means
  * the cafe was put back to that release, anything else that it wasn't.
  *
+ * The support window (docs/releases.md): only the latest two minor lines are
+ * supported. A stable rollout of a supported line also moves the cafes pinned
+ * to an older line whose "upgrade by" date has passed, and moves their pin to
+ * the new line; the plan marks them, and the state, the log and the summary
+ * say why. The window comes from `ctx.listReleases()`, the published
+ * releases; without it, or when it fails, nobody is forced and the rollout
+ * says so.
+ *
  * A dry run prints the plan and calls nothing: no Google, no store.
  */
+import { supportWindow } from "@cafemenu/shared/support-window";
+
 import { UsageError } from "../errors.mjs";
+import { parseVersion } from "../release-package.mjs";
 import {
   DEFAULT_BATCH_SIZE,
   DEFAULT_FAILURE_PERCENT,
   crossesThreshold,
+  forcedReason,
   planRollout,
 } from "../rollout-plan.mjs";
 import { SmokeTestError } from "../smoke-test.mjs";
@@ -56,6 +69,14 @@ function printPlan(ctx, { version, plan, state, batchSize, failurePercent }) {
       const names = batch.map((cafe) => cafe.name).join(", ");
       log.info(wave.name === "canary" ? names : `batch ${b + 1}: ${names}`);
     }
+  }
+  const forced = plan.waves
+    .flatMap((wave) => wave.batches.flat())
+    .filter((cafe) => cafe.forced);
+  if (forced.length) {
+    log.step("Moved off a line that is no longer supported");
+    for (const cafe of forced)
+      log.info(`${cafe.name}: ${forcedReason(cafe.forced, version)}`);
   }
   const resumed = Object.values(state?.cafes ?? {});
   const hasCanary =
@@ -101,6 +122,12 @@ function printSummary(ctx, state, names, resumeCommand) {
   log.say(
     `  Done (${done.length})${done.length ? `: ${done.map(([id]) => names(id)).join(", ")}` : ""}`,
   );
+  const moved = done.filter(([, entry]) => entry.forced);
+  if (moved.length) {
+    log.say(`  Moved off an unsupported line (${moved.length}):`);
+    for (const [id, entry] of moved)
+      log.say(`    ${names(id)}: ${entry.forced.reason}`);
+  }
   for (const [status, title] of [
     ["rolled-back", "Rolled back"],
     ["failed", "Failed"],
@@ -144,6 +171,37 @@ function printSummary(ctx, state, names, resumeCommand) {
   }
 }
 
+/**
+ * The support window for this rollout, as planRollout takes it, or null.
+ * Only asked for when some pinned cafe could be moved (a stable release, a
+ * live cafe pinned to another line); a failure to ask is a warning, never a
+ * stop: the rollout goes ahead and moves nobody off a line.
+ */
+async function supportFor(ctx, cafes, version, now) {
+  const wanted = parseVersion(version);
+  const relevant = cafes.some(
+    (cafe) =>
+      cafe.status === "live" &&
+      cafe.release.pinned &&
+      cafe.release.pinned !== wanted.line,
+  );
+  if (wanted.channel !== "stable" || !relevant) return null;
+  if (!ctx.listReleases) {
+    ctx.log.warn(
+      "the published releases weren't given, so no cafe is moved off a line that is no longer supported",
+    );
+    return null;
+  }
+  try {
+    return { window: supportWindow(await ctx.listReleases()), now: now() };
+  } catch (error) {
+    ctx.log.warn(
+      `couldn't read the published releases (${oneLine(error.message)}), so no cafe is moved off a line that is no longer supported`,
+    );
+    return null;
+  }
+}
+
 export async function rollout(ctx, options) {
   const { log, dryRun, directory, store } = ctx;
   const now = () => ctx.now?.() ?? new Date();
@@ -171,7 +229,12 @@ export async function rollout(ctx, options) {
       .filter(([, entry]) => entry.status === "done")
       .map(([id]) => id),
   );
-  const plan = planRollout(cafes, version, { batchSize, leaveOut: done });
+  const support = await supportFor(ctx, cafes, version, now);
+  const plan = planRollout(cafes, version, {
+    batchSize,
+    leaveOut: done,
+    support,
+  });
   const planned = plan.waves.flatMap((wave) => wave.batches.flat());
 
   const existing = await store.list();
@@ -219,6 +282,13 @@ export async function rollout(ctx, options) {
         status: "pending",
         reason: null,
         attempts: stored?.cafes[cafe.id]?.attempts ?? 0,
+        ...(cafe.forced && {
+          forced: {
+            from: cafe.forced.line,
+            upgradeBy: new Date(cafe.forced.upgradeBy).toISOString(),
+            reason: forcedReason(cafe.forced, version),
+          },
+        }),
       };
   for (const { cafe, reason } of plan.skipped)
     state.cafes[cafe.id] = { wave: null, status: "skipped", reason };
@@ -257,6 +327,10 @@ export async function rollout(ctx, options) {
           entry.status = "done";
           entry.reason = null;
           log.change(`${cafe.name} runs ${version}`);
+          if (cafe.forced)
+            log.change(
+              `${cafe.name} no longer stays on ${cafe.forced.line}: ${forcedReason(cafe.forced, version)}`,
+            );
           try {
             await directory.recordRelease(cafe.id, {
               current: version,
@@ -264,6 +338,9 @@ export async function rollout(ctx, options) {
                 cafe.release.current === version
                   ? cafe.release.previous
                   : cafe.release.current,
+              // Staying on the old line would leave it without the new
+              // line's patches.
+              ...(cafe.forced && { pinned: parseVersion(version).line }),
             });
           } catch (error) {
             log.warn(
