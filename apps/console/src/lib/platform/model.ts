@@ -5,6 +5,9 @@
  *
  *   cafes/{cafeId}         one per cafe: who owns it, where it runs, which
  *                          release it is on. The owner reads and edits it.
+ *                          The backend also keeps `emails.releaseNotices` here
+ *                          (false once the owner unsubscribed from the
+ *                          release emails; the owner never writes it).
  *   cafes/{cafeId}/setup/  the logo and starting menu from sign-up, until
  *     {logo,menu}          provisioning copies them into the owner's project.
  *   releases/{version}     one per published release. Written by the backend.

@@ -88,6 +88,19 @@ export async function testEnv({ releases = ["1.0.0"], state } = {}) {
   };
   const now = () => new Date(clock);
   const logs = [];
+  const outbox = [];
+  const mail = {
+    sender: {
+      name: "test",
+      send: async (email) => {
+        if (mail.failWith) throw new Error(mail.failWith);
+        outbox.push(email);
+        return { id: `mail-${outbox.length}` };
+      },
+    },
+    consoleUrl: "https://console.example",
+    unsubscribeUrl: "https://platform.example/unsubscribe",
+  };
   const google = createGoogleSide({
     getToken: async () => "fake-token-1",
     fetchImpl: fake.fetchImpl,
@@ -111,11 +124,14 @@ export async function testEnv({ releases = ["1.0.0"], state } = {}) {
     env: {
       store,
       google,
+      mail,
       loadShared: async () => shared,
       now,
       sleep,
       log: (level, message, fields) => logs.push({ level, message, ...fields }),
     },
+    mail,
+    outbox,
     store,
     fake,
     state: fake.state,

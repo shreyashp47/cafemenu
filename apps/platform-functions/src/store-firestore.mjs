@@ -8,10 +8,15 @@
  *   cafes/{id}/setup/{logo,menu}  read: what the owner gave at sign-up
  *   cafes/{id}/private/deployRecord  the deploy record (deploy-log.mjs). No
  *                                 rule matches `private`, so no client can read it.
+ *   cafes/{id}/private/mail       the unsubscribe token, and the emails sent so
+ *                                 far (mail/notify.mjs)
+ *   cafes/{id}.emails             {releaseNotices: false} once the owner unsubscribed
  *   releases/{version}            read
  *   deployments/{id}              created, claimed and updated here
  */
-import { FieldValue } from "firebase-admin/firestore";
+import { FieldPath, FieldValue } from "firebase-admin/firestore";
+
+import { newToken, sameSecret } from "./mail/token.mjs";
 
 const ms = (value) =>
   typeof value?.toMillis === "function"
@@ -28,6 +33,8 @@ export function createFirestoreStore({ db, auth }) {
     const data = snap.data();
     return { ...data, id: snap.id, createdAt: ms(data.createdAt) };
   };
+
+  const mailRef = (cafeId) => cafeRef(cafeId).collection("private").doc("mail");
 
   const cafeOf = (snap) => {
     if (!snap.exists) return null;
@@ -97,6 +104,64 @@ export function createFirestoreStore({ db, auth }) {
         .collection("private")
         .doc("deployRecord")
         .set(record);
+    },
+
+    /** Live cafes that stay on a minor line: the ones a new release is not applied to. */
+    async listPinnedCafes() {
+      const snap = await db
+        .collection("cafes")
+        .where("release.pinned", "!=", null)
+        .get();
+      return snap.docs.map(cafeOf).filter((cafe) => cafe.status === "live");
+    },
+
+    /** The owner's address from their account, else `fallback` (the one the cafe was made with). */
+    async getOwnerEmail(uid, fallback = null) {
+      try {
+        return (await auth.getUser(uid)).email ?? fallback;
+      } catch {
+        return fallback;
+      }
+    },
+
+    /** The cafe's unsubscribe token, made on first use. */
+    ensureMailToken(cafeId) {
+      return db.runTransaction(async (tx) => {
+        const snap = await tx.get(mailRef(cafeId));
+        const existing = snap.data()?.token;
+        if (existing) return existing;
+        const token = newToken();
+        tx.set(mailRef(cafeId), { token }, { merge: true });
+        return token;
+      });
+    },
+
+    async checkMailToken(cafeId, token) {
+      const snap = await mailRef(cafeId).get();
+      const saved = snap.data()?.token;
+      return Boolean(saved) && sameSecret(saved, token);
+    },
+
+    /** Records that the email `key` is being sent; false if it already was. */
+    claimMail(cafeId, key, now) {
+      return db.runTransaction(async (tx) => {
+        const snap = await tx.get(mailRef(cafeId));
+        if (snap.data()?.sent?.[key]) return false;
+        tx.set(mailRef(cafeId), { sent: { [key]: now } }, { merge: true });
+        return true;
+      });
+    },
+
+    /** Takes a claim back after the send failed. */
+    async unclaimMail(cafeId, key) {
+      await mailRef(cafeId).update(
+        new FieldPath("sent", key),
+        FieldValue.delete(),
+      );
+    },
+
+    async setEmailPreference(cafeId, { releaseNotices }) {
+      await cafeRef(cafeId).update({ "emails.releaseNotices": releaseNotices });
     },
 
     async getOwnerName(uid) {
