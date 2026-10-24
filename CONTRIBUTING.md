@@ -15,11 +15,12 @@ npm run dev        # the cafe app, in demo mode, on http://localhost:3000
 
 Node 20.9+ (`.nvmrc` pins 20). This is an npm workspace:
 
-| Folder         | What it is                                                                                                                                                                                     |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `apps/cafe`    | The cafe website: TOE v0.3.0, being generalised. Its own [README](./apps/cafe/README.md) and [CONTRIBUTING](./apps/cafe/CONTRIBUTING.md) cover its scripts, rules tests and Playwright checks. |
-| `apps/console` | The CafeMenu website (Phase 3, not started).                                                                                                                                                   |
-| `packages/*`   | Shared code and the deployer.                                                                                                                                                                  |
+| Folder                    | What it is                                                                                                                                                                                     |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/cafe`               | The cafe website: TOE v0.3.0, being generalised. Its own [README](./apps/cafe/README.md) and [CONTRIBUTING](./apps/cafe/CONTRIBUTING.md) cover its scripts, rules tests and Playwright checks. |
+| `apps/console`            | The CafeMenu website (Phase 3, not started).                                                                                                                                                   |
+| `apps/platform-functions` | The platform's Cloud Functions: they set cafes up and run their deploys with the deployer. Its [README](./apps/platform-functions/README.md) covers the emulator test and deploying it.        |
+| `packages/*`              | Shared code and the deployer.                                                                                                                                                                  |
 
 Install once at the root. Run a workspace's scripts from its folder, or from
 the root with `-w`, e.g. `npm run verify -w @cafemenu/cafe`. From the root,

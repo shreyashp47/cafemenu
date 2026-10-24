@@ -20,12 +20,20 @@ describe("the staged copy that firebase deploy uploads", () => {
     assert.equal(pkg.name, "@cafemenu/platform-functions");
     assert.equal(pkg.main, "src/index.mjs");
     assert.equal(pkg.engines.node, "22");
-    assert.deepEqual(
-      Object.keys(pkg.dependencies).sort(),
-      ["@cafemenu/deployer", "@cafemenu/shared", "firebase-admin", "firebase-functions"],
+    assert.deepEqual(Object.keys(pkg.dependencies).sort(), [
+      "@cafemenu/deployer",
+      "@cafemenu/shared",
+      "firebase-admin",
+      "firebase-functions",
+    ]);
+    assert.equal(
+      pkg.dependencies["@cafemenu/deployer"],
+      "file:vendor/packages/deployer",
     );
-    assert.equal(pkg.dependencies["@cafemenu/deployer"], "file:vendor/packages/deployer");
-    assert.equal(JSON.parse(await readFile(join(out, "package.json"), "utf8")).private, true);
+    assert.equal(
+      JSON.parse(await readFile(join(out, "package.json"), "utf8")).private,
+      true,
+    );
 
     for (const path of [
       "src/index.mjs",
@@ -40,8 +48,17 @@ describe("the staged copy that firebase deploy uploads", () => {
       assert.ok(await exists(join(out, path)), `${path} is staged`);
     }
     // Tests and the other apps stay behind.
-    assert.equal(await exists(join(out, "vendor/packages/deployer/tests")), false);
-    assert.equal(await exists(join(out, "vendor/scripts/release/__tests__")), false);
-    assert.deepEqual((await readdir(join(out, "vendor"))).sort(), ["packages", "scripts"]);
+    assert.equal(
+      await exists(join(out, "vendor/packages/deployer/tests")),
+      false,
+    );
+    assert.equal(
+      await exists(join(out, "vendor/scripts/release/__tests__")),
+      false,
+    );
+    assert.deepEqual((await readdir(join(out, "vendor"))).sort(), [
+      "packages",
+      "scripts",
+    ]);
   });
 });

@@ -92,7 +92,11 @@ let cached = null;
 
 /** The production env, built on first use. */
 export function runtimeEnv() {
-  cached ??= build();
+  // A setup that failed is tried again by the next call, not remembered.
+  cached ??= build().catch((error) => {
+    cached = null;
+    throw error;
+  });
   return cached;
 }
 
