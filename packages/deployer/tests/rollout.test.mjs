@@ -476,6 +476,7 @@ describe("from the command line", () => {
       failurePercent: 12.5,
       rollouts: "my rollouts.json",
       log: "cafemenu-deploys.json",
+      releases: undefined,
       package: undefined,
       sha256: undefined,
       flags: "--cafes cafes.json --rollouts 'my rollouts.json' --key key.json",

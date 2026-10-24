@@ -27,5 +27,16 @@ export {
 } from "./migrations.mjs";
 export { PERMISSIONS, permissionsFor } from "./permissions.mjs";
 export { compareVersions, parseVersion } from "./release-package.mjs";
-export { crossesThreshold, planRollout, skipReason } from "./rollout-plan.mjs";
+export {
+  crossesThreshold,
+  forcedMove,
+  forcedReason,
+  planRollout,
+  skipReason,
+} from "./rollout-plan.mjs";
+export {
+  fetchPublishedReleases,
+  readReleasesFile,
+  releasesFromGitHub,
+} from "./release-list.mjs";
 export { createJsonRolloutStore } from "./rollout-store.mjs";

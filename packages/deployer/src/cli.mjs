@@ -16,6 +16,7 @@ import { DEFAULT_APP_NAME, provision } from "./commands/provision.mjs";
 import { deployRelease, syncBranding } from "./commands/release.mjs";
 import { rollback } from "./commands/rollback.mjs";
 import { rollout } from "./commands/rollout.mjs";
+import { fetchPublishedReleases, readReleasesFile } from "./release-list.mjs";
 import { DEFAULT_LOG_FILE, createJsonDeployLog } from "./deploy-log.mjs";
 import { ActionNeededError, ApiError, UsageError } from "./errors.mjs";
 import { createGoogleClient } from "./http.mjs";
@@ -179,7 +180,7 @@ deployer deploy --project <id> [--rules <file>] [--indexes <file>]
     noProject: true,
     usage: `deployer rollout --version <x.y.z> --cafes <cafes.json>
                   [--batch-size <n>] [--failure-threshold <percent>]
-                  [--rollouts <file>] [--log <file>]
+                  [--rollouts <file>] [--log <file>] [--releases <file>]
                   [--package <archive>] [--sha256 <hex>] [--dry-run]
 deployer rollout --resume <rollout-id> --cafes <cafes.json> [the same options]
 
@@ -189,6 +190,12 @@ deployer rollout --resume <rollout-id> --cafes <cafes.json> [the same options]
   a stable release also goes to cafes pinned to its minor line (a patch); a
   cafe never moves down. Each deploy smoke-tests the cafe and rolls it back
   if that fails.
+
+  Support window: only the latest two minor lines are supported. A stable
+  release of a supported line also moves the cafes pinned to an older line
+  once its "upgrade by" date has passed (30 days after it stopped being
+  supported), and moves their pin to the new line. The window is read from
+  GitHub's published releases, or from --releases.
 
   The rollout pauses, before the next cafe, when the canary fails or when
   more than --failure-threshold percent of a batch fails. Exits 3 then, and
@@ -209,6 +216,8 @@ deployer rollout --resume <rollout-id> --cafes <cafes.json> [the same options]
                       (default: ${DEFAULT_FAILURE_PERCENT}, "more than 1 in 5")
   --rollouts <file>   Where rollouts are remembered (default: ${DEFAULT_ROLLOUT_FILE})
   --log <file>        The deploy log all the cafes share (default: ${DEFAULT_LOG_FILE})
+  --releases <file>   The published releases as JSON ({version, channel,
+                      publishedAt, withdrawn}) instead of GitHub's list
   --package <file>    A local cafemenu-cafe-<version>.tar.gz, with SHA256SUMS
                       next to it, instead of downloading it once per cafe
   --sha256 <hex>      The archive's expected SHA-256
@@ -222,6 +231,7 @@ deployer rollout --resume <rollout-id> --cafes <cafes.json> [the same options]
       "failure-threshold": { type: "string" },
       rollouts: { type: "string" },
       log: { type: "string" },
+      releases: { type: "string" },
       package: { type: "string" },
       sha256: { type: "string" },
     },
@@ -445,6 +455,7 @@ export function commandOptions(command, values) {
         failurePercent: percent === undefined ? undefined : Number(percent),
         rollouts: values.rollouts?.trim() || DEFAULT_ROLLOUT_FILE,
         log: values.log?.trim() || DEFAULT_LOG_FILE,
+        releases: values.releases?.trim() || undefined,
         package: values.package?.trim() || undefined,
         sha256,
       };
@@ -453,6 +464,7 @@ export function commandOptions(command, values) {
         ["--cafes", options.cafes],
         ["--rollouts", options.rollouts, DEFAULT_ROLLOUT_FILE],
         ["--log", options.log, DEFAULT_LOG_FILE],
+        ["--releases", options.releases],
         ["--key", values.key],
         ["--package", options.package],
         ["--sha256", options.sha256],
@@ -542,7 +554,7 @@ const RUN = {
  * of one cafe, which is `deploy --version` with that cafe's project, site
  * and settings.
  */
-function rolloutContext(parsed, { out, now, projectContext }) {
+function rolloutContext(parsed, { out, now, projectContext, deps }) {
   const { options } = parsed;
   return {
     log: createLogger({ write: out, dryRun: parsed.dryRun }),
@@ -550,6 +562,10 @@ function rolloutContext(parsed, { out, now, projectContext }) {
     now,
     directory: createJsonCafeDirectory(options.cafes),
     store: createJsonRolloutStore(options.rollouts),
+    listReleases: () =>
+      options.releases
+        ? readReleasesFile(options.releases, deps.readFile)
+        : fetchPublishedReleases(deps.fetchImpl),
     deployCafe: (cafe, { version, write }) =>
       deployRelease(projectContext(cafe.projectId, write), {
         release: true,
@@ -630,7 +646,7 @@ export async function main(argv, deps = {}) {
     });
     const ctx =
       parsed.command === "rollout"
-        ? rolloutContext(parsed, { out, now, projectContext })
+        ? rolloutContext(parsed, { out, now, projectContext, deps })
         : projectContext(parsed.project, out);
     const result = await RUN[parsed.command](ctx, parsed.options);
     return result?.ok === false ? EXIT.actionNeeded : EXIT.ok;

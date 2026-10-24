@@ -49,9 +49,11 @@ export function cafeEntry(id, release = {}, extra = {}) {
  * A rollout over `entries` (cafes.json entries) with a fake per-cafe deploy.
  * `fails` maps a cafe id to what its deploy does: "error" throws an Error,
  * "smoke" throws a SmokeTestError that was rolled back, "stuck" one whose
- * rollback failed too. It can be changed between runs.
+ * rollback failed too. It can be changed between runs. `releases` are the
+ * published releases the support window is read from (an Error to have
+ * reading them fail; left out, the rollout is not given any).
  */
-export async function rolloutHarness(entries, { fails = {} } = {}) {
+export async function rolloutHarness(entries, { fails = {}, releases } = {}) {
   const dir = await tempDir();
   const cafesPath = join(dir, "cafes.json");
   await writeFile(cafesPath, JSON.stringify({ cafes: entries }, null, 2));
@@ -63,6 +65,7 @@ export async function rolloutHarness(entries, { fails = {} } = {}) {
     store,
     directory,
     fails,
+    releases,
     deployed: [],
     lines: [],
     clock: 0,
@@ -89,6 +92,12 @@ export async function rolloutHarness(entries, { fails = {} } = {}) {
           directory,
           store,
           deployCafe: h.deployCafe,
+          ...(h.releases !== undefined && {
+            listReleases: async () => {
+              if (h.releases instanceof Error) throw h.releases;
+              return h.releases;
+            },
+          }),
         },
         { flags: "--cafes cafes.json", ...options },
       );
