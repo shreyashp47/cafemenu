@@ -525,6 +525,24 @@ describe("a new release", () => {
   });
 });
 
+describe("one cafe's trouble", () => {
+  it("never stops the emails to the others", async () => {
+    const p = await platform();
+    p.addCafe({ release: { pinned: "1.4", current: "1.4.1" } });
+    p.addCafe({ release: { pinned: "1.4", current: "1.4.1" } });
+    const getOwnerEmail = p.store.getOwnerEmail;
+    p.store.getOwnerEmail = async (uid, fallback) => {
+      if (uid === "owner1") throw new Error("Auth is down");
+      return getOwnerEmail(uid, fallback);
+    };
+    const result = await p.created("1.5.0");
+    assert.deepEqual(result.failed, [
+      { cafe: "cafe1", kind: "release-available", error: "Auth is down" },
+    ]);
+    assert.deepEqual(p.sentTo(), ["owner2@example.com"]);
+  });
+});
+
 describe("a line that is no longer supported", () => {
   it("gets the upgrade-required email, with the date, whatever the owner's settings", async () => {
     const p = await platform();

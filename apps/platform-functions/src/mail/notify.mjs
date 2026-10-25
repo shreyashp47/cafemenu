@@ -47,22 +47,35 @@ const newResult = () => ({ sent: [], skipped: [], failed: [] });
  * apart from the cafe's name and the links, which are added here.
  */
 async function deliver(env, cafe, { kind, key, data }, result) {
+  const { log } = env;
+  const about = { cafe: cafe.id, kind, key };
+  try {
+    const why = await send(env, cafe, { kind, key, data }, about);
+    if (why) {
+      log("info", `Email not sent: ${why}`, about);
+      result.skipped.push({ cafe: cafe.id, kind, why });
+    } else {
+      result.sent.push({ cafe: cafe.id, kind });
+    }
+  } catch (error) {
+    log("error", `Email failed: ${error.message}`, about);
+    result.failed.push({ cafe: cafe.id, kind, error: error.message });
+  }
+}
+
+/** Sends it; returns why it wasn't sent, or null when it was. Throws when the send fails. */
+async function send(env, cafe, { kind, key, data }, about) {
   const { store, mail, log } = env;
   const { essential } = EMAIL_KINDS[kind];
-  const about = { cafe: cafe.id, kind, key };
-  const skip = (why) => {
-    log("info", `Email not sent: ${why}`, about);
-    result.skipped.push({ cafe: cafe.id, kind, why });
-  };
 
   if (!essential && cafe.emails?.releaseNotices === false) {
-    return skip("the owner unsubscribed");
+    return "the owner unsubscribed";
   }
   if (!essential && !mail.unsubscribeUrl) {
-    return skip("UNSUBSCRIBE_URL isn't set, and these emails need the link");
+    return "UNSUBSCRIBE_URL isn't set, and these emails need the link";
   }
   const to = await store.getOwnerEmail(cafe.ownerUid, cafe.ownerEmail);
-  if (!to) return skip("the owner has no email address");
+  if (!to) return "the owner has no email address";
 
   let unsubscribeUrl = null;
   let headers;
@@ -82,16 +95,16 @@ async function deliver(env, cafe, { kind, key, data }, result) {
   });
 
   if (!(await store.claimMail(cafe.id, key, env.now()))) {
-    return skip("already sent");
+    return "already sent";
   }
   try {
     const { id } = await mail.sender.send({ to, ...email, headers });
     log("info", `Email sent: ${email.subject}`, { ...about, id });
-    result.sent.push({ cafe: cafe.id, kind });
+    return null;
   } catch (error) {
+    // Give the claim back, so the next write tries again.
     await store.unclaimMail(cafe.id, key);
-    log("error", `Email failed: ${error.message}`, about);
-    result.failed.push({ cafe: cafe.id, kind, error: error.message });
+    throw error;
   }
 }
 
