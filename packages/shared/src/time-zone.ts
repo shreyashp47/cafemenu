@@ -177,6 +177,38 @@ export function dayStartIn(timeZone: string, key: string): number {
 }
 
 /**
+ * The instant a clock in `timeZone` shows `wall`, "YYYY-MM-DD HH:MM" (what
+ * wallTimeIn gives back): how a form that asks for a date and time in the
+ * cafe's own zone gets a time to store, whatever zone the device is in. In
+ * the hour a daylight-saving jump skips, the moment the clock jumps; in the
+ * hour that repeats, the first of the two. Null when `wall` isn't one.
+ */
+export function instantIn(timeZone: string, wall: string): number | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})$/.exec(wall);
+  if (!match) return null;
+  const [y, m, d, hh, mm] = match.slice(1).map(Number);
+  if (m < 1 || m > 12 || d < 1 || d > 31 || hh > 23 || mm > 59) return null;
+  const guess = midnightUtc(y, m - 1, d) + (hh * 60 + mm) * 60_000;
+  if (wallTimeIn("UTC", guess) !== wall) return null; // 31 February
+  // As in dayStartIn: the clock reads `wall` within this window wherever the
+  // zone is. Keep `lo` before it and `hi` at or after it, to the minute.
+  let lo = guess - (MAX_UTC_OFFSET + 60) * 60_000;
+  let hi = guess - (MIN_UTC_OFFSET - 60) * 60_000;
+  while (hi - lo > 60_000) {
+    const mid = lo + Math.floor((hi - lo) / 120_000) * 60_000;
+    if (wallTimeIn(timeZone, mid) < wall) lo = mid;
+    else hi = mid;
+  }
+  // A repeated hour (or half hour, on Lord Howe Island) shows `wall` twice;
+  // the search may have found the second.
+  for (const minutes of [60, 30]) {
+    const earlier = hi - minutes * 60_000;
+    if (wallTimeIn(timeZone, earlier) === wall) return earlier;
+  }
+  return hi;
+}
+
+/**
  * The day keys firestore.rules accepts for an order placed at `ms`, given the
  * zone's offsets from the settings: the UTC date of `ms` plus each offset. One
  * key for a zone without daylight saving; for one with it, the two differ each

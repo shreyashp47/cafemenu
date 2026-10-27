@@ -1,5 +1,5 @@
 /**
- * Requests to CafeMenu's backend (#77): what the console writes to
+ * Requests to CafeMenu's backend (#77, and the admin's, #78): what the console writes to
  * `requests/{id}` in the platform's Firestore, and what the backend answers
  * on the same document. One contract for the three sides, so they agree:
  *
@@ -27,19 +27,64 @@
  * own bookkeeping (`attempts`, `lease`, `startedAt`, `finishedAt`).
  */
 
+import {
+  MAINTENANCE_REASONS,
+  REACTIVATION_REASONS,
+  REASON_NOTE_MAX,
+  SUSPENSION_REASONS,
+} from "./admin-policy.mjs";
+import { MAINTENANCE_MESSAGE_MAX } from "./maintenance.mjs";
+
 /**
+ * What an owner (or the admin, for any cafe) may ask:
+ *
  *   provision      set the cafe's Firebase project up and put CafeMenu on it
  *   check          "Check connection": may the deploy account do its work?
  *   deploy         upgrade to `params.version`
  *   rollback       back to the version before
  *   sync-branding  put the cafe's saved settings and logo on its site
  */
-export const REQUEST_KINDS = Object.freeze([
+export const OWNER_REQUEST_KINDS = Object.freeze([
   "provision",
   "check",
   "deploy",
   "rollback",
   "sync-branding",
+]);
+
+/**
+ * What only the admin may ask (#78, docs/super-admin-requirements.md). Each
+ * carries a reason (admin-policy.mjs) and is written to the admin log:
+ *
+ *   suspend          suspend the cafe's owner: their login, their requests,
+ *                    their rollouts; `effectiveAt` for a notice period
+ *   reactivate       undo a suspension
+ *   delete-owner     remove the owner's login and every record of them but
+ *                    the admin log; `confirm` is the cafe's web address
+ *   maintenance-on   take the cafe's site into maintenance (the admin's)
+ *   maintenance-off  end the admin's maintenance
+ *   appoint-admin    make the account with `email` an admin (no cafe)
+ *   remove-admin     stop it being one (no cafe)
+ */
+export const ADMIN_REQUEST_KINDS = Object.freeze([
+  "suspend",
+  "reactivate",
+  "delete-owner",
+  "maintenance-on",
+  "maintenance-off",
+  "appoint-admin",
+  "remove-admin",
+]);
+
+/** The admin kinds about an account rather than a cafe: `cafeId` is null. */
+export const CAFELESS_REQUEST_KINDS = Object.freeze([
+  "appoint-admin",
+  "remove-admin",
+]);
+
+export const REQUEST_KINDS = Object.freeze([
+  ...OWNER_REQUEST_KINDS,
+  ...ADMIN_REQUEST_KINDS,
 ]);
 
 /** The kinds that become a `deployments/{id}` the backend then runs. */
@@ -84,6 +129,80 @@ const exactly = (params, keys) => {
   return own.length === keys.length && keys.every((k) => own.includes(k));
 };
 
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+/** A batch of bulk maintenance requests made together. */
+const BATCH = /^[A-Za-z0-9_-]{1,64}$/;
+
+const isText = (value, max) => typeof value === "string" && value.length <= max;
+/** A time as the console sends it (a Date) or Firestore hands it back. */
+const isTimeOrNull = (value) =>
+  value === null ||
+  (value instanceof Date && Number.isFinite(value.getTime())) ||
+  typeof value?.toMillis === "function";
+
+/** An admin request's reason and note, from `reasons`. */
+const reasonProblem = (params, reasons) =>
+  !reasons.includes(params.reason)
+    ? "reason"
+    : !isText(params.note, REASON_NOTE_MAX)
+      ? "note"
+      : null;
+
+const ADMIN_PARAMS = {
+  suspend: (p) =>
+    !exactly(p, ["reason", "note", "effectiveAt"])
+      ? "params"
+      : (reasonProblem(p, SUSPENSION_REASONS) ??
+        (isTimeOrNull(p.effectiveAt) ? null : "time")),
+  reactivate: (p) =>
+    !exactly(p, ["reason", "note"])
+      ? "params"
+      : reasonProblem(p, REACTIVATION_REASONS),
+  "delete-owner": (p) =>
+    !exactly(p, ["reason", "note", "confirm"])
+      ? "params"
+      : (reasonProblem(p, SUSPENSION_REASONS) ??
+        (isText(p.confirm, 64) && p.confirm !== "" ? null : "confirm")),
+  "maintenance-on": (p) =>
+    !exactly(p, [
+      "reason",
+      "note",
+      "message",
+      "until",
+      "startsAt",
+      "endsAt",
+      "batch",
+    ])
+      ? "params"
+      : (reasonProblem(p, MAINTENANCE_REASONS) ??
+        (!isText(p.message, MAINTENANCE_MESSAGE_MAX)
+          ? "message"
+          : ![p.until, p.startsAt, p.endsAt].every(isTimeOrNull)
+            ? "time"
+            : p.batch === null || BATCH.test(p.batch)
+              ? null
+              : "batch")),
+  "maintenance-off": (p) =>
+    !exactly(p, ["note", "batch"])
+      ? "params"
+      : !isText(p.note, REASON_NOTE_MAX)
+        ? "note"
+        : p.batch === null || BATCH.test(p.batch)
+          ? null
+          : "batch",
+  "appoint-admin": (p) =>
+    !exactly(p, ["email", "note"])
+      ? "params"
+      : typeof p.email === "string" &&
+          p.email.length <= 254 &&
+          EMAIL.test(p.email)
+        ? isText(p.note, REASON_NOTE_MAX)
+          ? null
+          : "note"
+        : "email",
+};
+ADMIN_PARAMS["remove-admin"] = ADMIN_PARAMS["appoint-admin"];
+
 /**
  * What is wrong with a request's kind and params, or null when nothing is:
  *
@@ -91,10 +210,18 @@ const exactly = (params, keys) => {
  *   params      not a map, or not exactly the keys the kind takes
  *   project-id  check: `projectId` is not a project ID
  *   version     deploy: `version` is not a release version
+ *   reason      an admin kind: not one of the policy's reasons for it
+ *   note        an admin kind: the free text is too long, or not text
+ *   time        a time that is neither a Date nor a Timestamp, nor null
+ *   message     maintenance-on: the customers' message is too long
+ *   batch       maintenance: the batch id isn't one
+ *   confirm     delete-owner: the typed web address is missing
+ *   email       appoint-admin, remove-admin: not an email address
  */
 export function requestParamsProblem(kind, params) {
   if (!REQUEST_KINDS.includes(kind)) return "kind";
   if (!isPlainObject(params)) return "params";
+  if (Object.hasOwn(ADMIN_PARAMS, kind)) return ADMIN_PARAMS[kind](params);
   switch (kind) {
     case "check":
       if (!exactly(params, ["projectId"])) return "params";
@@ -120,8 +247,17 @@ export function requestParamsProblem(kind, params) {
  * so a mistake shows up here rather than as "permission-denied".
  */
 export function newRequestRecord({ cafeId, kind, params = {}, by }, createdAt) {
-  if (typeof cafeId !== "string" || !CAFE_ID.test(cafeId)) {
-    throw new TypeError("A request needs the id of the cafe it is about.");
+  const cafeless = CAFELESS_REQUEST_KINDS.includes(kind);
+  if (
+    cafeless
+      ? cafeId !== null
+      : typeof cafeId !== "string" || !CAFE_ID.test(cafeId)
+  ) {
+    throw new TypeError(
+      cafeless
+        ? "This request is about an account, not a cafe."
+        : "A request needs the id of the cafe it is about.",
+    );
   }
   if (typeof by !== "string" || by === "") {
     throw new TypeError("A request needs who asked.");
@@ -141,3 +277,5 @@ export function newRequestRecord({ cafeId, kind, params = {}, by }, createdAt) {
 }
 
 export const isOpenRequest = (status) => OPEN_REQUEST_STATUSES.includes(status);
+
+export const isAdminRequestKind = (kind) => ADMIN_REQUEST_KINDS.includes(kind);
