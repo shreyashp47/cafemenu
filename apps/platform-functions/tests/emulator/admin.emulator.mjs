@@ -24,10 +24,12 @@ import {
 import {
   CAFE_PROJECT,
   account,
+  adminAuth,
   ask,
   browser,
   db,
   finished,
+  makeAdmin,
   watch,
   until,
   worker,
@@ -194,5 +196,51 @@ describe("the super admin's requests, done by the worker", () => {
     const all = logs.join("\n");
     assert.doesNotMatch(all, /@/);
     assert.doesNotMatch(all, /Spam orders/);
+  });
+
+  it("makes the first admin from the command line, and takes it back", async () => {
+    const ada = await account("ada@platform.test");
+    try {
+      assert.match(
+        await makeAdmin("--email", "ADA@platform.test"),
+        /ada@platform\.test is an admin/,
+      );
+      assert.equal(
+        (await adminAuth.getUser(ada.uid)).customClaims?.admin,
+        true,
+      );
+      assert.equal(
+        (await db.doc(`owners/${ada.uid}`).get()).data().admin,
+        true,
+      );
+      const logged = (await db.collection("adminLog").get()).docs
+        .map((d) => d.data())
+        .filter((e) => e.by === "command-line");
+      assert.deepEqual(
+        logged.map((e) => [e.action, e.details.uid]),
+        [["appoint-admin", ada.uid]],
+      );
+
+      // Once her token has the claim, the rules let her read the log.
+      await ada.auth.currentUser.getIdToken(true);
+      const entries = await getDocs(collection(ada.db, "adminLog"));
+      assert.ok(entries.size > 0);
+
+      await makeAdmin("--email", "ada@platform.test", "--remove");
+      assert.notEqual(
+        (await adminAuth.getUser(ada.uid)).customClaims?.admin,
+        true,
+      );
+      assert.equal(
+        (await db.doc(`owners/${ada.uid}`).get()).data().admin,
+        false,
+      );
+      await assert.rejects(
+        makeAdmin("--email", "nobody@platform.test"),
+        /No CafeMenu account has the email/,
+      );
+    } finally {
+      await ada.close();
+    }
   });
 });

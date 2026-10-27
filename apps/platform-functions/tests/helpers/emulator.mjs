@@ -93,24 +93,25 @@ export const ask = (who, cafeId, kind, params = {}) =>
 const runWorker = promisify(execFile);
 
 /** One run of the backend, as the workflow does it. Returns its log. */
-export async function worker(...args) {
-  const { stdout } = await runWorker(
-    process.execPath,
-    ["src/worker/main.mjs", ...args],
-    {
-      cwd: WORKER_DIR,
-      env: {
-        ...process.env,
-        GCLOUD_PROJECT: PROJECT,
-        FIRESTORE_EMULATOR_HOST:
-          process.env.FIRESTORE_EMULATOR_HOST ?? `${HOST}:${FS_PORT}`,
-        FIREBASE_AUTH_EMULATOR_HOST:
-          process.env.FIREBASE_AUTH_EMULATOR_HOST ?? `${HOST}:${AUTH_PORT}`,
-        CAFEMENU_FAKE_GOOGLE: "http://127.0.0.1:8399",
-      },
-      timeout: 120_000,
+export const worker = (...args) => run("src/worker/main.mjs", args);
+
+/** `npm run make-admin`, as the maintainer runs it once. Returns what it said. */
+export const makeAdmin = (...args) => run("src/worker/make-admin.mjs", args);
+
+async function run(script, args) {
+  const { stdout } = await runWorker(process.execPath, [script, ...args], {
+    cwd: WORKER_DIR,
+    env: {
+      ...process.env,
+      GCLOUD_PROJECT: PROJECT,
+      FIRESTORE_EMULATOR_HOST:
+        process.env.FIRESTORE_EMULATOR_HOST ?? `${HOST}:${FS_PORT}`,
+      FIREBASE_AUTH_EMULATOR_HOST:
+        process.env.FIREBASE_AUTH_EMULATOR_HOST ?? `${HOST}:${AUTH_PORT}`,
+      CAFEMENU_FAKE_GOOGLE: "http://127.0.0.1:8399",
     },
-  );
+    timeout: 120_000,
+  });
   return stdout;
 }
 
