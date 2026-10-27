@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes } from "react";
+import type { ComponentProps } from "react";
 import { buttonClass, type Variant } from "./ButtonLink";
 
 /** A <button> that looks like ButtonLink. Disabled ones fade. */
@@ -7,7 +7,7 @@ export function Button({
   className = "",
   type = "button",
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant }) {
+}: ComponentProps<"button"> & { variant?: Variant }) {
   return (
     <button
       type={type}
@@ -22,7 +22,7 @@ export function TextButton({
   className = "",
   type = "button",
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement>) {
+}: ComponentProps<"button">) {
   return (
     <button
       type={type}

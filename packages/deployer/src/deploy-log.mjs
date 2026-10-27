@@ -32,13 +32,11 @@
  *
  * createJsonDeployLog is the CLI's: one JSON file on disk.
  *
- * TODO(#28): a platform-Firestore DeployLog for the console, writing what
- * apps/console/src/lib/platform/model.ts reads: `cafes/{id}.release.current`
- * and `.previous` (version strings only, so the Release details above need a
- * home of their own, e.g. a field on the cafe or on `releases/{version}`), and
- * one `deployments/{id}` per run ({cafeId, ownerUid, kind, version,
- * fromVersion, status, trigger, steps, error, createdAt, finishedAt}; kind
- * "branding" is what this file calls sync-branding).
+ * The platform's own, on Firestore, is apps/platform-functions/src/deploy-log.mjs
+ * (#28): `cafes/{id}.release.current` and `.previous` as version strings for
+ * the console, the rest of the CafeRecord in a document the console cannot
+ * read, and each run's Deployment as `deployments/{id}` (kind "branding" is
+ * what this file calls sync-branding).
  */
 import { randomUUID } from "node:crypto";
 import { readFile, rename, writeFile } from "node:fs/promises";

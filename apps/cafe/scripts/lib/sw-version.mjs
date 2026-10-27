@@ -18,6 +18,15 @@ import { join, relative, sep } from "node:path";
 export const PLACEHOLDER = "__SW_VERSION__";
 export const SW_FILE = "sw.js";
 
+/**
+ * The cache version a service worker's source carries (or still the
+ * placeholder), or null. Checking a deployed site reads it back with this
+ * (scripts/entry.mjs); the deployer reads it with the same pattern.
+ */
+export function swVersionIn(source) {
+  return /\bconst VERSION = "([^"]*)"/.exec(source)?.[1] ?? null;
+}
+
 async function listFiles(dir) {
   const entries = await readdir(dir, { withFileTypes: true });
   const nested = await Promise.all(

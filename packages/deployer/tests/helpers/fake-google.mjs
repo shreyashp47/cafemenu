@@ -5,10 +5,15 @@
  * that a second run sees what the first one did, and records every request
  * so tests can assert on exactly what was sent.
  *
+ * It also serves each Hosting site's address (<site>.web.app) from the live
+ * release, for the smoke test: see fake-site.mjs.
+ *
  * It is a model of the documented behaviour, not of Google's real quirks;
  * those are what the Phase 0 spikes are for.
  */
 import { createHash, createPublicKey, createVerify } from "node:crypto";
+
+import { isSiteHost, serveSite } from "./fake-site.mjs";
 
 export const PROJECT = "test-cafe";
 export const PROJECT_NUMBER = "123456789012";
@@ -677,6 +682,10 @@ export function createFakeGoogle({ publicKeyPem, state = freshState() } = {}) {
 
   async function fetchImpl(input, init = {}) {
     const url = new URL(String(input));
+    // The cafe's own address: not a Google API, so not in `calls`.
+    if (isSiteHost(url.hostname)) {
+      return serveSite({ state, calls, project: PROJECT }, url, init);
+    }
     const method = init.method ?? "GET";
     const headers = Object.fromEntries(
       Object.entries(init.headers ?? {}).map(([k, v]) => [k.toLowerCase(), v]),

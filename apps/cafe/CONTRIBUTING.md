@@ -102,7 +102,7 @@ These check what a unit test cannot. Each one starts `next dev` itself, or uses
 ```bash
 node scripts/screenshot.mjs   # every screen at 5 widths; fails on overflow
 npm run audit                 # WCAG A/AA, in Chromium *and* WebKit (not `npm audit`)
-npm run test:entry            # every way a customer reaches the menu
+npm run test:entry            # every way a customer reaches the menu (--url, --table, --sw-version)
 npm run flow                  # customer → staff → customer, end to end
 npm run preview               # serve an existing ./out build on port 4320
 ```

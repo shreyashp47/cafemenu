@@ -1,0 +1,10 @@
+.deploy/
+.emulator/
+node_modules/
+*.log
+# The maintainer's settings for a deploy (see .env.example); the emulator's
+# own file is kept.
+.env
+.env.*
+!.env.demo-cafemenu
+!.env.example

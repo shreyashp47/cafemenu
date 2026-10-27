@@ -7,6 +7,7 @@
 import { parseArgs } from "node:util";
 
 import { createTokenProvider, loadServiceAccountKey } from "./auth.mjs";
+import { createJsonCafeDirectory } from "./cafe-directory.mjs";
 import { check } from "./commands/check.mjs";
 import { PARTS, deploy } from "./commands/deploy.mjs";
 import { migrate } from "./commands/migrate.mjs";
@@ -14,12 +15,23 @@ import { owner } from "./commands/owner.mjs";
 import { DEFAULT_APP_NAME, provision } from "./commands/provision.mjs";
 import { deployRelease, syncBranding } from "./commands/release.mjs";
 import { rollback } from "./commands/rollback.mjs";
+import { rollout } from "./commands/rollout.mjs";
+import { fetchPublishedReleases, readReleasesFile } from "./release-list.mjs";
 import { DEFAULT_LOG_FILE, createJsonDeployLog } from "./deploy-log.mjs";
 import { ActionNeededError, ApiError, UsageError } from "./errors.mjs";
 import { createGoogleClient } from "./http.mjs";
 import { createLogger } from "./log.mjs";
+import { PROJECT_ID, SITE_NAME } from "./names.mjs";
 import { COMMANDS_WITH_PERMISSIONS } from "./permissions.mjs";
 import { releaseVersion } from "./release-package.mjs";
+import {
+  DEFAULT_BATCH_SIZE,
+  DEFAULT_FAILURE_PERCENT,
+} from "./rollout-plan.mjs";
+import {
+  DEFAULT_ROLLOUT_FILE,
+  createJsonRolloutStore,
+} from "./rollout-store.mjs";
 
 export const EXIT = { ok: 0, failed: 1, usage: 2, actionNeeded: 3 };
 
@@ -163,6 +175,67 @@ deployer deploy --project <id> [--rules <file>] [--indexes <file>]
       log: { type: "string" },
     },
   },
+  rollout: {
+    summary: "Deploy a release to every cafe that should get it, in waves",
+    noProject: true,
+    usage: `deployer rollout --version <x.y.z> --cafes <cafes.json>
+                  [--batch-size <n>] [--failure-threshold <percent>]
+                  [--rollouts <file>] [--log <file>] [--releases <file>]
+                  [--package <archive>] [--sha256 <hex>] [--dry-run]
+deployer rollout --resume <rollout-id> --cafes <cafes.json> [the same options]
+
+  Works out which cafes get <x.y.z> from their channel and pin, then runs
+  deploy --version on each: the canary first, then beta cafes, then stable
+  and pinned cafes, the last two in batches. A beta goes to beta cafes only;
+  a stable release also goes to cafes pinned to its minor line (a patch); a
+  cafe never moves down. Each deploy smoke-tests the cafe and rolls it back
+  if that fails.
+
+  Support window: only the latest two minor lines are supported. A stable
+  release of a supported line also moves the cafes pinned to an older line
+  once its "upgrade by" date has passed (30 days after it stopped being
+  supported), and moves their pin to the new line. The window is read from
+  GitHub's published releases, or from --releases.
+
+  The rollout pauses, before the next cafe, when the canary fails or when
+  more than --failure-threshold percent of a batch fails. Exits 3 then, and
+  whenever a cafe failed or was rolled back. --resume carries on: cafes that
+  are done stay done, the others are tried again. This takes no --project:
+  every cafe in the list has its own.
+
+  --version <x.y.z>   The release to roll out (not needed with --resume)
+  --cafes <file>      The cafes, as JSON: {"cafes": [{id, projectId, site,
+                      settingsFile, logoFile, canary, status, release:
+                      {channel, pinned, current, previous}}]}. Paths are
+                      relative to the file. Updated as cafes finish.
+  --resume <id>       Carry on with a paused (or stopped) rollout
+  --batch-size <n>    Cafes per batch in the beta and stable waves
+                      (default: ${DEFAULT_BATCH_SIZE})
+  --failure-threshold <percent>
+                      Pause when more than this share of a batch fails
+                      (default: ${DEFAULT_FAILURE_PERCENT}, "more than 1 in 5")
+  --rollouts <file>   Where rollouts are remembered (default: ${DEFAULT_ROLLOUT_FILE})
+  --log <file>        The deploy log all the cafes share (default: ${DEFAULT_LOG_FILE})
+  --releases <file>   The published releases as JSON ({version, channel,
+                      publishedAt, withdrawn}) instead of GitHub's list
+  --package <file>    A local cafemenu-cafe-<version>.tar.gz, with SHA256SUMS
+                      next to it, instead of downloading it once per cafe
+  --sha256 <hex>      The archive's expected SHA-256
+
+  With --dry-run, prints the plan and does nothing else.`,
+    options: {
+      version: { type: "string" },
+      cafes: { type: "string" },
+      resume: { type: "string" },
+      "batch-size": { type: "string" },
+      "failure-threshold": { type: "string" },
+      rollouts: { type: "string" },
+      log: { type: "string" },
+      releases: { type: "string" },
+      package: { type: "string" },
+      sha256: { type: "string" },
+    },
+  },
   owner: {
     summary: "Create the owner's account and send the set-password email",
     usage: `deployer owner --project <id> --email <email> --name <name>
@@ -198,11 +271,15 @@ Run \`deployer <command> --help\` for a command's options.`;
 const commandUsage = (name) =>
   `Usage: ${COMMANDS[name].usage}\n\n${GLOBAL_USAGE}`;
 
-const PROJECT_ID = /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/;
-// A site name becomes <name>.web.app, so it must be a DNS label.
-const SITE_NAME = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const REGION = /^[a-z][a-z0-9-]*[0-9]$/;
+
+/** `text` as one shell word, quoted only when it has to be. */
+function shellWord(text) {
+  return /^[\w@%+=:,./-]+$/.test(text)
+    ? text
+    : `'${text.replaceAll("'", "'\\''")}'`;
+}
 
 function required(values, name) {
   const value = values[name]?.trim();
@@ -343,6 +420,61 @@ export function commandOptions(command, values) {
         logo: values.logo?.trim() || undefined,
         log: values.log?.trim() || DEFAULT_LOG_FILE,
       };
+    case "rollout": {
+      if (values.project !== undefined)
+        throw new UsageError(
+          "--project doesn't go with rollout: every cafe in the list has its own.",
+        );
+      const resume = values.resume?.trim() || undefined;
+      if (!resume && values.version === undefined)
+        throw new UsageError(
+          "--version is required, or --resume <rollout-id> to carry on with a rollout.",
+        );
+      const sha256 = values.sha256?.trim().toLowerCase() || undefined;
+      if (sha256 && !/^[0-9a-f]{64}$/.test(sha256))
+        throw new UsageError("--sha256 takes 64 hex digits.");
+      const batch = values["batch-size"]?.trim();
+      if (batch !== undefined && !/^[1-9]\d{0,3}$/.test(batch))
+        throw new UsageError(`--batch-size takes a number of cafes: ${batch}`);
+      const percent = values["failure-threshold"]?.trim();
+      if (
+        percent !== undefined &&
+        !(/^\d{1,3}(\.\d+)?$/.test(percent) && Number(percent) <= 100)
+      )
+        throw new UsageError(
+          `--failure-threshold takes a percentage, 0 to 100: ${percent}`,
+        );
+      const options = {
+        version:
+          values.version === undefined
+            ? undefined
+            : releaseVersion(required(values, "version")),
+        resume,
+        cafes: required(values, "cafes"),
+        batchSize: batch === undefined ? undefined : Number(batch),
+        failurePercent: percent === undefined ? undefined : Number(percent),
+        rollouts: values.rollouts?.trim() || DEFAULT_ROLLOUT_FILE,
+        log: values.log?.trim() || DEFAULT_LOG_FILE,
+        releases: values.releases?.trim() || undefined,
+        package: values.package?.trim() || undefined,
+        sha256,
+      };
+      // What `--resume` is given again, for the message that says how.
+      const again = [
+        ["--cafes", options.cafes],
+        ["--rollouts", options.rollouts, DEFAULT_ROLLOUT_FILE],
+        ["--log", options.log, DEFAULT_LOG_FILE],
+        ["--releases", options.releases],
+        ["--key", values.key],
+        ["--package", options.package],
+        ["--sha256", options.sha256],
+      ];
+      options.flags = again
+        .filter(([, value, fallback]) => value && value !== fallback)
+        .map(([flag, value]) => `${flag} ${shellWord(value)}`)
+        .join(" ");
+      return options;
+    }
     case "owner": {
       const email = required(values, "email").toLowerCase();
       if (!EMAIL.test(email)) throw new UsageError(`Not an email: ${email}`);
@@ -390,8 +522,11 @@ export function parseCommandLine(argv) {
     throw new UsageError(error.message);
   }
   if (values.help) return { help: commandUsage(command), exit: EXIT.ok };
-  const project = required(values, "project");
-  if (!PROJECT_ID.test(project))
+  // A rollout goes to many projects, each from the cafe list.
+  const project = COMMANDS[command].noProject
+    ? undefined
+    : required(values, "project");
+  if (project && !PROJECT_ID.test(project))
     throw new UsageError(`Not a project ID: ${project}`);
   return {
     command,
@@ -410,8 +545,40 @@ const RUN = {
   migrate,
   rollback,
   "sync-branding": syncBranding,
+  rollout,
   owner,
 };
+
+/**
+ * What `rollout` works with: the cafe list, the rollouts file, and a deploy
+ * of one cafe, which is `deploy --version` with that cafe's project, site
+ * and settings.
+ */
+function rolloutContext(parsed, { out, now, projectContext, deps }) {
+  const { options } = parsed;
+  return {
+    log: createLogger({ write: out, dryRun: parsed.dryRun }),
+    dryRun: parsed.dryRun,
+    now,
+    directory: createJsonCafeDirectory(options.cafes),
+    store: createJsonRolloutStore(options.rollouts),
+    listReleases: () =>
+      options.releases
+        ? readReleasesFile(options.releases, deps.readFile)
+        : fetchPublishedReleases(deps.fetchImpl),
+    deployCafe: (cafe, { version, write }) =>
+      deployRelease(projectContext(cafe.projectId, write), {
+        release: true,
+        site: cafe.site,
+        version,
+        settings: cafe.settingsFile,
+        logo: cafe.logoFile ?? undefined,
+        package: options.package,
+        sha256: options.sha256,
+        log: options.log,
+      }),
+  };
+}
 
 /**
  * Runs the CLI and returns the exit code. `deps` replaces the outside world:
@@ -436,38 +603,51 @@ export async function main(argv, deps = {}) {
   }
 
   try {
-    const key = await loadServiceAccountKey({
-      keyPath: parsed.keyPath,
-      env: deps.env ?? process.env,
-      readFile: deps.readFile,
-    });
-    const getToken = createTokenProvider({
-      key,
-      fetchImpl: deps.fetchImpl,
-      now: deps.now,
-    });
-    const api = createGoogleClient({
-      fetchImpl: deps.fetchImpl,
-      getToken,
-      dryRun: parsed.dryRun,
-      sleep: deps.sleep,
-      now: deps.now,
-    });
-    const ctx = {
-      api,
-      log: createLogger({ write: out, dryRun: parsed.dryRun }),
-      project: parsed.project,
+    // A dry-run rollout only prints its plan: no sign-in, no Google.
+    const key =
+      parsed.command === "rollout" && parsed.dryRun
+        ? null
+        : await loadServiceAccountKey({
+            keyPath: parsed.keyPath,
+            env: deps.env ?? process.env,
+            readFile: deps.readFile,
+          });
+    const getToken =
+      key &&
+      createTokenProvider({
+        key,
+        fetchImpl: deps.fetchImpl,
+        now: deps.now,
+      });
+    const now = deps.now && (() => new Date(deps.now()));
+    const sleep =
+      deps.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+    const deployLog =
+      parsed.options.log && createJsonDeployLog(parsed.options.log);
+    /** What a command works with, for one project; its output goes to `write`. */
+    const projectContext = (project, write) => ({
+      api: createGoogleClient({
+        fetchImpl: deps.fetchImpl,
+        getToken,
+        dryRun: parsed.dryRun,
+        sleep: deps.sleep,
+        now: deps.now,
+      }),
+      log: createLogger({ write, dryRun: parsed.dryRun }),
+      project,
       dryRun: parsed.dryRun,
       clientEmail: key.clientEmail,
       readFile: deps.readFile,
       fetchImpl: deps.fetchImpl ?? fetch,
       loadShared: deps.loadShared,
-      now: deps.now && (() => new Date(deps.now())),
-      deployLog: parsed.options.log && createJsonDeployLog(parsed.options.log),
-      sleep:
-        deps.sleep ??
-        ((ms) => new Promise((resolve) => setTimeout(resolve, ms))),
-    };
+      now,
+      deployLog,
+      sleep,
+    });
+    const ctx =
+      parsed.command === "rollout"
+        ? rolloutContext(parsed, { out, now, projectContext, deps })
+        : projectContext(parsed.project, out);
     const result = await RUN[parsed.command](ctx, parsed.options);
     return result?.ok === false ? EXIT.actionNeeded : EXIT.ok;
   } catch (error) {
@@ -480,7 +660,7 @@ export async function main(argv, deps = {}) {
       return EXIT.actionNeeded;
     }
     err(`\n${error.message}`);
-    if (error instanceof ApiError && error.status === 403) {
+    if (error instanceof ApiError && error.status === 403 && parsed.project) {
       err(
         `Run \`deployer check --project ${parsed.project}\` to see which permissions are missing.`,
       );

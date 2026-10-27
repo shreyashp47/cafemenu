@@ -138,7 +138,7 @@ export function tableCount(text: string): number | null {
   return n >= 1 && n <= MAX_TABLE_NUMBER ? n : null;
 }
 
-function isCurrency(code: string): boolean {
+export function isCurrency(code: string): boolean {
   if (!/^[A-Z]{3}$/.test(code)) return false;
   try {
     new Intl.NumberFormat("en", { style: "currency", currency: code });
@@ -148,7 +148,7 @@ function isCurrency(code: string): boolean {
   }
 }
 
-function isLocale(tag: string): boolean {
+export function isLocale(tag: string): boolean {
   try {
     return Intl.getCanonicalLocales(tag)[0] === tag;
   } catch {

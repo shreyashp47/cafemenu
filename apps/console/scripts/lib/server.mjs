@@ -38,6 +38,15 @@ export async function startServer(port) {
   return { base, stop: () => dev.kill("SIGTERM") };
 }
 
+/** Signs in as the demo's platform admin and waits for its cafes. */
+async function signInAdmin(page) {
+  await page.getByLabel("Email").fill("admin@cafemenu.demo");
+  await page.getByLabel("Password").fill("demo-admin");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByRole("heading", { name: "Every cafe", level: 1 }).waitFor();
+  await page.getByRole("article").first().waitFor();
+}
+
 /**
  * Every page of the console, as served, and the states behind its steps:
  * `demo` names a state from demo-states.mjs to load first, and `act` does
@@ -66,6 +75,39 @@ export const ROUTES = [
     },
   },
   { path: "/signup", name: "signup-verify", demo: "verify" },
+  { path: "/admin", name: "admin-signin" },
+  // The demo's own admin, with its sample cafes in every state.
+  { path: "/admin", name: "admin", act: signInAdmin },
+  {
+    path: "/admin",
+    name: "admin-errors",
+    // A release with nothing filled in: every field's problem is on show.
+    act: async (page) => {
+      await signInAdmin(page);
+      await page.getByLabel("Version").fill("1.1.1");
+      await page.getByRole("button", { name: /publish release/i }).click();
+      await page.getByRole("alert").first().waitFor();
+    },
+  },
+  { path: "/setup", name: "setup-signin" },
+  { path: "/setup", name: "setup-project", demo: "project" },
+  { path: "/setup", name: "setup-access", demo: "access" },
+  { path: "/setup", name: "setup-connected", demo: "connected" },
+  { path: "/cafe", name: "cafe-signin" },
+  { path: "/cafe", name: "cafe", demo: "owner" },
+  { path: "/cafe", name: "cafe-running", demo: "ownerRunning" },
+  {
+    path: "/cafe",
+    name: "cafe-errors",
+    demo: "owner",
+    // An empty name, and a currency changed without the box ticked.
+    act: async (page) => {
+      await page.getByLabel("Cafe name").fill("");
+      await page.getByLabel("Currency").selectOption("USD");
+      await page.getByRole("button", { name: /save and update/i }).click();
+      await page.getByText("Give your cafe's name.").waitFor();
+    },
+  },
 ];
 
 /** Opens `route` in `page`: its demo state, the page, then its action. */

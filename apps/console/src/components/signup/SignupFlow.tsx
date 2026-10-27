@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAccount, useDataBundle } from "@/lib/data/hooks";
-import { messages } from "@/lib/messages";
+import { fill, messages } from "@/lib/messages";
+import type { Cafe } from "@/lib/platform/model";
+import { cafeToSetUp } from "@/lib/setup/wizard";
 import {
   clearDraft,
   loadDraft,
@@ -16,10 +18,11 @@ import {
   type SignupStage,
 } from "@/lib/signup/flow";
 import { DemoNotice } from "../DemoNotice";
+import { Rich } from "../Rich";
 import { SavingCafe } from "./SavingCafe";
 import { SignupDone } from "./SignupDone";
 import { SignupForm } from "./SignupForm";
-import { StageHeading } from "./StageHeading";
+import { StageHeading } from "../StageHeading";
 import { VerifyEmail } from "./VerifyEmail";
 
 const { signup } = messages;
@@ -40,6 +43,19 @@ export function SignupFlow() {
     region: string;
     menuCount: number;
   } | null>(null);
+
+  // A verified owner back at the form may have a cafe waiting for setup.
+  const [cafes, setCafes] = useState<Cafe[]>([]);
+  const verifiedUid = user?.emailVerified ? user.uid : null;
+  useEffect(() => {
+    setCafes([]);
+    if (!data || !verifiedUid) return;
+    return data.cafes.subscribeMine(verifiedUid, setCafes, () => setCafes([]));
+  }, [data, verifiedUid]);
+  const inSetup = cafeToSetUp(
+    cafes.filter((c) => c.status === "draft"),
+    null,
+  );
 
   const stage = signupStage({
     ready: ready && draftRead && data !== null,
@@ -109,7 +125,22 @@ export function SignupFlow() {
               focus={moved}
             />
             <p className="text-text mt-4 text-lg">{signup.lead}</p>
+            {!user && (
+              <p className="text-muted mt-3">
+                <Rich text={signup.haveAccount} />
+              </p>
+            )}
           </div>
+          {inSetup && (
+            <p className="border-brand bg-brand-soft text-ink rounded-md border-l-4 p-4">
+              <Rich
+                text={fill(signup.inSetup, {
+                  name: inSetup.settings.name,
+                  id: encodeURIComponent(inSetup.id),
+                })}
+              />
+            </p>
+          )}
           <SignupForm data={data} user={user} draft={draft} onSent={keep} />
         </>
       )}

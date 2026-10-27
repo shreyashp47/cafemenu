@@ -1,0 +1,11 @@
+{
+  "//": "Deploys the staged copy in .deploy, which `node scripts/stage.mjs` makes: the functions with @cafemenu/deployer and its files beside them, as a package of their own. See README.md.",
+  "functions": [
+    {
+      "source": ".deploy",
+      "codebase": "default",
+      "predeploy": ["node scripts/stage.mjs"],
+      "ignore": ["node_modules", ".git", "*.log"]
+    }
+  ]
+}

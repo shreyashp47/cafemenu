@@ -15,7 +15,12 @@ import { newCafeSettings, type CafeSettings } from "@cafemenu/shared";
 import { applyActionCode } from "firebase/auth";
 import { setLogLevel } from "firebase/firestore";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import type { Cafe, PlatformUser, StartingMenu } from "../../platform/model";
+import type {
+  Cafe,
+  Deployment,
+  PlatformUser,
+  StartingMenu,
+} from "../../platform/model";
 import { CafeInputError, SetupInputError } from "../../platform/validate";
 import {
   connectFirebase,
@@ -406,6 +411,36 @@ describe.runIf(PROJECT.startsWith("demo-"))("Firebase adapters", () => {
     });
   });
 
+  it("lets an owner replace a live cafe's logo, for the backend to deploy", async () => {
+    // As the deployer would: only the status changes.
+    const setStatus = (status: string) =>
+      fetch(
+        `${FS}/v1/projects/${PROJECT}/databases/(default)/documents/cafes/${cafe.id}?updateMask.fieldPaths=status`,
+        {
+          method: "PATCH",
+          headers: ADMIN,
+          body: JSON.stringify({ fields: { status: str(status) } }),
+        },
+      );
+    expect((await setStatus("live")).ok).toBe(true);
+    const png = new Uint8Array(64);
+    png.set([137, 80, 78, 71, 13, 10, 26, 10]);
+    await alice.setup.saveLogo(cafe.id, png);
+    expect(await alice.setup.getLogo(cafe.id)).toEqual(png);
+    await alice.setup.removeLogo(cafe.id);
+    expect(await alice.setup.getLogo(cafe.id)).toBeNull();
+    // The menu is still only for a draft.
+    await expect(
+      alice.setup.saveMenu(cafe, {
+        source: "blank",
+        template: null,
+        currency: cafe.settings.currency,
+        items: [],
+      }),
+    ).rejects.toMatchObject({ code: "permission-denied" });
+    expect((await setStatus("provisioning")).ok).toBe(true);
+  });
+
   it("gives the admin claim to the account the backend marked", async () => {
     const admin = await owner("erin", "erin@platform.test");
     apps.push(admin.handles);
@@ -435,6 +470,30 @@ describe.runIf(PROJECT.startsWith("demo-"))("Firebase adapters", () => {
       (cafes) => cafes.length > 0,
     );
     expect(all.map((c) => c.id)).toContain(cafe.id);
+
+    // The admin page's other read: the latest deployments of every cafe.
+    const recent = await next<Deployment[]>(
+      (l, e) => admin.bundle.deployments.subscribeRecent(10, l, e),
+      (list) => list.length > 0,
+    );
+    expect(recent.map((d) => d.cafeId)).toContain(cafe.id);
+    const times = recent.map((d) => d.createdAt);
+    expect(times).toEqual([...times].sort((a, b) => b - a));
+    // An owner's query for them all is refused, not quietly narrowed. (Dana
+    // has read no deployment yet: the SDK would answer Alice's own, kept from
+    // earlier, from its cache before the server refused.)
+    const dana = await owner("dana", "dana@owner.test");
+    apps.push(dana.handles);
+    await expect(
+      next(
+        (l, e) => dana.bundle.deployments.subscribeRecent(10, l, e),
+        () => true,
+      ),
+    ).rejects.toMatchObject({ code: "permission-denied" });
+    // The real platform has no backend to ask yet.
+    await expect(
+      admin.bundle.admin.rollout("1.1.0", "pause"),
+    ).rejects.toMatchObject({ code: "admin-pending" });
   });
 
   it("signs out", async () => {

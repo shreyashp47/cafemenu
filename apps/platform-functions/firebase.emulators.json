@@ -1,0 +1,23 @@
+{
+  "//": "The same ports as apps/console's emulators (Auth 9199, Firestore 8180), so the console can run against these with NEXT_PUBLIC_FIREBASE_EMULATORS and NEXT_PUBLIC_BACKEND_FUNCTIONS set. Run one or the other.",
+  "functions": [
+    {
+      "source": ".",
+      "codebase": "default",
+      "ignore": ["node_modules", ".git", ".emulator", "tests", "*.log"]
+    }
+  ],
+  "firestore": {
+    "rules": ".emulator/firestore.rules",
+    "indexes": ".emulator/firestore.indexes.json"
+  },
+  "emulators": {
+    "auth": { "host": "127.0.0.1", "port": 9199 },
+    "firestore": { "host": "127.0.0.1", "port": 8180, "websocketPort": 9160 },
+    "functions": { "host": "127.0.0.1", "port": 5101 },
+    "hub": { "port": 4410 },
+    "logging": { "port": 4510 },
+    "ui": { "enabled": false },
+    "singleProjectMode": true
+  }
+}

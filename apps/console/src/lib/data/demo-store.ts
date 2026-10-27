@@ -15,6 +15,7 @@ import type {
   PlatformUser,
   Release,
 } from "../platform/model";
+import type { RolloutStatus } from "./types";
 import { parseCafe, parseDeployment, parseRelease } from "../platform/parse";
 import { isPlainObject } from "../platform/validate";
 import { SEED_RELEASES } from "./demo-seed";
@@ -27,6 +28,8 @@ export interface DemoAccount {
   /** See passwordHash() below: not security, and never the password itself. */
   passwordHash: string;
   emailVerified: boolean;
+  /** The platform admin's claim. Only demo.ts, for DEMO_ADMIN, sets it. */
+  isAdmin?: boolean;
 }
 
 export interface DemoState {
@@ -36,6 +39,8 @@ export interface DemoState {
   cafes: Cafe[];
   releases: Release[];
   deployments: Deployment[];
+  /** The rollout of each version that has one (a stub for #32). */
+  rollouts: Record<string, RolloutStatus>;
 }
 
 export function seedState(): DemoState {
@@ -45,6 +50,7 @@ export function seedState(): DemoState {
     cafes: [],
     releases: SEED_RELEASES.map((r) => ({ ...r })),
     deployments: [],
+    rollouts: {},
   };
 }
 
@@ -102,6 +108,7 @@ function parseAccount(value: unknown): DemoAccount | null {
     email,
     passwordHash: hash,
     emailVerified: emailVerified === true,
+    ...(value.isAdmin === true ? { isAdmin: true } : {}),
   };
 }
 
@@ -109,6 +116,19 @@ const keep = <T>(list: unknown, parse: (v: unknown) => T | null): T[] =>
   Array.isArray(list)
     ? list.map(parse).filter((item): item is T => item !== null)
     : [];
+
+const ROLLOUT_STATUSES: readonly unknown[] = ["running", "paused", "completed"];
+
+function parseRollouts(value: unknown): Record<string, RolloutStatus> {
+  const rollouts: Record<string, RolloutStatus> = {};
+  if (!isPlainObject(value)) return rollouts;
+  for (const [version, status] of Object.entries(value)) {
+    if (ROLLOUT_STATUSES.includes(status)) {
+      rollouts[version] = status as RolloutStatus;
+    }
+  }
+  return rollouts;
+}
 
 /** A stored state that does not parse is replaced by a fresh seed. */
 export function parseState(raw: string | null): DemoState {
@@ -141,6 +161,7 @@ export function parseState(raw: string | null): DemoState {
         const doc = withId(v);
         return doc ? parseDeployment(doc.id as string, doc) : null;
       }),
+      rollouts: parseRollouts(data.rollouts),
     };
   } catch {
     return seedState();
@@ -192,7 +213,7 @@ export function onChange(listener: () => void): () => void {
   };
 }
 
-/** The signed-in account as the console sees it. Demo accounts are never admin. */
+/** The signed-in account as the console sees it. Only DEMO_ADMIN is admin. */
 export function currentUser(state: DemoState): PlatformUser | null {
   const account = state.accounts.find((a) => a.uid === state.session);
   if (!account) return null;
@@ -200,7 +221,7 @@ export function currentUser(state: DemoState): PlatformUser | null {
     uid: account.uid,
     email: account.email,
     emailVerified: account.emailVerified,
-    isAdmin: false,
+    isAdmin: account.isAdmin === true,
   };
 }
 

@@ -20,6 +20,14 @@ a few minutes. It then keeps every cafe updated with releases the owner chooses.
 > [issues](https://github.com/shreyashp47/cafemenu/issues) grouped into
 > [milestones](https://github.com/shreyashp47/cafemenu/milestones), one per phase.
 
+## Live now
+
+- **CafeMenu website:** <https://getcafemenu.web.app> (demo mode until the backend is on)
+- **Demo cafe:** <https://getcafemenu-demo.web.app>. Order at `/order?table=3`; staff board at `/staff`, PIN `1122`.
+
+Docs: [requirements](./docs/requirements.md) · [your guide](./docs/user-guide.md) ·
+[super admin and maintenance mode](./docs/super-admin-requirements.md) · [plan](./PLAN.md)
+
 ## Try the cafe app locally
 
 ```bash
