@@ -1233,6 +1233,324 @@ await t(
   denied(() => getDoc(deploy(bob, "dep-a"))),
 );
 
+// -- requests -------------------------------------------------------------------
+
+console.log("\n requests (the console asks, the backend answers)");
+const req = (c, id) => doc(c.db, "requests", id);
+// Mirrors newRequestRecord() in src/lib/platform/records.ts: what the console
+// writes. Only these keys; the backend adds the rest.
+const newRequest = (c, o = {}) => ({
+  cafeId: "cafe-a",
+  ownerUid: c.uid,
+  by: c.uid,
+  kind: "check",
+  params: { projectId: "alice-cafe" },
+  status: "queued",
+  createdAt: serverTimestamp(),
+  ...o,
+});
+const ask = (c, id, o) => setDoc(req(c, id), newRequest(c, o));
+const publish = {
+  version: "1.2.0",
+  channel: "stable",
+  notes: "Fixes.",
+  schemaVersion: 2,
+};
+
+await t(
+  "owner A asks to check the connection of their cafe",
+  allowed(() => ask(alice, "r-check")),
+);
+for (const [kind, params] of [
+  ["provision", {}],
+  ["deploy", { version: "1.1.0" }],
+  ["deploy", { version: "1.2.0-beta.1" }],
+  ["rollback", {}],
+  ["sync-branding", {}],
+]) {
+  await t(
+    `owner A asks for a ${kind} of their cafe`,
+    allowed(() =>
+      ask(alice, `r-${kind}-${params.version ?? 0}`, { kind, params }),
+    ),
+  );
+}
+await t(
+  "…with an id Firestore chooses, as the console does",
+  allowed(() => addDoc(collection(alice.db, "requests"), newRequest(alice))),
+);
+await t(
+  "owner A cannot ask about owner B's cafe",
+  denied(() => ask(alice, "r-theirs", { cafeId: "cafe-b" })),
+);
+await t(
+  "…nor a cafe that doesn't exist",
+  denied(() => ask(alice, "r-nothing", { cafeId: "no-such-cafe" })),
+);
+await t(
+  "…nor in someone else's name",
+  denied(() => ask(alice, "r-name", { by: BOB.uid })),
+);
+await t(
+  "…nor with someone else as the owner of the request",
+  denied(() => ask(alice, "r-owner", { ownerUid: BOB.uid })),
+);
+await t(
+  "owner B cannot ask about owner A's cafe",
+  denied(() => ask(bob, "r-b-for-a", { cafeId: "cafe-a" })),
+);
+await t(
+  "an owner who has not verified their email cannot ask",
+  denied(() =>
+    ask(lapsed, "r-lapsed", {
+      cafeId: "cafe-l",
+      params: { projectId: "lapsed-cafe" },
+    }),
+  ),
+);
+await t(
+  "someone who is not signed in cannot ask",
+  denied(() => ask(nobody, "r-nobody", { ownerUid: ALICE.uid, by: ALICE.uid })),
+);
+await t(
+  "an anonymous account cannot ask",
+  denied(() => ask(anon, "r-anon", { ownerUid: ALICE.uid, by: ALICE.uid })),
+);
+
+await t(
+  "an unknown kind is refused",
+  denied(() => ask(alice, "r-kind", { kind: "format-disk", params: {} })),
+);
+await t(
+  "an owner cannot ask for a release to be published",
+  denied(() =>
+    ask(alice, "r-publish", { kind: "publish", cafeId: null, params: publish }),
+  ),
+);
+await t(
+  "…nor rolled out",
+  denied(() =>
+    ask(alice, "r-rollout", {
+      kind: "rollout",
+      cafeId: null,
+      params: { version: "1.2.0", action: "start" },
+    }),
+  ),
+);
+for (const [what, o] of [
+  ["a check with no project", { params: {} }],
+  [
+    "a check with a project that isn't a project ID",
+    { params: { projectId: "NOT a project" } },
+  ],
+  [
+    "a check with something extra",
+    { params: { projectId: "alice-cafe", force: true } },
+  ],
+  ["a deploy with no version", { kind: "deploy", params: {} }],
+  ["a deploy of v1.1.0", { kind: "deploy", params: { version: "v1.1.0" } }],
+  ["a deploy of 'latest'", { kind: "deploy", params: { version: "latest" } }],
+  [
+    "a rollback with params",
+    { kind: "rollback", params: { version: "1.0.0" } },
+  ],
+  [
+    "a setup with params",
+    { kind: "provision", params: { projectId: "alice-cafe" } },
+  ],
+  [
+    "a request with params that aren't a map",
+    { kind: "rollback", params: "none" },
+  ],
+]) {
+  await t(
+    `${what} is refused`,
+    denied(() => ask(alice, "r-params", o)),
+  );
+}
+await t(
+  "a request can't start out finished or running",
+  denied(() => ask(alice, "r-status", { status: "done" })),
+);
+await t(
+  "…nor carry a result, steps or an error of its own",
+  denied(() =>
+    ask(alice, "r-result", { result: { status: "connected" }, steps: [] }),
+  ),
+);
+await t(
+  "…nor a made-up time",
+  denied(() => ask(alice, "r-time", { createdAt: Timestamp.fromDate(WHEN) })),
+);
+await t(
+  "…nor leave out a field",
+  denied(() => setDoc(req(alice, "r-short"), without(newRequest(alice), "by"))),
+);
+
+await t(
+  "the admin asks for a release to be published",
+  allowed(() =>
+    ask(erin, "r-a-publish", {
+      kind: "publish",
+      cafeId: null,
+      params: publish,
+    }),
+  ),
+);
+await t(
+  "…and for a rollout to start or pause",
+  allowed(async () => {
+    for (const action of ["start", "pause"]) {
+      await ask(erin, `r-a-${action}`, {
+        kind: "rollout",
+        cafeId: null,
+        params: { version: "1.2.0", action },
+      });
+    }
+  }),
+);
+await t(
+  "…but not with a bad channel, or a made-up action",
+  denied(async () => {
+    await ask(erin, "r-a-channel", {
+      kind: "publish",
+      cafeId: null,
+      params: { ...publish, channel: "nightly" },
+    });
+  }),
+);
+await t(
+  "…nor a rollout with a made-up action",
+  denied(() =>
+    ask(erin, "r-a-action", {
+      kind: "rollout",
+      cafeId: null,
+      params: { version: "1.2.0", action: "delete" },
+    }),
+  ),
+);
+await t(
+  "…nor a release 'about' a cafe",
+  denied(() =>
+    ask(erin, "r-a-cafe", {
+      kind: "publish",
+      cafeId: "cafe-a",
+      params: publish,
+    }),
+  ),
+);
+await t(
+  "the admin cannot ask for a deploy of an owner's cafe from a browser",
+  denied(() =>
+    ask(erin, "r-a-deploy", { kind: "deploy", params: { version: "1.1.0" } }),
+  ),
+);
+await t(
+  "an admin claim on an unverified account asks for nothing",
+  denied(() =>
+    ask(frank, "r-f-publish", {
+      kind: "publish",
+      cafeId: null,
+      params: publish,
+    }),
+  ),
+);
+
+// The backend answers on the same document: seeded here as the service
+// account, which the rules don't hold to anything.
+await seed("requests/r-answered", {
+  ...newRequest(alice, { createdAt: WHEN, status: "done" }),
+  steps: [{ id: "check", label: "Check", status: "done" }],
+  result: { status: "connected" },
+  error: null,
+  attempts: 1,
+  lease: null,
+});
+await t(
+  "owner A reads their request and the backend's answer on it",
+  allowed(async () => {
+    const snap = await getDoc(req(alice, "r-answered"));
+    expect(snap.data().result.status === "connected", "no answer");
+  }),
+);
+await t(
+  "owner A reads the progress of the request they just made",
+  allowed(async () => {
+    const snap = await getDoc(req(alice, "r-check"));
+    expect(snap.data().status === "queued", "not queued");
+  }),
+);
+await t(
+  "owner B cannot read owner A's request",
+  denied(() => getDoc(req(bob, "r-answered"))),
+);
+await t(
+  "owner A lists their cafe's requests",
+  allowed(async () => {
+    const snap = await getDocs(
+      query(
+        collection(alice.db, "requests"),
+        where("ownerUid", "==", alice.uid),
+        where("cafeId", "==", "cafe-a"),
+        orderBy("createdAt", "desc"),
+        limit(10),
+      ),
+    );
+    expect(snap.size >= 2, `expected their requests, got ${snap.size}`);
+  }),
+);
+await t(
+  "owner A cannot list every request",
+  denied(() => getDocs(collection(alice.db, "requests"))),
+);
+await t(
+  "…nor owner B's",
+  denied(() =>
+    getDocs(
+      query(collection(alice.db, "requests"), where("ownerUid", "==", BOB.uid)),
+    ),
+  ),
+);
+await t(
+  "the admin reads every request",
+  allowed(async () => {
+    const snap = await getDocs(collection(erin.db, "requests"));
+    expect(snap.size >= 3, `expected them all, got ${snap.size}`);
+  }),
+);
+await t(
+  "an unverified account with the admin claim reads none",
+  denied(() => getDocs(collection(frank.db, "requests"))),
+);
+for (const [who, c] of [
+  ["owner A", alice],
+  ["the admin", erin],
+]) {
+  await t(
+    `${who} cannot mark a request done, or give it a result`,
+    denied(() =>
+      updateDoc(req(c, "r-check"), {
+        status: "done",
+        result: { status: "connected" },
+      }),
+    ),
+  );
+  await t(
+    `${who} cannot change what was asked`,
+    denied(() =>
+      updateDoc(req(c, "r-check"), { params: { projectId: "bobs-cafe" } }),
+    ),
+  );
+  await t(
+    `${who} cannot delete a request`,
+    denied(() => deleteDoc(req(c, "r-check"))),
+  );
+}
+await t(
+  "owner A cannot write over an answered request",
+  denied(() => ask(alice, "r-answered")),
+);
+
 // -- the backend's deploy record ---------------------------------------------------
 
 console.log("\n the deploy record (backend only)");

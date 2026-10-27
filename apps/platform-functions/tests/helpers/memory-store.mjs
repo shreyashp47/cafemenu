@@ -19,6 +19,10 @@
  *   transactDeployment(id, fn)        fn(current) → {patch, result}; returns result
  *   queueDeployment(cafeId, decide, now)   decide({cafe, active}) →
  *                                     {deployment, expire, cafeStatus}; returns the new id
+ *   listOpenRequests(limit)           queued and running requests, oldest first
+ *   getRequest(id) / updateRequest(id, patch) / transactRequest(id, fn)   as for deployments
+ *   getAccount(uid)                   {emailVerified, admin}, or null
+ *   claimJob(name, now, everyMs)      whether the periodic job may run now (and notes that it did)
  */
 import { newToken, sameSecret } from "../../src/mail/token.mjs";
 
@@ -33,6 +37,9 @@ export function createMemoryStore() {
     emails: new Map(), // uid → account email (absent: the owner's account is gone)
     mail: new Map(), // cafeId → {token, sent: {key: when}}
     deployments: new Map(),
+    requests: new Map(),
+    accounts: new Map(), // uid → {emailVerified, admin}
+    jobs: new Map(), // name → when it last ran (ms)
   };
   let counter = 0;
   const ms = (v) => (v instanceof Date ? v.getTime() : v);
@@ -55,6 +62,11 @@ export function createMemoryStore() {
     /** Test setup: a cafe as the console would have created it. */
     addCafe: (cafe) => data.cafes.set(cafe.id, structuredClone(cafe)),
     addRelease: (release) => data.releases.set(release.version, release),
+    /** Test setup: a request as the console would have written it. */
+    addRequest: (request) =>
+      data.requests.set(request.id, structuredClone(request)),
+    addAccount: (uid, account) =>
+      data.accounts.set(uid, { emailVerified: true, admin: false, ...account }),
 
     async getCafe(id) {
       return withRelease(data.cafes.get(id)) ?? null;
@@ -133,6 +145,33 @@ export function createMemoryStore() {
       if (patch)
         Object.assign(data.deployments.get(id), structuredClone(patch));
       return result;
+    },
+    async listOpenRequests(limit) {
+      return [...data.requests.values()]
+        .filter((r) => ["queued", "running"].includes(r.status))
+        .sort((a, b) => ms(a.createdAt) - ms(b.createdAt))
+        .slice(0, limit)
+        .map(view);
+    },
+    async getRequest(id) {
+      return view(data.requests.get(id)) ?? null;
+    },
+    async updateRequest(id, patch) {
+      Object.assign(data.requests.get(id), structuredClone(patch));
+    },
+    async transactRequest(id, fn) {
+      const { patch, result } = fn(view(data.requests.get(id)) ?? null);
+      if (patch) Object.assign(data.requests.get(id), structuredClone(patch));
+      return result;
+    },
+    async getAccount(uid) {
+      return data.accounts.get(uid) ?? null;
+    },
+    async claimJob(name, now, everyMs) {
+      const last = data.jobs.get(name);
+      if (last !== undefined && now - last < everyMs) return false;
+      data.jobs.set(name, now);
+      return true;
     },
     async queueDeployment(cafeId, decide, now) {
       const active = [...data.deployments.values()]

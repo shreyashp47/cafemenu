@@ -1,7 +1,9 @@
 /**
  * The real world, wired together once per instance: the platform's Firestore
  * and Auth through the Admin SDK, and Google's APIs as the function's runtime
- * service account. The tests build an `env` of their own with the same shape:
+ * service account (or, for the worker on GitHub Actions, as the platform
+ * service account whose key is in GOOGLE_APPLICATION_CREDENTIALS). The tests
+ * build an `env` of their own with the same shape:
  *
  *   store       the platform's data (store-firestore.mjs)
  *   google      {clientEmail(), contextFor(project, {write, readFile, deployLog})}
@@ -68,16 +70,19 @@ export function metadataServiceAccount(fetchImpl = fetch) {
 }
 
 /**
- * Under the Functions emulator, and only there, Google (and GitHub, for the
- * release package) can be a fake served from `CAFEMENU_FAKE_GOOGLE`: the
- * emulator test points it at the deployer's fake Google. Needs the emulator's
- * own variable and a `demo-` project, which can't exist for real, so a
- * deployed function can never take this path.
+ * Under the emulators, and only there, Google (and GitHub, for the release
+ * package) can be a fake served from `CAFEMENU_FAKE_GOOGLE`: the emulator
+ * tests point it at the deployer's fake Google. Needs one of the emulators'
+ * own variables (the Functions emulator's, or the Firestore emulator's, for the
+ * worker) and a `demo-` project, which can't exist for real, so a deployed
+ * function, or a run on GitHub Actions, can never take this path.
  */
 export function fakeGoogleBase(env = process.env) {
   const base = env.CAFEMENU_FAKE_GOOGLE;
   const demo = (env.GCLOUD_PROJECT ?? "").startsWith("demo-");
-  return base && env.FUNCTIONS_EMULATOR === "true" && demo ? base : null;
+  const emulated =
+    env.FUNCTIONS_EMULATOR === "true" || Boolean(env.FIRESTORE_EMULATOR_HOST);
+  return base && emulated && demo ? base : null;
 }
 
 /** A fetch that sends everything to the fake at `base`, saying where it was meant to go. */
@@ -102,11 +107,23 @@ export function runtimeEnv() {
 }
 
 async function build() {
+  const { logger } = await import("firebase-functions/logger");
+  return createEnv({
+    log: (level, message, fields) => logger[level](message, fields),
+    clientEmail: metadataServiceAccount(),
+  });
+}
+
+/**
+ * The production env. `log(level, message, fields)` is where the backend
+ * writes to; `clientEmail` is the deploy account's address (a string, or a
+ * function that answers with it).
+ */
+export async function createEnv({ log, clientEmail }) {
   const { getApps, initializeApp, applicationDefault } =
     await import("firebase-admin/app");
   const { getFirestore } = await import("firebase-admin/firestore");
   const { getAuth } = await import("firebase-admin/auth");
-  const { logger } = await import("firebase-functions/logger");
   const { createFirestoreStore } = await import("./store-firestore.mjs");
   const { createMail } = await import("./mail/setup.mjs");
 
@@ -129,10 +146,9 @@ async function build() {
       : {
           getToken: async () =>
             (await applicationDefault().getAccessToken()).access_token,
-          clientEmail: metadataServiceAccount(),
+          clientEmail,
         }),
   });
-  const log = (level, message, fields) => logger[level](message, fields);
   return {
     store: createFirestoreStore({ db, auth: getAuth(app) }),
     google,
