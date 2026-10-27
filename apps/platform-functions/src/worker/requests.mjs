@@ -23,15 +23,22 @@
  * A deployment that has to wait (Google busy, out of time, another run on
  * it) puts the request back in the queue with its `deploymentId`, and the
  * next run carries on from there rather than asking again.
+ *
+ * The admin's kinds (#78) are admin.mjs's. An owner whose account is
+ * suspended is refused, with the reason, before anything else.
  */
-import { FINISHED_REQUEST_STATUSES } from "@cafemenu/shared/requests";
+import {
+  FINISHED_REQUEST_STATUSES,
+  isAdminRequestKind,
+} from "@cafemenu/shared/requests";
 
 import * as calls from "../callables.mjs";
 import { FINISHED, MAX_ATTEMPTS, decideClaim } from "../claim.mjs";
-import { RequestError, RetryLater } from "../errors.mjs";
+import { Deferred, RequestError, RetryLater } from "../errors.mjs";
 import { runDeployment } from "../jobs.mjs";
 import { notifyDeployment } from "../mail/notify.mjs";
 import { isTransient } from "../retry.mjs";
+import { ADMIN_HANDLERS, reasonLabel } from "./admin.mjs";
 
 /**
  * How long a run holds a request. Longer than a run can last (the workflow
@@ -232,7 +239,24 @@ export const HANDLERS = {
   })),
   rollback: viaDeployment(calls.requestRollback, () => ({})),
   "sync-branding": viaDeployment(calls.requestSyncBranding, () => ({})),
+  ...ADMIN_HANDLERS,
 };
+
+/**
+ * An owner's request about a cafe of theirs that is suspended: refused, with
+ * the reason (#78). Their account is disabled too, which askerOf would
+ * refuse with no reason at all.
+ */
+async function refuseIfSuspended(env, request) {
+  if (isAdminRequestKind(request.kind) || !request.cafeId) return;
+  const cafe = await env.store.getCafe(request.cafeId);
+  if (cafe?.status !== "suspended" || cafe.ownerUid !== request.by) return;
+  const note = cafe.statusReason?.note;
+  throw new RequestError(
+    "permission-denied",
+    `Your CafeMenu account is suspended, because of ${reasonLabel(cafe.statusReason)}${note ? ` (${note})` : ""}. Your site keeps running, but nothing can be changed from CafeMenu until it is reactivated. Check your email for more.`,
+  );
+}
 
 async function answer(env, id, answered) {
   await env.store.updateRequest(id, {
@@ -327,11 +351,24 @@ export async function processRequest(env, id, { runId, touched } = {}) {
         "CafeMenu doesn't know how to do this.",
       );
     }
+    await refuseIfSuspended(env, request);
     job.auth = await askerOf(env, request.by);
     return await end(await handler(env, job));
   } catch (error) {
     if (error instanceof RequestError) {
       return end(failed(job, { errorCode: error.code, error: error.message }));
+    }
+    if (error instanceof Deferred) {
+      // Waits for its date, unclaimed: a pickup that only found it early
+      // doesn't count against it.
+      await env.store.updateRequest(id, {
+        status: "queued",
+        lease: null,
+        attempts: Math.max(0, (request.attempts ?? 1) - 1),
+        notBefore: new Date(error.until),
+        progress: { steps: [], detail: error.message },
+      });
+      return { id, kind, outcome: "later", code: "scheduled" };
     }
     if (error instanceof RetryLater || isTransient(error)) {
       // Back in the queue, with its deployment if it has one: the next run

@@ -12,9 +12,10 @@
   "scripts": {
     "test": "node --test",
     "test:emulator": "node scripts/copy-rules.mjs && npx --yes firebase-tools emulators:exec --config firebase.emulators.json --only auth,firestore,functions --project demo-cafemenu \"node --test tests/emulator/provision.emulator.mjs\"",
-    "test:emulator:worker": "node scripts/copy-rules.mjs && npx --yes firebase-tools emulators:exec --config firebase.emulators.json --only auth,firestore --project demo-cafemenu \"node --test tests/emulator/worker.emulator.mjs\"",
+    "test:emulator:worker": "node scripts/copy-rules.mjs && npx --yes firebase-tools emulators:exec --config firebase.emulators.json --only auth,firestore --project demo-cafemenu \"node --test --test-concurrency=1 tests/emulator/worker.emulator.mjs tests/emulator/admin.emulator.mjs\"",
     "emulators": "node scripts/copy-rules.mjs && npx --yes firebase-tools emulators:start --config firebase.emulators.json --only auth,firestore,functions --project demo-cafemenu",
     "worker": "node src/worker/main.mjs",
+    "make-admin": "node src/worker/make-admin.mjs",
     "stage": "node scripts/stage.mjs",
     "deploy": "node scripts/stage.mjs && npx --yes firebase-tools deploy --only functions",
     "format": "prettier --write .",

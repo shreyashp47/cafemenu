@@ -155,6 +155,11 @@ export async function commit(api, project, writes) {
 /** One JSON-like value as a Firestore Value. */
 export function encodeValue(value, key = "value") {
   if (value === null) return { nullValue: null };
+  if (value instanceof Date) {
+    if (!Number.isFinite(value.getTime()))
+      throw new Error(`Can't encode ${key}: an invalid date`);
+    return { timestampValue: value.toISOString() };
+  }
   if (typeof value === "string") return { stringValue: value };
   if (typeof value === "boolean") return { booleanValue: value };
   if (Number.isInteger(value)) return { integerValue: String(value) };
@@ -188,6 +193,7 @@ export function decodeValue(value) {
   if ("integerValue" in value) return Number(value.integerValue);
   if ("doubleValue" in value) return value.doubleValue;
   if ("nullValue" in value) return null;
+  if ("timestampValue" in value) return new Date(value.timestampValue);
   if ("arrayValue" in value)
     return (value.arrayValue.values ?? []).map(decodeValue);
   if ("mapValue" in value) return decodeFields(value.mapValue.fields);

@@ -11,6 +11,7 @@ export { check } from "./commands/check.mjs";
 export { deploy } from "./commands/deploy.mjs";
 export { migrate } from "./commands/migrate.mjs";
 export { owner } from "./commands/owner.mjs";
+export { maintenance } from "./commands/maintenance.mjs";
 export { deployRelease, syncBranding } from "./commands/release.mjs";
 export { REQUIRED_APIS, provision } from "./commands/provision.mjs";
 export { rollback } from "./commands/rollback.mjs";

@@ -6,10 +6,13 @@
  */
 import { parseArgs } from "node:util";
 
+import { maintenanceRecord } from "@cafemenu/shared/maintenance";
+
 import { createTokenProvider, loadServiceAccountKey } from "./auth.mjs";
 import { createJsonCafeDirectory } from "./cafe-directory.mjs";
 import { check } from "./commands/check.mjs";
 import { PARTS, deploy } from "./commands/deploy.mjs";
+import { maintenance } from "./commands/maintenance.mjs";
 import { migrate } from "./commands/migrate.mjs";
 import { owner } from "./commands/owner.mjs";
 import { DEFAULT_APP_NAME, provision } from "./commands/provision.mjs";
@@ -234,6 +237,29 @@ deployer rollout --resume <rollout-id> --cafes <cafes.json> [the same options]
       releases: { type: "string" },
       package: { type: "string" },
       sha256: { type: "string" },
+    },
+  },
+  maintenance: {
+    summary: "Take the cafe's site into maintenance, or out of it (the admin's)",
+    usage: `deployer maintenance --project <id> --on [--message <text>]
+               [--until <time>] [--starts <time>] [--ends <time>]
+       deployer maintenance --project <id> --off
+
+  --on               Customers see the "back soon" page and can't order; the
+                     staff board and the owner's dashboard keep working
+  --message <text>   What customers read (default: "We'll be back soon")
+  --until <time>     When the cafe expects to be back, shown to customers
+  --starts <time>    Start then, not now
+  --ends <time>      End by itself then
+  --off              End it
+  Times are ISO 8601 with a zone, like 2026-11-01T22:00+05:30.`,
+    options: {
+      on: { type: "boolean", default: false },
+      off: { type: "boolean", default: false },
+      message: { type: "string" },
+      until: { type: "string" },
+      starts: { type: "string" },
+      ends: { type: "string" },
     },
   },
   owner: {
@@ -475,6 +501,47 @@ export function commandOptions(command, values) {
         .join(" ");
       return options;
     }
+    case "maintenance": {
+      if (values.on === values.off) {
+        throw new UsageError("Say --on or --off.");
+      }
+      if (values.off) {
+        const stray = ["message", "until", "starts", "ends"].find(
+          (name) => values[name] !== undefined,
+        );
+        if (stray) throw new UsageError(`--${stray} goes with --on.`);
+        return { maintenance: null };
+      }
+      const time = (name) => {
+        const text = values[name]?.trim();
+        if (!text) return null;
+        const ms = /T\d{2}:\d{2}.*(Z|[+-]\d{2}:\d{2})$/.test(text)
+          ? Date.parse(text)
+          : NaN;
+        if (!Number.isFinite(ms)) {
+          throw new UsageError(
+            `--${name} takes an ISO 8601 time with its zone, like 2026-11-01T22:00+05:30: ${text}`,
+          );
+        }
+        return ms;
+      };
+      try {
+        return {
+          maintenance: maintenanceRecord(
+            {
+              by: "admin",
+              message: values.message ?? "",
+              until: time("until"),
+              startsAt: time("starts"),
+              endsAt: time("ends"),
+            },
+            Date.now(),
+          ),
+        };
+      } catch (error) {
+        throw new UsageError(error.message);
+      }
+    }
     case "owner": {
       const email = required(values, "email").toLowerCase();
       if (!EMAIL.test(email)) throw new UsageError(`Not an email: ${email}`);
@@ -546,6 +613,7 @@ const RUN = {
   rollback,
   "sync-branding": syncBranding,
   rollout,
+  maintenance,
   owner,
 };
 

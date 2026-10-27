@@ -17,6 +17,10 @@
  *     gives its key back, so the next write tries again.
  *   - One cafe's trouble (no email address, the provider refusing) never
  *     stops the others: every outcome is returned, and logged.
+ *   - A suspended owner (#78) gets only the notices about their account.
+ *
+ * Each email sent is also recorded on the cafe (`cafes/{id}/emails`), for its
+ * history on the admin page. The admin's notices go through emailOwner.
  */
 import { compareVersions } from "@cafemenu/deployer";
 import {
@@ -71,6 +75,9 @@ async function send(env, cafe, { kind, key, data }, about) {
   if (!essential && cafe.emails?.releaseNotices === false) {
     return "the owner unsubscribed";
   }
+  if (cafe.status === "suspended" && !EMAIL_KINDS[kind].whileSuspended) {
+    return "the owner's account is suspended";
+  }
   if (!essential && !mail.unsubscribeUrl) {
     return "UNSUBSCRIBE_URL isn't set, and these emails need the link";
   }
@@ -97,15 +104,35 @@ async function send(env, cafe, { kind, key, data }, about) {
   if (!(await store.claimMail(cafe.id, key, env.now()))) {
     return "already sent";
   }
+  let id;
   try {
-    const { id } = await mail.sender.send({ to, ...email, headers });
-    log("info", `Email sent: ${email.subject}`, { ...about, id });
-    return null;
+    ({ id } = await mail.sender.send({ to, ...email, headers }));
   } catch (error) {
     // Give the claim back, so the next write tries again.
     await store.unclaimMail(cafe.id, key);
     throw error;
   }
+  log("info", `Email sent: ${email.subject}`, { ...about, id });
+  try {
+    await store.recordEmail(cafe.id, { kind, key, at: env.now() });
+  } catch (error) {
+    // The email went; only its line in the cafe's history is missing.
+    log("warn", "Could not record an email in the cafe's history", {
+      ...about,
+      error: error.message,
+    });
+  }
+  return null;
+}
+
+/**
+ * One email of `kind` to the cafe's owner, once per `key`: the admin's
+ * notices (worker/admin.mjs). Returns {sent, skipped, failed}, as the others.
+ */
+export async function emailOwner(env, cafe, { kind, key, data }) {
+  const result = newResult();
+  await deliver(env, cafe, { kind, key, data }, result);
+  return result;
 }
 
 /**

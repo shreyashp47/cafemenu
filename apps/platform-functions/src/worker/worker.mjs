@@ -22,6 +22,8 @@
  * Returns a summary of what it did, with no personal data in it, which is
  * all the workflow's public log shows.
  */
+import { toMillis } from "@cafemenu/shared/support-window";
+
 import { RetryLater } from "../errors.mjs";
 import { runBackgroundJobs } from "./background.mjs";
 import { processRequest, runAndTell } from "./requests.mjs";
@@ -82,7 +84,12 @@ export async function runWorker(
   const touched = new Set();
   const summary = { requests: [], deployments: [], jobs: { ran: false } };
 
-  const open = fairOrder(await env.store.listActiveRequests(READ_AHEAD));
+  const now = env.now().getTime();
+  // A request waiting for its date (a suspension's notice) isn't touched.
+  const due = (r) => !r.notBefore || toMillis(r.notBefore) <= now;
+  const open = fairOrder(
+    (await env.store.listActiveRequests(READ_AHEAD)).filter(due),
+  );
   for (const request of open) {
     const answered = summary.requests.filter((r) => r.outcome !== "skipped");
     if (answered.length >= maxRequests || outOfTime()) break;

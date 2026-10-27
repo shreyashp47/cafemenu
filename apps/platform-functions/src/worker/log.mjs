@@ -54,7 +54,10 @@ export function summaryLines(summary) {
     lines.push(
       `jobs: ${jobs.announced.length} release change(s)` +
         `${jobs.support ? ", support window checked" : ""}` +
-        `; emails ${jobs.sent} sent, ${jobs.skipped} not needed, ${jobs.failed} failed`,
+        `; emails ${jobs.sent} sent, ${jobs.skipped} not needed, ${jobs.failed} failed` +
+        (jobs.directory
+          ? `; directory ${jobs.directory.changed} of ${jobs.directory.accounts} updated`
+          : ""),
     );
   }
   if (!lines.length) lines.push("nothing to do");

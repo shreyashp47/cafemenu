@@ -7,7 +7,7 @@
  *   setCafeStatus(id, status, now)
  *   setCafeRelease(id, {current?, previous?, pinned?})   only the keys given
  *   listReleases() / getRelease(version)
- *   getLogo(cafeId) / getStartingMenu(cafeId) / getOwnerName(uid)
+ *   getLogo(cafeId) / getStartingMenu(cafeId) / getOwnerName(uid) (names)
  *   getRecord(cafeId) / setRecord(cafeId, record)
  *   listPinnedCafes()                 live cafes with release.pinned set
  *   getOwnerEmail(uid, fallback)      owners.emails, else the fallback
@@ -35,11 +35,14 @@ export function createMemoryStore() {
     logos: new Map(),
     menus: new Map(),
     records: new Map(),
-    owners: new Map(), // uid → display name
+    names: new Map(), // uid → display name
     emails: new Map(), // uid → account email (absent: the owner's account is gone)
     mail: new Map(), // cafeId → {token, sent: {key: when}}
+    emailLog: new Map(), // cafeId → [{kind, key, at}]
     deployments: new Map(),
-    accounts: new Map(), // uid → {email, emailVerified, disabled, admin}
+    accounts: new Map(), // uid → {email, name, emailVerified, disabled, admin, createdAt, lastSignInAt}
+    owners: new Map(), // uid → the admin's directory entry
+    adminLog: new Map(), // id → entry
     requests: new Map(),
     worker: null,
   };
@@ -71,9 +74,12 @@ export function createMemoryStore() {
     addAccount: (uid, account = {}) =>
       data.accounts.set(uid, {
         email: `${uid}@example.com`,
+        name: null,
         emailVerified: true,
         disabled: false,
         admin: false,
+        createdAt: Date.UTC(2026, 8, 1),
+        lastSignInAt: null,
         ...account,
       }),
     /** Test setup: a request as the console writes it; returns its id. */
@@ -137,12 +143,17 @@ export function createMemoryStore() {
     async unclaimMail(cafeId, key) {
       delete data.mail.get(cafeId)?.sent[key];
     },
+    async recordEmail(cafeId, entry) {
+      const list = data.emailLog.get(cafeId) ?? [];
+      list.push(structuredClone(entry));
+      data.emailLog.set(cafeId, list);
+    },
     async setEmailPreference(cafeId, { releaseNotices }) {
       const cafe = data.cafes.get(cafeId);
       cafe.emails = { ...cafe.emails, releaseNotices };
     },
     async getOwnerName(uid) {
-      return data.owners.get(uid) ?? null;
+      return data.names.get(uid) ?? null;
     },
     async getRecord(cafeId) {
       return structuredClone(data.records.get(cafeId) ?? null);
@@ -172,6 +183,76 @@ export function createMemoryStore() {
     async getAccount(uid) {
       const account = data.accounts.get(uid);
       return account ? { uid, ...structuredClone(account) } : null;
+    },
+    async findAccountByEmail(email) {
+      for (const [uid, account] of data.accounts) {
+        if (account.email === email)
+          return { uid, ...structuredClone(account) };
+      }
+      return null;
+    },
+    async listAccounts() {
+      return [...data.accounts].map(([uid, a]) => ({
+        uid,
+        ...structuredClone(a),
+      }));
+    },
+    async listAdmins() {
+      return (await this.listAccounts()).filter((a) => a.admin);
+    },
+    async setAccountDisabled(uid, disabled) {
+      data.accounts.get(uid).disabled = disabled;
+    },
+    async deleteAccount(uid) {
+      data.accounts.delete(uid);
+    },
+    async setAdminClaim(uid, admin) {
+      data.accounts.get(uid).admin = admin;
+    },
+    async listCafesOf(ownerUid) {
+      return [...data.cafes.values()]
+        .filter((c) => c.ownerUid === ownerUid)
+        .map(withRelease);
+    },
+    async updateCafe(id, patch) {
+      Object.assign(data.cafes.get(id), structuredClone(patch));
+    },
+    async setOwnerRecord(uid, patch) {
+      data.owners.set(uid, {
+        ...data.owners.get(uid),
+        ...structuredClone(patch),
+      });
+    },
+    async listOwnerRecords() {
+      return new Map(structuredClone([...data.owners]));
+    },
+    async addAdminLog(id, entry) {
+      if (data.adminLog.has(id)) return false;
+      data.adminLog.set(id, structuredClone(entry));
+      return true;
+    },
+    async listOpenRequestsFor(cafeId) {
+      return [...data.requests.values()]
+        .filter((r) => r.cafeId === cafeId && open(r))
+        .map(view);
+    },
+    async deleteOwnerData(uid, cafeIds) {
+      for (const id of cafeIds) {
+        for (const map of [
+          data.cafes,
+          data.logos,
+          data.menus,
+          data.records,
+          data.mail,
+          data.emailLog,
+        ])
+          map.delete(id);
+        for (const [key, d] of data.deployments)
+          if (d.cafeId === id) data.deployments.delete(key);
+      }
+      for (const [key, r] of data.requests)
+        if (r.by === uid) data.requests.delete(key);
+      data.owners.delete(uid);
     },
     async listActiveRequests(limit) {
       return [...data.requests.values()]
