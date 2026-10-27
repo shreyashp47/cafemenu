@@ -58,14 +58,34 @@ export const firebaseConfig: Record<string, string> | null = firebaseKeysFilled
   : null;
 
 /**
- * Whether Check connection, Upgrade, Roll back and Save branding call the
- * platform's Cloud Functions (apps/platform-functions) instead of answering
- * from a stand-in (the emulators) or saying the backend is not there yet
- * (the real platform). Off unless set, and it changes nothing in demo mode,
- * which always simulates its backend.
+ * How Check connection, Upgrade, Roll back and Save branding reach the
+ * platform's backend (apps/platform-functions), from NEXT_PUBLIC_BACKEND:
+ *
+ *   requests   a `requests/{id}` document the backend's GitHub Actions job
+ *              picks up within minutes (#77), watched live: free, on Spark
+ *   functions  the backend's Cloud Functions, answered at once: needs Blaze.
+ *              NEXT_PUBLIC_BACKEND_FUNCTIONS=1 still means this.
+ *   none       (unset) a stand-in answers on the emulators, and the real
+ *              platform says the backend is not there yet
+ *
+ * It changes nothing in demo mode, which always simulates its backend.
  */
-export const useBackendFunctions = ["1", "true"].includes(
-  read(process.env.NEXT_PUBLIC_BACKEND_FUNCTIONS).toLowerCase(),
+export type BackendMode = "requests" | "functions" | "none";
+
+export function backendModeOf(
+  backendSetting: string | undefined,
+  functionsSetting: string | undefined,
+): BackendMode {
+  const mode = read(backendSetting).toLowerCase();
+  if (mode === "requests" || mode === "functions") return mode;
+  return ["1", "true"].includes(read(functionsSetting).toLowerCase())
+    ? "functions"
+    : "none";
+}
+
+export const backendMode: BackendMode = backendModeOf(
+  process.env.NEXT_PUBLIC_BACKEND,
+  process.env.NEXT_PUBLIC_BACKEND_FUNCTIONS,
 );
 
 /** The region the platform's functions are deployed to (CAFEMENU_REGION there). */

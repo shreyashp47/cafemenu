@@ -51,3 +51,16 @@ follow [Semantic Versioning](https://semver.org/).
   `NEXT_PUBLIC_BACKEND_FUNCTIONS` is set. Tested on the Functions, Firestore and
   Auth emulators against the deployer's fake Google; not yet run against real
   Google (`[[SPIKE #3]]`).
+- **The backend on GitHub Actions, for free** (#77). The console asks the
+  backend with a `requests/{id}` document (connection check, setup, upgrade,
+  roll back, branding sync), which the rules let an owner write only for their
+  own cafe and never change. `.github/workflows/backend.yml` runs the worker
+  (`npm run worker -w @cafemenu/platform-functions`) every 5 minutes: it claims
+  each request in a transaction, does it with the same handlers as the Cloud
+  Functions, writes progress and the result back, and runs the owner emails and
+  the support window. It signs in with the platform service account's key from
+  the `production` environment's `PLATFORM_SERVICE_ACCOUNT` secret, and its
+  public log holds ids and outcomes only. The console uses it with
+  `NEXT_PUBLIC_BACKEND=requests` ("this takes a few minutes", with live
+  progress); demo mode stays the default, and the Cloud Functions stay for
+  Blaze. Tested end to end on the Auth and Firestore emulators.

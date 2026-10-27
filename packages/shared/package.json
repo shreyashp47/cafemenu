@@ -12,6 +12,10 @@
     "./support-window": {
       "types": "./src/support-window.d.mts",
       "default": "./src/support-window.mjs"
+    },
+    "./requests": {
+      "types": "./src/requests.d.mts",
+      "default": "./src/requests.mjs"
     }
   },
   "engines": {

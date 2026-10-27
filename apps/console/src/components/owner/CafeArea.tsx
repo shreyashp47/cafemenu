@@ -6,7 +6,7 @@ import { useAccount, useDataBundle } from "@/lib/data/hooks";
 import type { DataBundle } from "@/lib/data/types";
 import { fill, messages } from "@/lib/messages";
 import { cafeToShow } from "@/lib/owner/area";
-import type { Cafe, Deployment } from "@/lib/platform/model";
+import type { BackendRequest, Cafe, Deployment } from "@/lib/platform/model";
 import { Button } from "../Button";
 import { DemoNotice } from "../DemoNotice";
 import { Rich } from "../Rich";
@@ -170,6 +170,15 @@ function Sections({
       ),
     [data, id, ownerUid],
   );
+  // And on the owner's requests, when the backend takes them as documents
+  // (#77): those still waiting for its next run show, and count as busy.
+  const [requests, setRequests] = useState<BackendRequest[]>([]);
+  useEffect(() => {
+    if (!data.requests) return;
+    return data.requests.subscribeForCafe({ id }, ownerUid, setRequests, () =>
+      setRequests([]),
+    );
+  }, [data, id, ownerUid]);
 
   return (
     <>
@@ -179,8 +188,18 @@ function Sections({
         demo={data.backend === "demo"}
         onSignOut={() => void data.auth.signOut()}
       />
-      <UpdatesPanel data={data} cafe={cafe} deployments={deployments} />
-      <BrandingPanel data={data} cafe={cafe} deployments={deployments} />
+      <UpdatesPanel
+        data={data}
+        cafe={cafe}
+        deployments={deployments}
+        requests={requests}
+      />
+      <BrandingPanel
+        data={data}
+        cafe={cafe}
+        deployments={deployments}
+        requests={requests}
+      />
       <AccessPanel cafe={cafe} />
     </>
   );

@@ -16,7 +16,8 @@ export const FINISHED = ["succeeded", "failed", "rolled-back"];
 
 /**
  * What to do with a deployment when an invocation `by` finds it at `now`
- * (ms): {outcome, patch}.
+ * (ms): {outcome, patch}. Requests to the backend (worker/requests.mjs) are
+ * claimed the same way, with their own finished statuses.
  *
  *   finished   it is already done: nothing to do
  *   busy       another invocation holds the lease: retry later
@@ -25,10 +26,16 @@ export const FINISHED = ["succeeded", "failed", "rolled-back"];
  */
 export function decideClaim(
   deployment,
-  { by, now, leaseMs = LEASE_MS, maxAttempts = MAX_ATTEMPTS },
+  {
+    by,
+    now,
+    leaseMs = LEASE_MS,
+    maxAttempts = MAX_ATTEMPTS,
+    finished = FINISHED,
+  },
 ) {
   if (!deployment) return { outcome: "missing" };
-  if (FINISHED.includes(deployment.status)) return { outcome: "finished" };
+  if (finished.includes(deployment.status)) return { outcome: "finished" };
   const held = deployment.lease && deployment.lease.until > now;
   if (deployment.status === "running" && held) return { outcome: "busy" };
   const attempts = deployment.attempts ?? 0;

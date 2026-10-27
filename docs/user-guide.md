@@ -121,25 +121,36 @@ file is the same shape as
 
 ## 7. Turn the backend on (free, no Blaze)
 
-The backend runs as a GitHub Actions job every 5 minutes (#77), not as Cloud
-Functions, so no paid plan is needed. Once #77 is merged:
+The backend runs as a GitHub Actions job every 5 minutes (#77,
+`.github/workflows/backend.yml`), not as Cloud Functions, so no paid plan is
+needed. Once #77 is merged:
 
-1. **Create CafeMenu's deploy account.** In the Google Cloud console for
-   `getcafemenu`, go to IAM & Admin → Service accounts → Create, give it the
-   roles the #77 README lists, then Keys → Add key → JSON.
-2. **Give the key to GitHub, then delete your copy:**
+1. **Switch the console to real mode**, steps 1–3: create the Firestore
+   database (`asia-south1`), turn on Email/Password sign-in, deploy the
+   platform rules and indexes. The
+   [console README](../apps/console/README.md#real-mode-the-platform-project)
+   has each click and command.
+2. **Create CafeMenu's deploy account and its key**: in the Google Cloud
+   console for `getcafemenu`, IAM & Admin → Service accounts → Create, give it
+   the two platform roles, then Keys → Add key → JSON. The
+   [platform-functions README](../apps/platform-functions/README.md#setting-it-up)
+   lists the roles and the commands.
+3. **Create the `production` environment** (Settings → Environments, limited
+   to `main`), **give it the key, then delete your copy:**
    ```bash
    gh secret set PLATFORM_SERVICE_ACCOUNT --env production < ~/Downloads/key.json
    rm ~/Downloads/key.json
    ```
-3. **Ask Claude to switch the console to real mode:** create the Firestore
-   database (`asia-south1`), turn on Email/Password sign-in, deploy the
-   platform rules, and rebuild the console with its Firebase settings.
-4. **Make yourself the super admin** (the one-time command in the console
-   README).
+4. **Rebuild the console** with its Firebase settings and
+   `NEXT_PUBLIC_BACKEND=requests`, and redeploy (`./scripts/deploy-live.sh`).
+5. **Try it:** Actions → Backend → Run workflow, then Check connection as a
+   test owner.
+6. **Make yourself the super admin** (comes with #78; the one-time command
+   will be in the console README).
 
 GitHub pauses scheduled jobs on a public repo after 60 days with no commits.
-Push something now and then, or re-enable the job under **Actions**.
+Push something now and then, or re-enable the job under **Actions → Backend**.
+The job's log is public, so it shows request ids and outcomes only.
 
 ## 8. Your super-admin powers
 

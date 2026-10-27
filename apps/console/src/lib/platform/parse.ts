@@ -5,12 +5,14 @@
  */
 
 import { parseCafeSettings } from "@cafemenu/shared";
+import { REQUEST_KINDS, REQUEST_STATUSES } from "@cafemenu/shared/requests";
 import {
   DEPLOYMENT_KINDS,
   DEPLOYMENT_STATUSES,
   DEPLOYMENT_TRIGGERS,
   STARTING_MENU_SOURCES,
   STEP_STATUSES,
+  type BackendRequest,
   type Cafe,
   type CafeRelease,
   type Deployment,
@@ -202,4 +204,47 @@ export function compareVersionsDesc(a: string, b: string): number {
   if (!x.pre) return -1;
   if (!y.pre) return 1;
   return y.pre.localeCompare(x.pre, "en", { numeric: true });
+}
+
+/** A request's steps and "now doing" line; anything that is not a step is dropped. */
+function parseProgress(value: unknown): BackendRequest["progress"] {
+  if (!isPlainObject(value) || !Array.isArray(value.steps)) return null;
+  return {
+    steps: value.steps
+      .map(parseStep)
+      .filter((step): step is DeploymentStep => step !== null),
+    detail: stringOrNull(value.detail),
+  };
+}
+
+/**
+ * A request to the backend (#77). A just-written one still has a pending
+ * serverTimestamp(); it reads as now, so the owner sees it at once.
+ */
+export function parseRequest(id: string, data: unknown): BackendRequest | null {
+  if (!isPlainObject(data)) return null;
+  if (
+    typeof data.cafeId !== "string" ||
+    typeof data.by !== "string" ||
+    !oneOf(REQUEST_KINDS, data.kind) ||
+    !oneOf(REQUEST_STATUSES, data.status)
+  ) {
+    return null;
+  }
+  const now = Date.now();
+  return {
+    id,
+    cafeId: data.cafeId,
+    kind: data.kind,
+    params: isPlainObject(data.params) ? data.params : {},
+    status: data.status,
+    by: data.by,
+    createdAt: toMillis(data.createdAt, now) ?? now,
+    progress: parseProgress(data.progress),
+    result: data.result ?? null,
+    error: stringOrNull(data.error),
+    errorCode: stringOrNull(data.errorCode),
+    deploymentId: stringOrNull(data.deploymentId),
+    finishedAt: toMillis(data.finishedAt),
+  };
 }

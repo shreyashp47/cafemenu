@@ -13,12 +13,15 @@ rules_version = '2';
 //   an owner      reads their own cafes and those cafes' deployments, edits
 //                 their cafe's settings and release choice, creates new
 //                 cafes, and gives a draft cafe its logo and starting menu
-//                 (a live cafe's logo too), all only with a verified email
-//   the admin     (custom claim admin: true) reads everything
+//                 (a live cafe's logo too), all only with a verified email;
+//                 asks the backend for things with a `requests` document
+//                 for their own cafe, and reads their own requests
+//   the admin     (custom claim admin: true) reads everything, and asks the
+//                 backend for things for any cafe
 //   the backend   writes everything else: release records, deployments, a
-//                 cafe's status, plan and the version it runs. It uses the platform
-//                 service account, which Firestore does not hold to these
-//                 rules at all.
+//                 cafe's status, plan and the version it runs, and the
+//                 answers to requests. It uses the platform service account,
+//                 which Firestore does not hold to these rules at all.
 //   anyone else   nothing
 //
 // Default closed: a path with no match below is refused.
@@ -74,9 +77,12 @@ service cloud.firestore {
         && value.matches('[a-z]{2,20}([0-9]{1,2}|-[a-z]{2,20}[0-9]{1,2})');
     }
 
+    function isProjectId(value) {
+      return value is string && value.matches('[a-z][a-z0-9-]{4,28}[a-z0-9]');
+    }
+
     function isProjectIdOrNull(value) {
-      return value == null
-        || (value is string && value.matches('[a-z][a-z0-9-]{4,28}[a-z0-9]'));
+      return value == null || isProjectId(value);
     }
 
     // CafeSettings from @cafemenu/shared (packages/shared/src/settings.ts):
@@ -305,5 +311,85 @@ service cloud.firestore {
       allow get, list: if isAdmin() || owns(resource.data);
       allow create, update, delete: if false;
     }
+
+    // -- requests to the backend (#77) -------------------------------------------
+
+    // How the console asks the backend for something: a person writes a
+    // `queued` request, and the backend (a GitHub Actions job every 5 minutes,
+    // apps/platform-functions/src/worker/) picks it up, claims it, does it,
+    // and writes `status`, `progress`, `result` and `error` on the same
+    // document, which the console listens to. The shape is
+    // @cafemenu/shared/requests (packages/shared/src/requests.mjs): change
+    // both together.
+    //
+    // A person may only create a request: for their own cafe (or any cafe,
+    // as the admin), with a kind and params that fit, as queued, at the
+    // server's time, in their own name. Nothing the backend writes can be set
+    // at birth, and no browser may ever change or delete a request after:
+    // the backend's answer is what really happened. The backend checks again
+    // that the asker may still ask, and refuses with a reason otherwise.
+    match /requests/{requestId} {
+      // The owner of `cafeId`. The id is checked first, so it cannot point
+      // the lookup anywhere but /cafes.
+      function ownsCafe(cafeId) {
+        return cafeId is string
+          && cafeId.matches('[A-Za-z0-9_-]{1,64}')
+          && get(/databases/$(database)/documents/cafes/$(cafeId)).data.ownerUid
+            == request.auth.uid;
+      }
+
+      function adminCafe(cafeId) {
+        return isAdmin()
+          && cafeId is string
+          && cafeId.matches('[A-Za-z0-9_-]{1,64}')
+          && exists(/databases/$(database)/documents/cafes/$(cafeId));
+      }
+
+      // What each kind takes (requestParamsProblem in requests.mjs). A check
+      // is only for the project already saved on the cafe, so it cannot be
+      // used to ask whether the deploy account is a member of any project.
+      function isParams(kind, params, cafeId) {
+        return params is map
+          && ((kind == 'check'
+              && params.keys().hasOnly(['projectId'])
+              && params.keys().hasAll(['projectId'])
+              && isProjectId(params.projectId)
+              && params.projectId
+                == get(/databases/$(database)/documents/cafes/$(cafeId)).data.projectId)
+            || (kind == 'deploy'
+              && params.keys().hasOnly(['version'])
+              && params.keys().hasAll(['version'])
+              && params.version is string
+              && params.version.matches('[0-9]+[.][0-9]+[.][0-9]+(-[0-9A-Za-z.]{1,40})?'))
+            || (kind in ['provision', 'rollback', 'sync-branding']
+              && params.keys().size() == 0));
+      }
+
+      // Its asker, and the admin. An owner's list query must filter on
+      // `by` == their uid, as on /cafes.
+      allow get, list: if isAdmin()
+        || (signedIn() && resource.data.by == request.auth.uid);
+
+      allow create: if verified()
+        && request.resource.data.keys().hasOnly([
+          'cafeId', 'kind', 'params', 'status', 'createdAt', 'by'])
+        && request.resource.data.keys().hasAll([
+          'cafeId', 'kind', 'params', 'status', 'createdAt', 'by'])
+        && request.resource.data.by == request.auth.uid
+        && request.resource.data.status == 'queued'
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.kind in
+          ['provision', 'check', 'deploy', 'rollback', 'sync-branding']
+        && (ownsCafe(request.resource.data.cafeId)
+          || adminCafe(request.resource.data.cafeId))
+        && isParams(request.resource.data.kind, request.resource.data.params,
+          request.resource.data.cafeId);
+
+      allow update, delete: if false;
+    }
+
+    // The backend's own bookkeeping (`backend/worker`: which releases it has
+    // seen, when it last ran its email jobs) matches no rule, so no browser
+    // can read or write it.
   }
 }

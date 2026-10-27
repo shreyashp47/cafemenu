@@ -9,11 +9,13 @@
 
 import type { CafeSettings } from "@cafemenu/shared";
 import type {
+  BackendRequest,
   Cafe,
   Deployment,
   PlatformUser,
   Release,
   ReleaseChannel,
+  RequestKind,
   StartingMenu,
 } from "../platform/model";
 import type { NewCafeInput, ReleaseChoice } from "../platform/validate";
@@ -143,9 +145,46 @@ export interface DeploymentRepository {
 /** How many deployments a cafe's history shows. */
 export const DEPLOYMENT_HISTORY = 20;
 
-/** The record a request creates: where its progress shows up. */
-export interface DeployReceipt {
-  deploymentId: string;
+/**
+ * Where a request's progress shows up: the deployment the backend queued at
+ * once (Cloud Functions, demo mode), or the request it will pick up on its
+ * next run (the backend on GitHub Actions, #77), which says how it is going.
+ */
+export type DeployReceipt = { deploymentId: string } | { requestId: string };
+
+/** How many of an owner's requests for a cafe the owner area watches. */
+export const REQUEST_HISTORY = 5;
+
+/**
+ * Requests to the backend as documents (#77): the console writes one, and
+ * the backend's job, every 5 minutes, picks it up and answers on it. The
+ * rules let a verified owner write one only for their own cafe, and nobody
+ * change one after (firestore.rules, `match /requests/{id}`).
+ */
+export interface RequestRepository {
+  /**
+   * Asks the backend for `kind` on the cafe, as the signed-in account.
+   * Returns the request's id. Fails with permission-denied when the rules
+   * refuse it.
+   */
+  create(input: {
+    cafeId: string;
+    kind: RequestKind;
+    params?: Record<string, unknown>;
+  }): Promise<string>;
+  /** One request, live. */
+  subscribe(
+    id: string,
+    listener: Listener<BackendRequest>,
+    onError?: ErrorListener,
+  ): Unsubscribe;
+  /** `by`'s latest requests for the cafe, live, newest first. */
+  subscribeForCafe(
+    cafe: Pick<Cafe, "id">,
+    by: string,
+    listener: Listener<BackendRequest[]>,
+    onError?: ErrorListener,
+  ): Unsubscribe;
 }
 
 /**
@@ -263,6 +302,12 @@ export interface DataBundle {
   deployments: DeploymentRepository;
   /** Upgrade, Roll back and Save branding in the owner area. */
   deploys: DeployRequests;
+  /**
+   * The requests the console writes when the backend runs on GitHub Actions
+   * (NEXT_PUBLIC_BACKEND=requests); null otherwise. Requests take minutes,
+   * so the pages say so when this is set.
+   */
+  requests: RequestRepository | null;
   backend: Backend;
 }
 
