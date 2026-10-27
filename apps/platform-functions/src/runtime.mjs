@@ -68,16 +68,19 @@ export function metadataServiceAccount(fetchImpl = fetch) {
 }
 
 /**
- * Under the Functions emulator, and only there, Google (and GitHub, for the
- * release package) can be a fake served from `CAFEMENU_FAKE_GOOGLE`: the
- * emulator test points it at the deployer's fake Google. Needs the emulator's
- * own variable and a `demo-` project, which can't exist for real, so a
- * deployed function can never take this path.
+ * Under the emulators, and only there, Google (and GitHub, for the release
+ * package) can be a fake served from `CAFEMENU_FAKE_GOOGLE`: the emulator
+ * tests point it at the deployer's fake Google. Needs the Functions
+ * emulator's own variable (or, for the worker, the Firestore emulator's) and
+ * a `demo-` project, which can't exist for real, so a deployed function or
+ * the backend's workflow can never take this path.
  */
 export function fakeGoogleBase(env = process.env) {
   const base = env.CAFEMENU_FAKE_GOOGLE;
   const demo = (env.GCLOUD_PROJECT ?? "").startsWith("demo-");
-  return base && env.FUNCTIONS_EMULATOR === "true" && demo ? base : null;
+  const emulated =
+    env.FUNCTIONS_EMULATOR === "true" || Boolean(env.FIRESTORE_EMULATOR_HOST);
+  return base && emulated && demo ? base : null;
 }
 
 /** A fetch that sends everything to the fake at `base`, saying where it was meant to go. */
