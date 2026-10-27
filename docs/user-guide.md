@@ -2,6 +2,8 @@
 
 For you, the person running CafeMenu. It covers what's live, how to run and
 deploy everything yourself, how to set up a cafe, and what still needs doing.
+**Status 2026-10-27: paused for a few days.** Everything is on GitHub `main`; no session is running. Restart with section 12.
+
 The requirements are in [requirements.md](./requirements.md), the design in
 [PLAN.md](../PLAN.md).
 
@@ -180,14 +182,33 @@ fallback is `npm run seed:staff -w @cafemenu/cafe -- --email=… --role=owner`.
 
 ## 11. What's left, and who does it
 
-| Step                                                             | Who                |
-| ---------------------------------------------------------------- | ------------------ |
-| Free disk space so new sessions can start                        | You, or ask Claude |
-| The backend on GitHub Actions (#77)                              | Claude             |
-| Deploy account key as a GitHub secret (#2, section 7)            | You                |
-| First real deployer runs and fixes (#3–#7)                       | Claude             |
-| A test cafe project in a spare Google account (#2)               | You                |
-| Super admin and maintenance mode (#78), after your six decisions | You, then Claude   |
-| Move TOE onto CafeMenu (#23), at a quiet hour                    | Claude, with you   |
-| Lawyer's review of privacy and terms (#31)                       | You                |
-| v1.0 test on real phones and a real cafe day (#41)               | Both               |
+| Step                                                             | Who              |
+| ---------------------------------------------------------------- | ---------------- |
+| The backend on GitHub Actions (#77)                              | Claude           |
+| Deploy account key as a GitHub secret (#2, section 7)            | You              |
+| First real deployer runs and fixes (#3–#7)                       | Claude           |
+| A test cafe project in a spare Google account (#2)               | You              |
+| Super admin and maintenance mode (#78), after your six decisions | You, then Claude |
+| Move TOE onto CafeMenu (#23), at a quiet hour                    | Claude, with you |
+| Lawyer's review of privacy and terms (#31)                       | You              |
+| v1.0 test on real phones and a real cafe day (#41)               | Both             |
+
+## 12. Restarting after a break
+
+Say **"continue"** to Claude in this project, then:
+
+1. **Backend on GitHub Actions (#77).** Its session never started, because the
+   disk was full at the time; there's room now (22 GB free). Restart it from
+   that session, or ask Claude to start it again.
+2. **Your part of #2.** Create the deploy account and its key, then the
+   `PLATFORM_SERVICE_ACCOUNT` GitHub secret (section 7), plus a test cafe
+   project in a spare Google account.
+3. **First real deployer run (#3–#7)** against that test cafe, then a real cafe
+   site live on Firebase with orders across phones.
+4. **Super admin and maintenance mode (#78),** after your six decisions in
+   [super-admin-requirements.md](./super-admin-requirements.md) §8.
+5. **Housekeeping:**
+   - Four Dependabot PRs are waiting: #43, #44, #46, #52. Merge them when CI
+     is green.
+   - Old session worktrees in `.claude/worktrees` can be cleaned up: all their
+     work is on `main`.
