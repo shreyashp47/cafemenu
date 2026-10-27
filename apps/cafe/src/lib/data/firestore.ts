@@ -84,6 +84,8 @@ const ORDERS = "orders";
 const CONFIG = "config";
 const SPECIAL_DOC = "special";
 const SITE_DOC = "site";
+/** The owner's own maintenance (#78); the admin's is a field of config/site. */
+const OWNER_MAINTENANCE_DOC = "ownerMaintenance";
 const TABLES_DOC = "tables";
 const STAFF = "staff";
 const INVITES = "invites";
@@ -613,6 +615,33 @@ export const firestoreConfigRepo: ConfigRepository = {
         () => {},
       );
     });
+  },
+  subscribeOwnerMaintenance(listener) {
+    return deferred(async () => {
+      const { db, fs } = await dbAndFs();
+      return fs.onSnapshot(
+        fs.doc(db, CONFIG, OWNER_MAINTENANCE_DOC),
+        (snap) => {
+          // As subscribeSite: an empty cache isn't "no maintenance".
+          if (!snap.exists() && snap.metadata.fromCache) return;
+          listener(snap.exists() ? snap.data() : null);
+        },
+        // Public read: a failure is the network. The rules still refuse
+        // orders while it is on.
+        () => {},
+      );
+    });
+  },
+  async saveOwnerMaintenance(record) {
+    const { db, fs } = await dbAndFs();
+    const ref = fs.doc(db, CONFIG, OWNER_MAINTENANCE_DOC);
+    if (!record) {
+      await fs.deleteDoc(ref);
+      return;
+    }
+    // A whole-document set: the rules allow exactly these fields, with the
+    // server's time.
+    await fs.setDoc(ref, { ...record, updatedAt: fs.serverTimestamp() });
   },
   subscribeTables(listener) {
     return deferred(async () => {

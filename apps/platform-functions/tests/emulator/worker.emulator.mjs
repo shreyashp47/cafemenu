@@ -12,34 +12,9 @@
  * installed as the workflow installs it (CI does both).
  */
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
-import { dirname, join } from "node:path";
 import { after, before, describe, it } from "node:test";
-import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
 
-import { initializeApp as initializeAdmin } from "firebase-admin/app";
-import { getAuth as getAdminAuth } from "firebase-admin/auth";
-import {
-  Timestamp,
-  getFirestore as getAdminFirestore,
-} from "firebase-admin/firestore";
-import { deleteApp, initializeApp } from "firebase/app";
-import {
-  connectAuthEmulator,
-  getAuth,
-  signInWithEmailAndPassword,
-} from "firebase/auth";
-import {
-  addDoc,
-  collection,
-  connectFirestoreEmulator,
-  doc,
-  getFirestore,
-  onSnapshot,
-  serverTimestamp,
-  setLogLevel,
-} from "firebase/firestore";
+import { Timestamp } from "firebase-admin/firestore";
 
 import { newRequestRecord } from "@cafemenu/shared/requests";
 
@@ -50,95 +25,19 @@ import {
   publish,
   releasePackage,
 } from "../../../../packages/deployer/tests/helpers/release.mjs";
+import {
+  CAFE_PROJECT,
+  account,
+  ask,
+  db,
+  finished,
+  until,
+  watch,
+  worker,
+} from "../helpers/emulator.mjs";
 import { startFakeGoogle } from "../helpers/fake-google-server.mjs";
 
-const PROJECT = "demo-cafemenu";
-const CAFE_PROJECT = "test-cafe"; // the project the fake Google answers for
-const HOST = "127.0.0.1";
-const AUTH_PORT = 9199;
-const FS_PORT = 8180;
-const PASSWORD = "correct-horse-1";
-const APP = join(dirname(fileURLToPath(import.meta.url)), "../..");
-const WORKER_DIR = join(APP, process.env.CAFEMENU_WORKER_DIR ?? ".");
-
-setLogLevel("silent");
-process.env.GCLOUD_PROJECT = PROJECT;
-const admin = initializeAdmin({ projectId: PROJECT }, "seed");
-const db = getAdminFirestore(admin);
-const adminAuth = getAdminAuth(admin);
-
-/** A verified account, and a browser signed in as it. */
-async function owner(email) {
-  const user = await adminAuth.createUser({
-    email,
-    password: PASSWORD,
-    emailVerified: true,
-  });
-  const app = initializeApp(
-    { projectId: PROJECT, apiKey: "demo", authDomain: "demo.local" },
-    email,
-  );
-  const auth = getAuth(app);
-  connectAuthEmulator(auth, `http://${HOST}:${AUTH_PORT}`, {
-    disableWarnings: true,
-  });
-  const browser = getFirestore(app);
-  connectFirestoreEmulator(browser, HOST, FS_PORT);
-  await signInWithEmailAndPassword(auth, email, PASSWORD);
-  return { uid: user.uid, email, app, db: browser };
-}
-
-/** What the console's requests adapter writes (apps/console/src/lib/data/requests.ts). */
-const ask = (who, cafeId, kind, params = {}) =>
-  addDoc(
-    collection(who.db, "requests"),
-    newRequestRecord({ cafeId, kind, params, by: who.uid }, serverTimestamp()),
-  );
-
-const runWorker = promisify(execFile);
-/** One run of the backend, as the workflow does it. Returns its log. */
-async function worker(...args) {
-  const { stdout } = await runWorker(
-    process.execPath,
-    ["src/worker/main.mjs", ...args],
-    {
-      cwd: WORKER_DIR,
-      env: {
-        ...process.env,
-        GCLOUD_PROJECT: PROJECT,
-        FIRESTORE_EMULATOR_HOST:
-          process.env.FIRESTORE_EMULATOR_HOST ?? `${HOST}:${FS_PORT}`,
-        FIREBASE_AUTH_EMULATOR_HOST:
-          process.env.FIREBASE_AUTH_EMULATOR_HOST ?? `${HOST}:${AUTH_PORT}`,
-        CAFEMENU_FAKE_GOOGLE: "http://127.0.0.1:8399",
-      },
-      timeout: 120_000,
-    },
-  );
-  return stdout;
-}
-
-/** Everything a request's listener saw, as the console's would. */
-function watch(ref) {
-  const seen = [];
-  const stop = onSnapshot(ref, (snap) => {
-    const data = snap.data();
-    if (data) seen.push(data);
-  });
-  return { seen, stop, last: () => seen.at(-1) };
-}
-
-const until = async (what, read, seconds = 30) => {
-  const end = Date.now() + seconds * 1000;
-  for (;;) {
-    const value = await read();
-    if (value) return value;
-    if (Date.now() > end) throw new Error(`Timed out waiting for ${what}`);
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  }
-};
-const finished = (w) => () =>
-  ["done", "failed"].includes(w.last()?.status) ? w.last() : null;
+const owner = account;
 
 async function release(version) {
   await publish(fake.google, await releasePackage(version));
@@ -203,7 +102,7 @@ describe("requests from the console, done by the worker", () => {
   });
 
   after(async () => {
-    await Promise.all([alice, mallory].map((who) => deleteApp(who.app)));
+    await Promise.all([alice, mallory].map((who) => who.close()));
     await fake?.close();
   });
 

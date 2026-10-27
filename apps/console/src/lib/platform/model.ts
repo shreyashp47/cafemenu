@@ -16,6 +16,12 @@
  *   requests/{id}          what an owner (or the admin) asked the backend for:
  *                          written once by them, answered by the backend
  *                          (#77; the shape is @cafemenu/shared/requests).
+ *   owners/{uid}           the admin's directory of accounts (#78), copied
+ *                          from Authentication by the backend. Admin only.
+ *   adminLog/{id}          every admin action (#78), written once by the
+ *                          backend and never changed. Admin only.
+ *   cafes/{id}/emails/     the emails sent to a cafe's owner, for the admin's
+ *                          history of it (#78). Admin only.
  *
  * firestore.rules is the real boundary; the checks in validate.ts mirror it so
  * the console can say what is wrong before a write is refused. Change all
@@ -123,8 +129,85 @@ export interface Cafe {
   settings: CafeSettings;
   release: CafeRelease;
   status: CafeStatus;
+  /**
+   * Why the admin last suspended or reactivated it, and when (#78). Null
+   * when the admin never has; absent on a record built in the app.
+   */
+  statusReason?: AdminReason | null;
+  statusChangedAt?: number | null;
+  /** CafeMenu's maintenance of its site (#78), as the backend set it. */
+  maintenance?: CafeMaintenance | null;
   createdAt: number;
   updatedAt: number;
+}
+
+// -- the super admin (#78) ------------------------------------------------------
+
+/** A reason from the policy's list (@cafemenu/shared/admin-policy), and a note. */
+export interface AdminReason {
+  /** Null for an action that needs none, such as maintenance off. */
+  code: string | null;
+  note: string;
+}
+
+/**
+ * CafeMenu's maintenance of a cafe's site, as the backend keeps it on the
+ * cafe: what it put in the cafe's own `config/site.maintenance` (times in
+ * ms), and why, which only the admin and the owner read here.
+ */
+export interface CafeMaintenance {
+  on: true;
+  by: "admin" | "owner";
+  message: string;
+  until: number | null;
+  startsAt: number | null;
+  endsAt: number | null;
+  reason: AdminReason | null;
+  setAt: number | null;
+  setBy: string | null;
+  /** The bulk action it was part of, if any. */
+  batch: string | null;
+}
+
+export const OWNER_STATUSES = ["active", "suspended"] as const;
+export type OwnerStatus = (typeof OWNER_STATUSES)[number];
+
+/** One `owners/{uid}`: an account in the admin's directory. */
+export interface OwnerRecord {
+  uid: string;
+  email: string;
+  name: string | null;
+  /** Sign-up and last console sign-in, from Authentication. */
+  createdAt: number | null;
+  lastSignInAt: number | null;
+  admin: boolean;
+  disabled: boolean;
+  status: OwnerStatus;
+  statusReason: AdminReason | null;
+  statusChangedAt: number | null;
+}
+
+/** One `adminLog/{id}`: who did what, to which cafe, when and why. */
+export interface AdminLogEntry {
+  id: string;
+  at: number;
+  /** The admin's uid, and their email then. */
+  by: string;
+  byEmail: string | null;
+  /** The request kind: "suspend", "maintenance-on"… */
+  action: string;
+  cafeId: string | null;
+  ownerUid: string | null;
+  reason: AdminReason | null;
+  details: Record<string, unknown>;
+}
+
+/** One `cafes/{id}/emails/{id}`: an email the backend sent the owner. */
+export interface SentEmail {
+  id: string;
+  /** The template: "account-suspended", "release-available"… */
+  kind: string;
+  at: number;
 }
 
 // -- what the owner gives at sign-up ---------------------------------------------
@@ -268,7 +351,8 @@ export interface RequestProgress {
  */
 export interface BackendRequest {
   id: string;
-  cafeId: string;
+  /** Null for a request about an account rather than a cafe (appoint-admin). */
+  cafeId: string | null;
   kind: RequestKind;
   params: Record<string, unknown>;
   status: RequestStatus;
@@ -287,6 +371,8 @@ export interface BackendRequest {
   errorCode: string | null;
   /** The deployment it became, once the backend has queued it. */
   deploymentId: string | null;
+  /** A request waiting for its date (a suspension's notice): not before then. */
+  notBefore: number | null;
   finishedAt: number | null;
 }
 

@@ -15,6 +15,7 @@ import type { ReactNode } from "react";
 
 import { Icon, type IconName } from "@/components/icons";
 import { CafeMark } from "@/components/CafeMark";
+import { MaintenanceBanner } from "@/components/MaintenanceBanner";
 import { Mascot } from "@/components/Mascot";
 import { NotSetUp } from "@/components/NotSetUp";
 import { OwnerSwitch } from "@/components/OwnerSwitch";
@@ -127,7 +128,10 @@ function Shell({ children }: { children: ReactNode }) {
         </nav>
       </header>
 
-      <main className="shell-wide pt-4">{children}</main>
+      <main className="shell-wide pt-4">
+        <MaintenanceBanner who="owner" />
+        {children}
+      </main>
     </div>
   );
 }

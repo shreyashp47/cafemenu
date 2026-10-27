@@ -1,7 +1,7 @@
 /**
  * The admin's view of every cafe (#30) as data: how each one is doing, from
- * its latest deployment and the smoke test in it; the filters; the audit
- * list of deployments. Pure, so every case is tested without a browser; the
+ * its latest deployment and the smoke test in it; the audit list of
+ * deployments. The directory's search and filters are in directory.ts. Pure, so every case is tested without a browser; the
  * components only show it, and the words are in messages/en.json under
  * `admin`.
  *
@@ -174,32 +174,7 @@ export function adminRows(
     );
 }
 
-export interface Summary {
-  total: number;
-  live: number;
-  attention: number;
-  busy: number;
-}
-
-export function summary(rows: readonly AdminRow[]): Summary {
-  return {
-    total: rows.length,
-    live: rows.filter((r) => r.cafe.status === "live").length,
-    attention: rows.filter((r) => r.health.level === "attention").length,
-    busy: rows.filter((r) => r.health.level === "busy").length,
-  };
-}
-
-// -- filters ----------------------------------------------------------------------
-
-export const ADMIN_FILTERS = [
-  "all",
-  "attention",
-  "busy",
-  "beta",
-  "pinned",
-] as const;
-export type AdminFilter = (typeof ADMIN_FILTERS)[number];
+// -- following releases -------------------------------------------------------------
 
 /** How a cafe follows releases, for display: stable, beta, or a line. */
 export function followOf(release: CafeRelease): {
@@ -208,38 +183,6 @@ export function followOf(release: CafeRelease): {
 } {
   if (release.pinned !== null) return { kind: "pinned", line: release.pinned };
   return { kind: release.channel, line: null };
-}
-
-export function matchesFilter(row: AdminRow, filter: AdminFilter): boolean {
-  switch (filter) {
-    case "attention":
-      return row.health.level === "attention";
-    case "busy":
-      return row.health.level === "busy";
-    case "beta":
-      return row.cafe.release.channel === "beta";
-    case "pinned":
-      return row.cafe.release.pinned !== null;
-    default:
-      return true;
-  }
-}
-
-/** The rows that pass `filter` and whose name, site or owner has `query`. */
-export function filterRows(
-  rows: readonly AdminRow[],
-  filter: AdminFilter,
-  query: string,
-): AdminRow[] {
-  const q = query.trim().toLowerCase();
-  return rows.filter(
-    (row) =>
-      matchesFilter(row, filter) &&
-      (!q ||
-        [row.cafe.settings.name, row.cafe.site, row.cafe.ownerEmail].some(
-          (field) => field.toLowerCase().includes(q),
-        )),
-  );
 }
 
 // -- the audit list ------------------------------------------------------------------

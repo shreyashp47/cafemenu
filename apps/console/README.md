@@ -281,6 +281,9 @@ Types in [`src/lib/platform/model.ts`](./src/lib/platform/model.ts), rules in
 | `deployments/{id}`   | one per setup, deploy, rollback or branding sync of a cafe | the backend only                                                | that cafe's owner, the admin |
 | `cafes/{id}/setup/…` | the logo and starting menu from sign-up                    | its owner, while the cafe is a draft (the logo also while live) | its owner, the admin         |
 | `requests/{id}`      | something asked of the backend (#77)                       | its asker once, queued, for their own cafe; then the backend    | its asker, the admin         |
+| `owners/{uid}`       | the admin's directory of accounts (#78)                    | the backend only (copied from Authentication hourly)            | the admin                    |
+| `adminLog/{id}`      | every admin action (#78), id the request's                 | the backend only, once; never changed or deleted                | the admin                    |
+| `cafes/{id}/emails/` | each email sent to the cafe's owner (#78)                  | the backend only                                                | the admin                    |
 
 A cafe:
 
@@ -356,25 +359,60 @@ client writes.
 
 ## The platform admin
 
-`/admin` is the maintainer's page: not linked from anywhere, and a sign-in form
-for everyone but an account with the `admin: true` claim (the rules are what
-keep the data from anyone else; the page only declines to ask). It shows:
+`/admin` is the maintainer's page, the **super admin**
+([#30](https://github.com/shreyashp47/cafemenu/issues/30),
+[#78](https://github.com/shreyashp47/cafemenu/issues/78),
+[docs/super-admin-requirements.md](../../docs/super-admin-requirements.md)):
+not linked from anywhere, and a sign-in form for everyone but an account with
+the `admin: true` claim (the rules are what keep the data from anyone else;
+the page only declines to ask). The first admin is made with
+`npm run make-admin` (the
+[platform functions README](../platform-functions/README.md#the-super-admin)).
+It shows:
 
 <p align="center">
   <img src="docs/screens/admin-phone.jpg" width="816" alt="The platform admin on a phone, four views: Cafes filtered to those that need a look, with Orchard Tea House's rolled-back deployment, its failed smoke test and its error; Publish a release with the version 1.1.1 refused as already published; Published releases with a rollout running, one completed and two not started; and the Audit log of deployments with who asked, what, when, and each smoke test">
 </p>
 
-- **Cafes.** One card per cafe: how it is doing (healthy, in progress, needs a
-  look, paused, not set up), which release it runs and the one before, whether
-  it follows stable, beta or stays on a line, its latest deployment, the last
-  **smoke test** it had and when, the error if something failed, the owner and
-  the address. Cafes that need a look come first; a search (name, address,
-  owner's email) and filters (needs a look, in progress, on beta, staying on a
-  version) narrow them. Health is worked out in
-  [`src/lib/admin/overview.ts`](./src/lib/admin/overview.ts) from the cafe's
-  status and its newest deployment, and the smoke result from the deployment's
-  `smoke` step, the one the deployer records. Cards, not a table, so a phone
+(The screenshot is from before #78: it shows the cafes, releases and
+deployments, not the directory's owners, actions and logs.)
+
+- **Owners and cafes.** One card per cafe with its owner, then one per
+  account with no cafe: the owner's name and email, when they signed up and
+  last signed in, the account's status (active or suspended), the cafe's
+  address, Firebase project, maintenance, plan, release and how it follows
+  releases, its latest deployment and **smoke test**, and how it is doing
+  (healthy, in progress, needs a look, paused, not set up); those that need a
+  look come first. A search (email, owner's or cafe's name, web address,
+  project ID) and five filters (status, maintenance, plan, channel, health)
+  narrow them, and **Download the list as CSV** saves what is shown.
+  [`src/lib/admin/directory.ts`](./src/lib/admin/directory.ts) joins
+  `owners/`, `cafes/` and the latest deployments; health is worked out in
+  [`overview.ts`](./src/lib/admin/overview.ts). Cards, not a table, so a phone
   has nothing to scroll sideways.
+- **One cafe**, behind **Open**: its full history, live (requests,
+  deployments, status changes, maintenance windows, the emails its owner was
+  sent; [`history.ts`](./src/lib/admin/history.ts)), and the **actions**:
+  suspend, reactivate, delete, maintenance on and off. Each is a request
+  (#77) the backend does on its next run and writes to the admin log; the
+  forms ([`actions.ts`](./src/lib/admin/actions.ts)) take the reasons and
+  notice periods from
+  [`@cafemenu/shared/admin-policy`](../../packages/shared/src/admin-policy.mjs)
+  and read times on the cafe's own clock. Delete reminds the admin to remove
+  the deploy account from the owner's project and asks for the web address
+  to be typed.
+- **Maintenance on several cafes**: tick them in the list, then one batch,
+  one request per cafe, with each cafe's own clock reading the times. The
+  plan is kept in this browser before the first request is written, so a
+  page closed partway shows the batch with **Resume**; **Revert** turns
+  maintenance off again on every cafe the batch turned it on
+  ([`bulk.ts`](./src/lib/admin/bulk.ts)).
+- **Admin log.** Every admin action as the backend did it (and each release
+  published, promoted or withdrawn), filtered by action or by what it is
+  about, and downloadable as CSV ([`log.ts`](./src/lib/admin/log.ts)). No
+  button changes it, and the rules let nobody write it.
+- **Admins.** The accounts with the claim; remove one (never the last);
+  appointing another is built in and off while the policy says so.
 - **Releases.** Publish a release record (version, channel, notes, database
   schema), checked here for the mistakes that can be seen from here (a bad
   or already-published version, a pre-release going to stable, no notes) and
@@ -386,32 +424,47 @@ keep the data from anyone else; the page only declines to ask). It shows:
   which only records the state until the backend runs `deployer rollout` (the
   `TODO(#32)` names the commands and says the rollouts become `rollouts/{id}`
   documents, with rules for the admin to read them).
-- **Audit log.** The latest 200 deployments of every cafe, newest first: what
-  (setup, deploy and from which version, rollback, branding sync), the cafe,
-  how it went, who asked (the owner's email, a rollout, or the admin), when,
-  its smoke test and error. Narrowed to one cafe, or to those that didn't go
-  through, 25 at a time.
+- **Deployments.** The latest 200 deployments of every cafe, newest first:
+  what (setup, deploy and from which version, rollback, branding sync), the
+  cafe, how it went, who asked (the owner's email, a rollout, or the admin),
+  when, its smoke test and error. Narrowed to one cafe, or to those that
+  didn't go through, 25 at a time.
+
+The actions need the backend on GitHub Actions
+(`NEXT_PUBLIC_BACKEND=requests`); with the Cloud Functions or none, the page
+reads and says so instead of offering them. The new queries need the indexes
+in [`firestore.indexes.json`](./firestore.indexes.json): deploy them with the
+rules (the `deploy --only firestore:rules,firestore:indexes` of
+[Real mode](#real-mode-the-platform-project)).
 
 What it deliberately lacks: **no way to sign in as an owner** (the
 authentication repository has no such call, and a test keeps it so) **and no way
-to read a cafe's orders**: they live in the owner's own project, and no path in
-the platform database leads to them (the rules test tries `/orders`, `/staff`
-and `/rollouts`, and is refused). Cafes are read-only: the admin cannot edit
-one, move it to another owner, withdraw a release or start a deploy from a
-browser, only ask the backend, which writes with its own account.
+to read a cafe's orders, customers or staff**: they live in the owner's own
+project, and no path in the platform database leads to them (the rules test
+tries `/orders`, `/staff` and `/rollouts`, and is refused). Cafes are
+read-only from the browser: every change is a request the backend does with
+its own account, and logs.
 
-**The latest 200.** One query feeds the log and each cafe's last deploy
-(`DeploymentRepository.subscribeRecent`: newest first, no filter, which only the
-admin's claim lets through). A cafe whose newest deployment is older than the
-latest 200 reads as having none, which is fine for dozens of cafes and is the
-place to start if there are ever thousands (a `lastDeployment` on the cafe,
-written by the backend).
+**Owners** see the admin's work in their own area: a suspended cafe says why;
+CafeMenu's maintenance of their site, on or coming, says so with the reason;
+and a sign-in refused while suspended (`auth/user-disabled`) says the account
+is suspended and that CafeMenu has emailed why.
+
+**The latest 200.** One query feeds the deployments list and each cafe's last
+deploy (`DeploymentRepository.subscribeRecent`: newest first, no filter, which
+only the admin's claim lets through). A cafe whose newest deployment is older
+than the latest 200 reads as having none, which is fine for dozens of cafes
+and is the place to start if there are ever thousands (a `lastDeployment` on
+the cafe, written by the backend).
 
 **Demo mode** has an admin of its own, made on first sign-in: `admin@cafemenu.demo`
 with the password `demo-admin` (the page says so). It sees seven sample cafes in
-every state, with their deployments, written once into the demo store and
-belonging to no account; an owner in the same browser never sees them. Nobody
-can sign up as it.
+every state, with their deployments, emails and a past maintenance window in
+the log, written once into the demo store and belonging to no account; an
+owner in the same browser never sees them. Nobody can sign up as it. Its
+actions are done at once, as the worker would
+([`src/lib/data/demo-admin.ts`](./src/lib/data/demo-admin.ts)): suspend a demo
+owner and their sign-in is refused.
 
 ## Checks
 

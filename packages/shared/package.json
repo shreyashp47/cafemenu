@@ -16,6 +16,14 @@
     "./requests": {
       "types": "./src/requests.d.mts",
       "default": "./src/requests.mjs"
+    },
+    "./admin-policy": {
+      "types": "./src/admin-policy.d.mts",
+      "default": "./src/admin-policy.mjs"
+    },
+    "./maintenance": {
+      "types": "./src/maintenance.d.mts",
+      "default": "./src/maintenance.mjs"
     }
   },
   "engines": {

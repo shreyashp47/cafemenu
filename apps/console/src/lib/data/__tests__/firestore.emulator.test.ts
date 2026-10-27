@@ -16,9 +16,11 @@ import { applyActionCode } from "firebase/auth";
 import { setLogLevel } from "firebase/firestore";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type {
+  AdminLogEntry,
   BackendRequest,
   Cafe,
   Deployment,
+  OwnerRecord,
   PlatformUser,
   StartingMenu,
 } from "../../platform/model";
@@ -29,7 +31,7 @@ import {
   type FirebaseTarget,
 } from "../firebase";
 import { createFirebaseBundle } from "../firestore";
-import type { DataBundle, Listener, Unsubscribe } from "../types";
+import type { CafeHistory, DataBundle, Listener, Unsubscribe } from "../types";
 
 const PROJECT = process.env.FIRESTORE_EMULATOR_PROJECT ?? "demo-cafemenu";
 const [fsHost, fsPort] = (process.env.FIRESTORE_EMULATOR_HOST ?? "").split(":");
@@ -131,6 +133,8 @@ describe.runIf(PROJECT.startsWith("demo-"))("Firebase adapters", () => {
   let alice: DataBundle;
   let aliceUser: PlatformUser;
   let cafe: Cafe;
+  /** The admin's browser, once the backend has given it the claim. */
+  let erin: Promise<FirebaseHandles>;
 
   beforeAll(async () => {
     setLogLevel("silent");
@@ -520,6 +524,7 @@ describe.runIf(PROJECT.startsWith("demo-"))("Firebase adapters", () => {
   it("gives the admin claim to the account the backend marked", async () => {
     const admin = await owner("erin", "erin@platform.test");
     apps.push(admin.handles);
+    erin = admin.handles;
     const { auth } = await admin.handles;
     const res = await fetch(
       `${AUTH}/identitytoolkit.googleapis.com/v1/projects/${PROJECT}/accounts:update`,
@@ -570,6 +575,133 @@ describe.runIf(PROJECT.startsWith("demo-"))("Firebase adapters", () => {
     await expect(
       admin.bundle.admin.rollout("1.1.0", "pause"),
     ).rejects.toMatchObject({ code: "admin-pending" });
+  });
+
+  it("reads the super admin's directory, history and log, and asks for an action (#78)", async () => {
+    const admin = createFirebaseBundle(() => erin, "emulators", {
+      mode: "requests",
+    });
+    const { directory } = admin;
+    expect(directory.canAct).toBe(true);
+    // What the backend writes, here as the emulator's admin.
+    await seed(`owners/${aliceUser.uid}`, {
+      email: str(aliceUser.email),
+      createdAt: { integerValue: "1000" },
+      lastSignInAt: { integerValue: "2000" },
+      admin: { booleanValue: false },
+      disabled: { booleanValue: false },
+      status: str("active"),
+    });
+    await seed("adminLog/req-earlier", {
+      at: time("2026-10-20T09:00:00Z"),
+      by: str("erin-uid"),
+      byEmail: str("erin@platform.test"),
+      action: str("maintenance-on"),
+      cafeId: str(cafe.id),
+      ownerUid: str(aliceUser.uid),
+      reason: {
+        mapValue: {
+          fields: { code: str("migration"), note: str("Prices to paise.") },
+        },
+      },
+      details: { mapValue: { fields: {} } },
+    });
+    await seed(`cafes/${cafe.id}/emails/e1`, {
+      kind: str("maintenance-on"),
+      key: str("maintenance-on:req-earlier"),
+      at: time("2026-10-20T09:01:00Z"),
+    });
+
+    const owners = await next<OwnerRecord[]>(
+      (l, e) => directory.subscribeOwners(l, e),
+      (list) => list.length > 0,
+    );
+    expect(owners.find((o) => o.uid === aliceUser.uid)).toMatchObject({
+      email: aliceUser.email,
+      lastSignInAt: 2000,
+      status: "active",
+    });
+    const log = await next<AdminLogEntry[]>(
+      (l, e) => directory.subscribeLog(10, l, e),
+      (list) => list.length > 0,
+    );
+    expect(log[0]).toMatchObject({
+      id: "req-earlier",
+      action: "maintenance-on",
+      reason: { code: "migration", note: "Prices to paise." },
+    });
+    const history = await next<CafeHistory>(
+      (l, e) => directory.subscribeHistory(cafe.id, l, e),
+      (h) => h.emails.length > 0 && h.requests.length > 0,
+    );
+    expect(history.log.map((e) => e.id)).toEqual(["req-earlier"]);
+    expect(history.emails[0]).toMatchObject({ kind: "maintenance-on" });
+    // Alice's own requests (#77) are in the admin's view of her cafe.
+    expect(history.requests.every((r) => r.cafeId === cafe.id)).toBe(true);
+    expect(history.deployments.every((d) => d.cafeId === cafe.id)).toBe(true);
+
+    // An action is a request, written through the rules, that the backend
+    // does on its next run.
+    const id = await directory.ask({
+      cafeId: cafe.id,
+      kind: "maintenance-on",
+      params: {
+        reason: "security",
+        note: "",
+        message: "Back soon.",
+        until: null,
+        startsAt: null,
+        endsAt: null,
+        batch: null,
+      },
+    });
+    const mine = await next<BackendRequest[]>(
+      (l, e) => directory.subscribeMine(10, l, e),
+      (list) => list.some((r) => r.id === id),
+    );
+    expect(mine.find((r) => r.id === id)).toMatchObject({
+      cafeId: cafe.id,
+      kind: "maintenance-on",
+      status: "queued",
+    });
+    // About an account, not a cafe.
+    await directory.ask({
+      cafeId: null,
+      kind: "remove-admin",
+      params: { email: "erin@platform.test", note: "" },
+    });
+    // A shape the rules refuse never leaves the browser.
+    await expect(
+      directory.ask({
+        cafeId: cafe.id,
+        kind: "suspend",
+        params: { reason: "boredom", note: "", effectiveAt: null },
+      }),
+    ).rejects.toMatchObject({ code: "invalid-argument" });
+
+    // The owner reaches none of it.
+    const own = createFirebaseBundle(() => apps[0], "emulators", {
+      mode: "requests",
+    }).directory;
+    for (const read of [
+      (l: Listener<unknown>, e: (e: Error) => void) =>
+        own.subscribeOwners(l, e),
+      (l: Listener<unknown>, e: (e: Error) => void) =>
+        own.subscribeLog(10, l, e),
+      (l: Listener<unknown>, e: (e: Error) => void) =>
+        own.subscribeHistory(cafe.id, l, e),
+    ]) {
+      await expect(next(read)).rejects.toMatchObject({
+        code: "permission-denied",
+      });
+    }
+    await expect(
+      own.ask({
+        cafeId: cafe.id,
+        kind: "maintenance-off",
+        params: { note: "", batch: null },
+      }),
+    ).rejects.toMatchObject({ code: "permission-denied" });
   });
 
   it("signs out", async () => {

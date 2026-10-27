@@ -41,6 +41,8 @@ deployer sync-branding --project <id> --site <name> --settings <cafe-settings.js
 deployer rollout   --version <x.y.z> --cafes <cafes.json> [--batch-size <n>] [--failure-threshold <percent>] [--releases <file>]
 deployer rollout   --resume <rollout-id> --cafes <cafes.json>
 deployer owner     --project <id> --email <email> --name <name>
+deployer maintenance --project <id> --on [--message <text>] [--until <time>] [--starts <time>] [--ends <time>]
+deployer maintenance --project <id> --off
 ```
 
 and, on its own and needing no key, the [smoke test](#smoke-test-is-the-cafe-up)
@@ -397,6 +399,34 @@ deployer sync-branding --project lantern-cafe-1a2b --site lantern-cafe \
   --settings lantern.json --logo lantern.png
 ```
 
+### `maintenance`
+
+CafeMenu's maintenance of a cafe's site (#78): while it is in effect,
+customers see a "back soon" page instead of the menu and the cafe's rules
+refuse every new order; orders already placed, the staff board and the
+owner's dashboard keep working. It writes only the `maintenance` field of
+`config/site` (an update mask, so nothing else there changes), which no
+browser can write: the owner can't end it, and their own maintenance, from
+their dashboard, is a separate document (`config/ownerMaintenance`). Deploys
+and branding syncs leave the field as it is. The super admin's
+`maintenance-on` and `maintenance-off` requests run it (the
+[platform functions README](../../apps/platform-functions/README.md#the-super-admin)).
+
+```bash
+deployer maintenance --project lantern-cafe-1a2b --on \
+  --message "Back after a short update." --until 2026-11-01T09:00+05:30
+deployer maintenance --project lantern-cafe-1a2b --on \
+  --starts 2026-11-01T02:00+05:30 --ends 2026-11-01T04:00+05:30
+deployer maintenance --project lantern-cafe-1a2b --off
+```
+
+Times are ISO 8601 with their zone. The record is
+`{on, by: "admin", message, until, startsAt, endsAt}` (the shape is
+[`@cafemenu/shared/maintenance`](../shared/src/maintenance.mjs)); the cafe's
+rules and its page apply the schedule on their own clocks, so it starts and
+ends on time with nothing run then. Running it again with the same record
+changes nothing. It needs a cafe that has been set up (`config/site` exists).
+
 ### `rollout`: a release to every cafe that should get it
 
 `deploy --version` puts a release on one cafe. `rollout` works out which cafes
@@ -700,6 +730,8 @@ The source of truth is [`src/permissions.mjs`](src/permissions.mjs).
 |                 | `datastore.entities.update`       | write it                                             |
 |                 | `firebasehosting.sites.get`       | read the live version's files                        |
 |                 | `firebasehosting.sites.update`    | create and release a version                         |
+| `maintenance`   | `datastore.entities.get`          | read `config/site`                                   |
+|                 | `datastore.entities.update`       | write `config/site`'s `maintenance`                  |
 | `owner`         | `firebaseauth.users.get`          | find the owner's account                             |
 |                 | `firebaseauth.users.create`       | create it                                            |
 |                 | `firebaseauth.users.sendEmail`    | send the set-password email                          |

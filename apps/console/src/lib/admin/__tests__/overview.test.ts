@@ -6,11 +6,9 @@ import {
   auditRows,
   byCafe,
   cafeHealth,
-  filterRows,
   followOf,
   rolloutButton,
   smokeOf,
-  summary,
 } from "../overview";
 
 const cafe = (id: string, over: Partial<Cafe> = {}): Cafe => ({
@@ -192,56 +190,9 @@ describe("one row per cafe", () => {
     expect(byId.d.last).toBeNull();
     expect(byId.d.smoke).toBeNull();
   });
-
-  it("counts them", () => {
-    expect(summary(rows)).toEqual({ total: 4, live: 3, attention: 1, busy: 0 });
-  });
 });
 
-describe("filters", () => {
-  const rows = adminRows(
-    [
-      cafe("a", {
-        release: {
-          channel: "beta",
-          pinned: null,
-          current: "1.2.0-beta.1",
-          previous: null,
-        },
-      }),
-      cafe("b", {
-        release: {
-          channel: "stable",
-          pinned: "1.0",
-          current: "1.0.0",
-          previous: null,
-        },
-      }),
-      cafe("c", { ownerEmail: "sam@owner.test", site: "tea-room" }),
-    ],
-    [deployment("c1", "c", { status: "failed", error: "x" })],
-  );
-
-  it("picks by how the cafe is doing and how it follows releases", () => {
-    const ids = (filter: Parameters<typeof filterRows>[1]) =>
-      filterRows(rows, filter, "")
-        .map((r) => r.cafe.id)
-        .sort();
-    expect(ids("all")).toEqual(["a", "b", "c"]);
-    expect(ids("attention")).toEqual(["c"]);
-    expect(ids("busy")).toEqual([]);
-    expect(ids("beta")).toEqual(["a"]);
-    expect(ids("pinned")).toEqual(["b"]);
-  });
-
-  it("searches name, address and owner, ignoring case and spaces", () => {
-    const ids = (q: string) => filterRows(rows, "all", q).map((r) => r.cafe.id);
-    expect(ids(" CAFE b ")).toEqual(["b"]);
-    expect(ids("tea-room")).toEqual(["c"]);
-    expect(ids("SAM@")).toEqual(["c"]);
-    expect(ids("nothing")).toEqual([]);
-  });
-
+describe("following releases", () => {
   it("names how a cafe follows releases", () => {
     expect(
       followOf({

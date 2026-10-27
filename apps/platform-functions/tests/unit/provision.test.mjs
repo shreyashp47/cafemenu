@@ -103,7 +103,7 @@ describe("provisioning a cafe", () => {
       ...SETTINGS,
       logo: "/logo.png",
     };
-    t.store.data.owners.set("owner1", "Asha Rao");
+    t.store.data.names.set("owner1", "Asha Rao");
 
     assert.deepEqual(await t.run(), { outcome: "succeeded" });
 

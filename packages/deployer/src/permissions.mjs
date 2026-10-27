@@ -84,6 +84,10 @@ export const PERMISSIONS = {
       "create and release a version with the new branding",
     ],
   ],
+  maintenance: [
+    ["datastore.entities.get", "read config/site"],
+    ["datastore.entities.update", "write config/site's maintenance"],
+  ],
   owner: [
     ["firebaseauth.users.get", "find the owner's account"],
     ["firebaseauth.users.create", "create the owner's account"],

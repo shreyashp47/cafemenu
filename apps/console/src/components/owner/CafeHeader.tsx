@@ -1,3 +1,5 @@
+import { maintenanceActive } from "@cafemenu/shared/maintenance";
+import { formatDateTime } from "@/lib/format";
 import { dashboardUrl } from "@/lib/owner/area";
 import { fill, messages } from "@/lib/messages";
 import type { Cafe } from "@/lib/platform/model";
@@ -7,6 +9,43 @@ import { Rich } from "../Rich";
 import { StageHeading } from "../StageHeading";
 
 const { header: text, nav, account } = messages.cafe;
+const reasonWords = messages.admin.words.reasons as Record<string, string>;
+
+/** "Non-payment: invoice 42 unpaid", from the reason the backend kept. */
+function reasonOf(reason: Cafe["statusReason"]): string {
+  if (!reason) return "";
+  const label = reason.code ? (reasonWords[reason.code] ?? reason.code) : "";
+  return [label, reason.note].filter(Boolean).join(": ");
+}
+
+/**
+ * CafeMenu's maintenance of the site (#78), as the owner hears of it here:
+ * on now, or coming, and why. Only CafeMenu ends it.
+ */
+function AdminMaintenance({ cafe }: { cafe: Cafe }) {
+  const m = cafe.maintenance;
+  if (!m || m.by !== "admin") return null;
+  const now = Date.now();
+  const reason = reasonOf(m.reason) || "—";
+  if (maintenanceActive(m, now)) {
+    return (
+      <p role="status" className="bg-accent-soft text-ink rounded-md p-3">
+        {fill(text.maintenance.on, { reason })}
+      </p>
+    );
+  }
+  if (m.startsAt !== null && m.startsAt > now) {
+    return (
+      <p role="status" className="bg-accent-soft text-ink rounded-md p-3">
+        {fill(text.maintenance.scheduled, {
+          reason,
+          when: formatDateTime(m.startsAt, cafe.settings.timeZone),
+        })}
+      </p>
+    );
+  }
+  return null;
+}
 
 /** A site exists to link to once the cafe has been set up. */
 const HAS_SITE = ["live", "disconnected", "suspended"] as const;
@@ -58,6 +97,12 @@ export function CafeHeader({
         </span>
       </p>
       {note && <p className="text-text">{note}</p>}
+      {cafe.status === "suspended" && cafe.statusReason && (
+        <p className="text-text">
+          {fill(text.reason, { reason: reasonOf(cafe.statusReason) })}
+        </p>
+      )}
+      <AdminMaintenance cafe={cafe} />
 
       {(HAS_SITE as readonly string[]).includes(cafe.status) && url && (
         <div className="border-line bg-sunk space-y-3 rounded-lg border p-4">

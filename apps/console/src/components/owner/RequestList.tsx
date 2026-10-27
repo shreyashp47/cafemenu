@@ -8,7 +8,9 @@ const { requests: text } = messages.cafe.updates;
 export function requestTitle(request: BackendRequest): string {
   const version =
     typeof request.params.version === "string" ? request.params.version : "";
-  return fill(text.kind[request.kind], { version });
+  // Only an owner's own kinds reach this list (SITE_REQUEST_KINDS).
+  const words = text.kind as Record<string, string>;
+  return fill(words[request.kind] ?? request.kind, { version });
 }
 
 /**

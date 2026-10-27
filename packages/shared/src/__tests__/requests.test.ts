@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   DEPLOYMENT_REQUEST_KINDS,
+  ADMIN_REQUEST_KINDS,
+  OWNER_REQUEST_KINDS,
   REQUEST_KINDS,
+  isAdminRequestKind,
   isOpenRequest,
   newRequestRecord,
   requestParamsProblem,
@@ -50,7 +53,7 @@ describe("what each kind of request takes", () => {
 
   it("every kind but check becomes a deployment", () => {
     expect(
-      REQUEST_KINDS.filter((k) => !DEPLOYMENT_REQUEST_KINDS.includes(k)),
+      OWNER_REQUEST_KINDS.filter((k) => !DEPLOYMENT_REQUEST_KINDS.includes(k)),
     ).toEqual(["check"]);
   });
 });
@@ -103,5 +106,112 @@ describe("the record a person writes", () => {
     expect(isOpenRequest("running")).toBe(true);
     expect(isOpenRequest("done")).toBe(false);
     expect(isOpenRequest("failed")).toBe(false);
+  });
+});
+
+describe("what the admin's requests take (#78)", () => {
+  const at = new Date("2026-11-01T10:00:00Z");
+
+  it("suspend: a reason from the policy, a note, and when", () => {
+    const ok = { reason: "abuse", note: "Spam orders.", effectiveAt: null };
+    expect(requestParamsProblem("suspend", ok)).toBe(null);
+    expect(requestParamsProblem("suspend", { ...ok, effectiveAt: at })).toBe(
+      null,
+    );
+    expect(requestParamsProblem("suspend", { ...ok, reason: "boredom" })).toBe(
+      "reason",
+    );
+    expect(
+      requestParamsProblem("suspend", { ...ok, reason: "migration" }),
+    ).toBe("reason");
+    expect(
+      requestParamsProblem("suspend", { ...ok, note: "x".repeat(501) }),
+    ).toBe("note");
+    expect(
+      requestParamsProblem("suspend", { ...ok, effectiveAt: "tomorrow" }),
+    ).toBe("time");
+    expect(requestParamsProblem("suspend", { reason: "abuse", note: "" })).toBe(
+      "params",
+    );
+  });
+
+  it("reactivate: a reason that ends a suspension", () => {
+    expect(
+      requestParamsProblem("reactivate", { reason: "resolved", note: "" }),
+    ).toBe(null);
+    expect(
+      requestParamsProblem("reactivate", { reason: "abuse", note: "" }),
+    ).toBe("reason");
+  });
+
+  it("delete-owner: the web address typed out", () => {
+    const ok = { reason: "owner-request", note: "", confirm: "lantern-cafe" };
+    expect(requestParamsProblem("delete-owner", ok)).toBe(null);
+    expect(requestParamsProblem("delete-owner", { ...ok, confirm: "" })).toBe(
+      "confirm",
+    );
+  });
+
+  it("maintenance: a message customers read, times, and a batch for several cafes", () => {
+    const ok = {
+      reason: "migration",
+      note: "",
+      message: "Back after the update.",
+      until: at,
+      startsAt: null,
+      endsAt: null,
+      batch: null,
+    };
+    expect(requestParamsProblem("maintenance-on", ok)).toBe(null);
+    expect(
+      requestParamsProblem("maintenance-on", { ...ok, batch: "b-20261101" }),
+    ).toBe(null);
+    expect(
+      requestParamsProblem("maintenance-on", {
+        ...ok,
+        message: "x".repeat(281),
+      }),
+    ).toBe("message");
+    expect(requestParamsProblem("maintenance-on", { ...ok, startsAt: 5 })).toBe(
+      "time",
+    );
+    expect(
+      requestParamsProblem("maintenance-on", { ...ok, batch: "a/b" }),
+    ).toBe("batch");
+    expect(
+      requestParamsProblem("maintenance-off", { note: "Done.", batch: null }),
+    ).toBe(null);
+  });
+
+  it("appoint-admin and remove-admin: an email address, and no cafe", () => {
+    const ok = { email: "erin@cafemenu.example", note: "" };
+    expect(requestParamsProblem("appoint-admin", ok)).toBe(null);
+    expect(requestParamsProblem("remove-admin", ok)).toBe(null);
+    expect(
+      requestParamsProblem("appoint-admin", { ...ok, email: "erin" }),
+    ).toBe("email");
+    expect(
+      newRequestRecord(
+        { cafeId: null, kind: "appoint-admin", params: ok, by: "u" },
+        0,
+      ).cafeId,
+    ).toBe(null);
+    expect(() =>
+      newRequestRecord(
+        { cafeId: "c1", kind: "appoint-admin", params: ok, by: "u" },
+        0,
+      ),
+    ).toThrow(/account, not a cafe/);
+    expect(() =>
+      newRequestRecord({ cafeId: null, kind: "rollback", by: "u" }, 0),
+    ).toThrow(/cafe it is about/);
+  });
+
+  it("are told apart from an owner's", () => {
+    expect(isAdminRequestKind("suspend")).toBe(true);
+    expect(isAdminRequestKind("deploy")).toBe(false);
+    expect([...OWNER_REQUEST_KINDS, ...ADMIN_REQUEST_KINDS].sort()).toEqual(
+      [...REQUEST_KINDS].sort(),
+    );
   });
 });

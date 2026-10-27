@@ -54,11 +54,57 @@ const SESSIONS = {
   },
 };
 
+const DEMO_KEY = "cafe-qr-order.demo.v2";
+/** CafeMenu's maintenance (#78), as the deployer writes it into config/site. */
+const ADMIN_MAINTENANCE = {
+  site: {
+    maintenance: {
+      on: true,
+      by: "admin",
+      message: "Back after a short update.",
+      until: "2099-01-01T10:00:00Z",
+      startsAt: null,
+      endsAt: null,
+    },
+  },
+};
+/** The owner's own, from the dashboard. */
+const OWNER_MAINTENANCE = {
+  ownerMaintenance: {
+    on: true,
+    by: "owner",
+    message: "Closed for Diwali.",
+    until: null,
+    startsAt: null,
+    endsAt: "2099-01-02T10:00:00Z",
+  },
+};
+
 const ROUTES = [
   { path: "/order?table=3", name: "order" },
+  // Maintenance mode (#78): `demo` is the demo store the page opens on.
+  { path: "/order?table=3", name: "order-maint", demo: ADMIN_MAINTENANCE },
   { path: "/order/confirmation?table=3", name: "confirmation" },
   { path: "/staff", name: "staff", auth: "staff" },
+  {
+    path: "/staff",
+    name: "staff-maint",
+    auth: "staff",
+    demo: OWNER_MAINTENANCE,
+  },
   { path: "/admin", name: "admin", auth: "owner" },
+  {
+    path: "/admin",
+    name: "admin-maint",
+    auth: "owner",
+    demo: ADMIN_MAINTENANCE,
+  },
+  {
+    path: "/admin",
+    name: "admin-ownmaint",
+    auth: "owner",
+    demo: OWNER_MAINTENANCE,
+  },
   { path: "/admin/reports", name: "reports", auth: "owner" },
   { path: "/admin/orders", name: "history", auth: "owner" },
   { path: "/admin/qr", name: "qr", auth: "owner" },
@@ -133,11 +179,16 @@ for (const { name, type } of engines) {
     // the app first to plant it, then navigating away, left that first page's
     // requests (the boot's init.json and site.json, the /order prefetch) to be
     // cancelled mid-flight, which WebKit reports as errors on the page.
-    if (route.auth) {
-      await page.addInitScript(
-        ([key, value]) => localStorage.setItem(key, value),
-        [SESSION_KEY, JSON.stringify(SESSIONS[route.auth])],
-      );
+    const planted = [
+      ...(route.auth
+        ? [[SESSION_KEY, JSON.stringify(SESSIONS[route.auth])]]
+        : []),
+      ...(route.demo ? [[DEMO_KEY, JSON.stringify(route.demo)]] : []),
+    ];
+    if (planted.length) {
+      await page.addInitScript((pairs) => {
+        for (const [key, value] of pairs) localStorage.setItem(key, value);
+      }, planted);
     }
 
     const open = async () => {

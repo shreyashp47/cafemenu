@@ -18,9 +18,16 @@
  *   backend/worker                the worker's own bookkeeping: the releases
  *                                 it has seen, when its email jobs last ran.
  *                                 No rule matches it, so no client can read it.
+ *   owners/{uid}                  the admin's directory (#78): each account
+ *                                 from Auth, and its status
+ *   adminLog/{id}                 every admin action (#78): only ever created,
+ *                                 with the request's id, so a retry adds nothing
+ *   cafes/{id}/emails/{id}        the emails a cafe's owner was sent
  *
  * Accounts are read from the platform's Auth (`getAccount`, `getOwnerEmail`,
- * `getOwnerName`), which needs the Firebase Authentication Viewer role.
+ * `getOwnerName`, `listAccounts`); the admin's actions also disable, delete
+ * and mark them (`setAccountDisabled`, `deleteAccount`, `setAdminClaim`),
+ * which needs the Firebase Authentication Admin role.
  */
 import { FieldPath, FieldValue } from "firebase-admin/firestore";
 
@@ -40,6 +47,39 @@ export function createFirestoreStore({ db, auth }) {
   const deployments = db.collection("deployments");
   const requests = db.collection("requests");
   const workerRef = db.collection("backend").doc("worker");
+  const owners = db.collection("owners");
+  const adminLog = db.collection("adminLog");
+  const accountOf = (user) => ({
+    uid: user.uid,
+    email: user.email ?? null,
+    name: user.displayName ?? null,
+    emailVerified: user.emailVerified === true,
+    disabled: user.disabled === true,
+    admin: user.customClaims?.admin === true,
+    createdAt: Date.parse(user.metadata?.creationTime ?? "") || null,
+    lastSignInAt: Date.parse(user.metadata?.lastSignInTime ?? "") || null,
+  });
+  const notFound = (error) => error?.code === "auth/user-not-found";
+  async function listAccounts() {
+    const accounts = [];
+    let pageToken;
+    do {
+      const page = await auth.listUsers(1000, pageToken);
+      accounts.push(...page.users.map(accountOf));
+      pageToken = page.pageToken;
+    } while (pageToken);
+    return accounts;
+  }
+  /** Deletes what `query` finds, in batches of the most a batch may hold. */
+  async function deleteAll(query) {
+    for (;;) {
+      const snap = await query.limit(400).get();
+      if (snap.empty) return;
+      const batch = db.batch();
+      for (const d of snap.docs) batch.delete(d.ref);
+      await batch.commit();
+    }
+  }
   const requestOf = (snap) => {
     if (!snap.exists) return null;
     const data = snap.data();
@@ -177,6 +217,11 @@ export function createFirestoreStore({ db, auth }) {
       );
     },
 
+    /** A line in the cafe's email history, for the admin's page. */
+    async recordEmail(cafeId, { kind, key, at }) {
+      await cafeRef(cafeId).collection("emails").add({ kind, key, at });
+    },
+
     async setEmailPreference(cafeId, { releaseNotices }) {
       await cafeRef(cafeId).update({ "emails.releaseNotices": releaseNotices });
     },
@@ -187,20 +232,123 @@ export function createFirestoreStore({ db, auth }) {
      * never refused because Auth was briefly unreachable.
      */
     async getAccount(uid) {
-      let user;
       try {
-        user = await auth.getUser(uid);
+        return accountOf(await auth.getUser(uid));
       } catch (error) {
-        if (error?.code === "auth/user-not-found") return null;
+        if (notFound(error)) return null;
         throw error;
       }
-      return {
-        uid: user.uid,
-        email: user.email ?? null,
-        emailVerified: user.emailVerified === true,
-        disabled: user.disabled === true,
-        admin: user.customClaims?.admin === true,
-      };
+    },
+
+    /** The account with `email`, or null. */
+    async findAccountByEmail(email) {
+      try {
+        return accountOf(await auth.getUserByEmail(email));
+      } catch (error) {
+        if (notFound(error)) return null;
+        throw error;
+      }
+    },
+
+    /** Every account in the platform's Auth. */
+    listAccounts,
+
+    async listAdmins() {
+      return (await listAccounts()).filter((a) => a.admin);
+    },
+
+    /** A suspended account can't sign in, nor refresh a token it has. */
+    async setAccountDisabled(uid, disabled) {
+      await auth.updateUser(uid, { disabled });
+      if (disabled) await auth.revokeRefreshTokens(uid);
+    },
+
+    async deleteAccount(uid) {
+      try {
+        await auth.deleteUser(uid);
+      } catch (error) {
+        if (!notFound(error)) throw error;
+      }
+    },
+
+    /** Sets or clears the `admin` claim, keeping any other claims. */
+    async setAdminClaim(uid, admin) {
+      const user = await auth.getUser(uid);
+      const claims = { ...user.customClaims };
+      if (admin) claims.admin = true;
+      else delete claims.admin;
+      await auth.setCustomUserClaims(
+        uid,
+        Object.keys(claims).length ? claims : null,
+      );
+    },
+
+    // -- the admin's records (#78) --------------------------------------------
+
+    async listCafesOf(ownerUid) {
+      const snap = await db
+        .collection("cafes")
+        .where("ownerUid", "==", ownerUid)
+        .get();
+      return snap.docs.map(cafeOf);
+    },
+
+    /** The backend's fields of a cafe: status, its reason, maintenance. */
+    async updateCafe(id, patch) {
+      await cafeRef(id).update({
+        ...patch,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    },
+
+    /** Merges `patch` into the owner's directory entry. */
+    async setOwnerRecord(uid, patch) {
+      await owners.doc(uid).set(patch, { merge: true });
+    },
+
+    async listOwnerRecords() {
+      const snap = await owners.get();
+      return new Map(snap.docs.map((d) => [d.id, d.data()]));
+    },
+
+    /**
+     * Adds an entry to the admin log under `id` (the request's), unless one
+     * is there: a retried request logs once. Never changes an entry.
+     * Returns whether it was added.
+     */
+    async addAdminLog(id, entry) {
+      try {
+        await adminLog.doc(id).create(entry);
+        return true;
+      } catch (error) {
+        if (error?.code === 6 || /already exists/i.test(error?.message ?? ""))
+          return false;
+        throw error;
+      }
+    },
+
+    /** Queued or running requests about the cafe. */
+    async listOpenRequestsFor(cafeId) {
+      const snap = await requests
+        .where("cafeId", "==", cafeId)
+        .where("status", "in", OPEN)
+        .get();
+      return snap.docs.map(requestOf);
+    },
+
+    /**
+     * Everything CafeMenu holds about an owner, but the admin log (#78,
+     * decision 5): their cafes with what is under them (setup, the deploy
+     * record, emails), the cafes' deployments, the requests they made, and
+     * their directory entry. Their login is deleteAccount's.
+     */
+    async deleteOwnerData(uid, cafeIds) {
+      for (const id of cafeIds) {
+        await deleteAll(deployments.where("cafeId", "==", id));
+        await db.recursiveDelete(cafeRef(id));
+      }
+      await deleteAll(requests.where("by", "==", uid));
+      await owners.doc(uid).delete();
     },
 
     async getOwnerName(uid) {

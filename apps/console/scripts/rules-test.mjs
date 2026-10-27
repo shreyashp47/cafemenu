@@ -1506,6 +1506,246 @@ await t(
   denied(() => setDoc(doc(alice.db, "backend", "worker"), { releases: {} })),
 );
 
+// -- the super admin (#78) ---------------------------------------------------------
+
+console.log("\n the super admin: admin requests, the directory and the log");
+await seed("owners/" + ALICE.uid, {
+  email: ALICE.email,
+  name: "Alice",
+  status: "active",
+  admin: false,
+  createdAt: WHEN,
+});
+await seed("adminLog/log-1", {
+  at: WHEN,
+  by: ERIN.uid,
+  byEmail: ERIN.email,
+  action: "maintenance-on",
+  cafeId: "cafe-a",
+  ownerUid: ALICE.uid,
+  reason: { code: "migration", note: "Moving prices to paise." },
+  details: {},
+});
+await seed("cafes/cafe-a/emails/mail-1", {
+  kind: "maintenance-on",
+  at: WHEN,
+});
+const adminAsks = (c, kind, params, cafeId = "cafe-b") =>
+  ask(c, { cafeId, kind, params });
+const SUSPEND = { reason: "abuse", note: "Spam orders.", effectiveAt: null };
+const MAINTENANCE = {
+  reason: "migration",
+  note: "",
+  message: "Back after a short update.",
+  until: null,
+  startsAt: null,
+  endsAt: null,
+  batch: null,
+};
+const APPOINT = { email: "dave@owner.test", note: "" };
+
+for (const [kind, params, cafeId] of [
+  ["suspend", SUSPEND, "cafe-a"],
+  ["reactivate", { reason: "resolved", note: "" }, "cafe-a"],
+  [
+    "delete-owner",
+    { reason: "owner-request", note: "", confirm: "alice-cafe" },
+    "cafe-a",
+  ],
+  ["maintenance-on", MAINTENANCE, "cafe-a"],
+  ["maintenance-off", { note: "", batch: null }, "cafe-a"],
+  ["appoint-admin", APPOINT, null],
+  ["remove-admin", APPOINT, null],
+]) {
+  await t(
+    `an owner cannot make an admin request, even about their own cafe: ${kind}`,
+    denied(() => adminAsks(alice, kind, params, cafeId)),
+  );
+}
+await t(
+  "…nor can an unverified account with the admin claim",
+  denied(() => adminAsks(frank, "suspend", SUSPEND)),
+);
+await t(
+  "the admin suspends an owner, with a reason from the policy",
+  allowed(() => adminAsks(erin, "suspend", SUSPEND)),
+);
+await t(
+  "…and with a notice period, from a date",
+  allowed(() =>
+    adminAsks(erin, "suspend", {
+      reason: "non-payment",
+      note: "Invoice 12 unpaid.",
+      effectiveAt: Timestamp.fromDate(new Date("2026-11-08T00:00:00Z")),
+    }),
+  ),
+);
+for (const [what, params] of [
+  ["a reason the policy doesn't have", { ...SUSPEND, reason: "boredom" }],
+  ["a maintenance-only reason", { ...SUSPEND, reason: "migration" }],
+  ["a note that is too long", { ...SUSPEND, note: "x".repeat(501) }],
+  ["a date that isn't one", { ...SUSPEND, effectiveAt: "next week" }],
+  ["no date at all", { reason: "abuse", note: "" }],
+  ["more than it takes", { ...SUSPEND, maintenance: true }],
+]) {
+  await t(
+    `…but not with ${what}`,
+    denied(() => adminAsks(erin, "suspend", params)),
+  );
+}
+await t(
+  "the admin reactivates, with a reason that ends a suspension",
+  allowed(() =>
+    adminAsks(erin, "reactivate", { reason: "resolved", note: "" }),
+  ),
+);
+await t(
+  "…not with one that starts one",
+  denied(() => adminAsks(erin, "reactivate", { reason: "abuse", note: "" })),
+);
+await t(
+  "the admin deletes an owner with the cafe's web address typed out",
+  allowed(() =>
+    adminAsks(erin, "delete-owner", {
+      reason: "owner-request",
+      note: "Asked by email.",
+      confirm: "bob-cafe",
+    }),
+  ),
+);
+await t(
+  "…not with the wrong address",
+  denied(() =>
+    adminAsks(erin, "delete-owner", {
+      reason: "owner-request",
+      note: "",
+      confirm: "alice-cafe",
+    }),
+  ),
+);
+await t(
+  "the admin takes a site into maintenance, scheduled, as part of a batch",
+  allowed(() =>
+    adminAsks(erin, "maintenance-on", {
+      ...MAINTENANCE,
+      until: Timestamp.fromDate(new Date("2026-11-02T08:00:00Z")),
+      startsAt: Timestamp.fromDate(new Date("2026-11-01T20:00:00Z")),
+      endsAt: Timestamp.fromDate(new Date("2026-11-02T08:00:00Z")),
+      batch: "b-20261101",
+    }),
+  ),
+);
+for (const [what, params] of [
+  ["a message too long", { ...MAINTENANCE, message: "x".repeat(281) }],
+  ["a start that isn't a date", { ...MAINTENANCE, startsAt: "8pm" }],
+  ["a batch id that isn't one", { ...MAINTENANCE, batch: "a/b" }],
+  ["no reason", { ...MAINTENANCE, reason: "" }],
+]) {
+  await t(
+    `…not with ${what}`,
+    denied(() => adminAsks(erin, "maintenance-on", params)),
+  );
+}
+await t(
+  "the admin ends it",
+  allowed(() =>
+    adminAsks(erin, "maintenance-off", { note: "Done.", batch: null }),
+  ),
+);
+await t(
+  "the admin appoints an admin, by email, about no cafe",
+  allowed(() => adminAsks(erin, "appoint-admin", APPOINT, null)),
+);
+await t(
+  "…and removes one",
+  allowed(() => adminAsks(erin, "remove-admin", APPOINT, null)),
+);
+await t(
+  "…not as if it were about a cafe",
+  denied(() => adminAsks(erin, "appoint-admin", APPOINT, "cafe-b")),
+);
+await t(
+  "…nor with something that isn't an email address",
+  denied(() =>
+    adminAsks(erin, "appoint-admin", { email: "dave", note: "" }, null),
+  ),
+);
+await t(
+  "an admin request about a cafe that doesn't exist is refused",
+  denied(() => adminAsks(erin, "suspend", SUSPEND, "no-such-cafe")),
+);
+
+await t(
+  "the admin reads the admin log",
+  allowed(async () => {
+    const snap = await getDocs(collection(erin.db, "adminLog"));
+    expect(snap.size >= 1, "no entries");
+  }),
+);
+await t(
+  "an owner cannot read the admin log",
+  denied(() => getDoc(doc(alice.db, "adminLog", "log-1"))),
+);
+await t(
+  "…nor list it, even the entries about their own cafe",
+  denied(() =>
+    getDocs(
+      query(collection(alice.db, "adminLog"), where("cafeId", "==", "cafe-a")),
+    ),
+  ),
+);
+await t(
+  "nobody edits the admin log from a browser, the admin included",
+  denied(() =>
+    updateDoc(doc(erin.db, "adminLog", "log-1"), { action: "nothing" }),
+  ),
+);
+await t(
+  "…or deletes from it",
+  denied(() => deleteDoc(doc(erin.db, "adminLog", "log-1"))),
+);
+await t(
+  "…or adds to it: only the backend writes it",
+  denied(() =>
+    setDoc(doc(erin.db, "adminLog", "forged"), {
+      at: serverTimestamp(),
+      by: ERIN.uid,
+      action: "suspend",
+      cafeId: "cafe-b",
+    }),
+  ),
+);
+await t(
+  "the admin reads the owners directory",
+  allowed(() => getDocs(collection(erin.db, "owners"))),
+);
+await t(
+  "an owner cannot read it, their own entry included",
+  denied(() => getDoc(doc(alice.db, "owners", ALICE.uid))),
+);
+await t(
+  "…nor write their own status in it",
+  denied(() =>
+    setDoc(doc(alice.db, "owners", ALICE.uid), { status: "active" }),
+  ),
+);
+await t(
+  "the admin reads the emails a cafe was sent",
+  allowed(() => getDocs(collection(erin.db, "cafes", "cafe-a", "emails"))),
+);
+await t(
+  "the owner cannot, nor write one",
+  denied(() =>
+    setDoc(doc(alice.db, "cafes", "cafe-a", "emails", "x"), { kind: "x" }),
+  ),
+);
+await t(
+  "an owner cannot set their cafe's maintenance or status reason on the platform",
+  denied(() =>
+    edit(alice, "cafe-a", { maintenance: null, statusReason: null }),
+  ),
+);
+
 // -- the admin --------------------------------------------------------------------
 
 console.log("\n the platform admin (custom claim)");

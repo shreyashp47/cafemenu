@@ -64,3 +64,16 @@ follow [Semantic Versioning](https://semver.org/).
   `NEXT_PUBLIC_BACKEND=requests` ("this takes a few minutes", with live
   progress); demo mode stays the default, and the Cloud Functions stay for
   Blaze. Tested end to end on the Auth and Firestore emulators.
+- **The super admin, and maintenance mode** (#78). The console's `/admin`
+  lists every owner and cafe (search, five filters, CSV), opens one cafe's
+  full history, and suspends, reactivates or deletes an owner, or puts a
+  cafe's site into maintenance (one or several at once, resumable and
+  revertable), each as a request the backend does and writes to an admin log
+  nobody can edit; the owner is emailed with the reason. A cafe's own rules
+  refuse new orders while CafeMenu's maintenance (`config/site.maintenance`,
+  `deployer maintenance`) or the owner's own (from their dashboard) is in
+  effect, on a schedule in the cafe's time zone; customers see a "back soon"
+  page, and placed orders, the staff board and the dashboard keep working.
+  Section 8's decisions are provisional, in `@cafemenu/shared/admin-policy`.
+  The first admin is made with `npm run make-admin`; the deploy account now
+  needs Firebase Authentication Admin.

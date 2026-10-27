@@ -136,17 +136,23 @@ needed. Once #77 is merged:
    [platform-functions README](../apps/platform-functions/README.md#setting-it-up)
    lists the roles and the commands.
 3. **Create the `production` environment** (Settings → Environments, limited
-   to `main`), **give it the key, then delete your copy:**
+   to `main`), **give it the key, make yourself the super admin with it, then
+   delete your copy.** Sign up on the console with your own email first;
+   then:
    ```bash
    gh secret set PLATFORM_SERVICE_ACCOUNT --env production < ~/Downloads/key.json
+   GOOGLE_APPLICATION_CREDENTIALS=~/Downloads/key.json \
+     npm run make-admin -w @cafemenu/platform-functions -- --email you@example.com
    rm ~/Downloads/key.json
    ```
+   Sign out of the console and in again to have the admin flag.
 4. **Rebuild the console** with its Firebase settings and
    `NEXT_PUBLIC_BACKEND=requests`, and redeploy (`./scripts/deploy-live.sh`).
 5. **Try it:** Actions → Backend → Run workflow, then Check connection as a
    test owner.
-6. **Make yourself the super admin** (comes with #78; the one-time command
-   will be in the console README).
+6. **If you set this up before #78**, the deploy account has the Firebase
+   Authentication **Viewer** role: swap it for **Admin**
+   (`roles/firebaseauth.admin`), which suspending and deleting logins need.
 
 GitHub pauses scheduled jobs on a public repo after 60 days with no commits.
 Push something now and then, or re-enable the job under **Actions → Backend**.
@@ -154,23 +160,36 @@ The job's log is public, so it shows request ids and outcomes only.
 
 ## 8. Your super-admin powers
 
-Today, `/admin` on the CafeMenu website shows:
-
-- every cafe and its owner;
-- each cafe's version, channel and health;
-- the deploy history;
-- publishing releases, and starting or pausing rollouts.
-
-Coming with [#78](https://github.com/shreyashp47/cafemenu/issues/78), per
+`/admin` on the CafeMenu website (sign in with your admin account) has, per
 [super-admin-requirements.md](./super-admin-requirements.md):
 
-- an owners directory;
-- suspend, reactivate and delete an owner;
-- **maintenance mode** for any cafe's website;
-- an admin log nobody can edit;
-- appointing other admins.
+- **every owner and cafe**: who, when they signed up and last signed in, the
+  address, project, status, maintenance, plan, version and health. Search,
+  filter, and download it as CSV;
+- **one cafe's history**: its requests, deploys, status changes, maintenance
+  windows and the emails its owner got;
+- **suspend, reactivate and delete** an owner, each with a reason from the
+  list (and 7 days' notice for non-payment). The owner is emailed each time;
+  a suspended owner can't sign in, and their requests are refused with the
+  reason. Delete asks you to type the cafe's address, and never touches their
+  own Firebase project;
+- **maintenance mode** for a cafe's website, or several at once (resumable,
+  and revertable): customers see a "back soon" page and can't order, staff
+  and the owner's dashboard keep working, and only you can end it;
+- **an admin log** nobody can edit, filterable and downloadable;
+- publishing releases, and starting or pausing rollouts.
 
-Before that's built, answer the six decisions in section 8 of that doc.
+Each action is done by the backend's next run, so within about 5 minutes
+(**Actions → Backend → Run workflow** does it at once). Owners can also turn
+maintenance on themselves, from their cafe's dashboard, for a holiday or a
+renovation.
+
+The six decisions in section 8 of that doc are answered **provisionally**
+with the suggested choices (separate suspension and maintenance, a fully
+working staff board, delete keeps only the log, just you as admin). Confirm
+or change them in `packages/shared/src/admin-policy.mjs` before the first
+outside cafe signs up, and have the terms' new section on suspension and
+maintenance reviewed with the rest.
 
 ## 9. Staff accounts at a cafe
 

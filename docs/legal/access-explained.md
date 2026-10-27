@@ -92,4 +92,23 @@ console.
 To delete your CafeMenu console account as well, see
 [Leaving](privacy-policy.md#7-leaving-and-deleting-your-console-data).
 
+## Maintenance after leaving
+
+If CafeMenu had put your site into **maintenance** (customers see a "back
+soon" page and can't order) when you removed its access, it stays on: only
+CafeMenu's deploy account can write that setting, and it can't reach your
+project any more. You can end it yourself, as the project's owner:
+
+1. Open the [Firebase console](https://console.firebase.google.com/), pick
+   your cafe's project, and go to **Firestore Database**.
+2. Open the `config` collection, then the `site` document.
+3. Find the field called `maintenance`. Hover over it and press the bin icon to
+   delete the field (or set it to `null`).
+
+Your customers can order again within a minute; the page follows the setting
+live. Leave everything else in `config/site` as it is: it holds your cafe's
+name, look and other settings. Maintenance you turned on yourself, from your
+cafe's dashboard, is in `config/ownerMaintenance`, and you can turn that off
+from the dashboard as usual.
+
 Questions: [[TO DECIDE: support contact email address]].

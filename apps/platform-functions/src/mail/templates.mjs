@@ -11,15 +11,33 @@
  *                       through, and was rolled back where it could be
  *                       (essential)
  *
+ *
+ * And the admin's (#78), all essential:
+ *
+ *   suspension-notice     the account will be suspended on a date (a reason
+ *                         with a notice period, such as non-payment)
+ *   account-suspended     the account is suspended, and why
+ *   account-reactivated   it is active again
+ *   account-deleted       the account and CafeMenu's records of it are gone
+ *   maintenance-on        CafeMenu has put the cafe's site into maintenance
+ *   maintenance-off       and taken it out again
+ *
  * "Essential" ones are about the cafe's service and are sent whatever the
  * owner has switched off; the others carry an unsubscribe link in the body
- * and in the List-Unsubscribe header (see notify.mjs).
+ * and in the List-Unsubscribe header (see notify.mjs). While an account is
+ * suspended only the kinds marked `whileSuspended` go to it.
  */
 
 export const EMAIL_KINDS = {
   "release-available": { essential: false },
   "upgrade-required": { essential: true },
   "deploy-failed": { essential: true },
+  "suspension-notice": { essential: true, whileSuspended: true },
+  "account-suspended": { essential: true, whileSuspended: true },
+  "account-reactivated": { essential: true, whileSuspended: true },
+  "account-deleted": { essential: true, whileSuspended: true },
+  "maintenance-on": { essential: true },
+  "maintenance-off": { essential: true },
 };
 
 const escapes = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" };
@@ -35,6 +53,17 @@ export const dateText = (ms) =>
 
 const days = (n) => `${n} day${n === 1 ? "" : "s"}`;
 
+/** "9 November 2026, 22:00", as a clock in the cafe's zone shows it, with the zone. */
+export const dateTimeText = (ms, timeZone = "UTC") =>
+  `${new Intl.DateTimeFormat("en-GB", {
+    dateStyle: "long",
+    timeStyle: "short",
+    timeZone,
+  }).format(ms)} (${timeZone})`;
+
+/** "abuse of the service (Spam orders.)": the reason, and the admin's words if any. */
+const why = (reasonLabel, note) => `${reasonLabel}${note ? ` (${note})` : ""}`;
+
 /** One line of an email: `text` for the plain version, `html` for the other. */
 const p = (text, html = escapeHtml(text)) => ({ text, html });
 /** A paragraph with a link on its own line below it; without a link, just the words. */
@@ -45,6 +74,10 @@ const link = (label, url) =>
         html: `${escapeHtml(label)}<br><a href="${escapeHtml(url)}">${escapeHtml(url)}</a>`,
       }
     : p(label);
+
+const CONTACT = p(
+  "If you think this is a mistake, reply to this email and CafeMenu's maintainer will look at it.",
+);
 
 const SERVICE_NOTE = p(
   "This email is about your cafe's service, so it is sent whatever your email settings are.",
@@ -166,6 +199,126 @@ const templates = {
       footer: SERVICE_NOTE,
     });
   },
+
+  "suspension-notice": ({
+    cafeName,
+    reasonLabel,
+    note,
+    effectiveAt,
+    timeZone,
+  }) =>
+    assemble({
+      subject: `Your CafeMenu account will be suspended on ${dateTimeText(effectiveAt, timeZone)}`,
+      paragraphs: [
+        p(
+          `CafeMenu will suspend the account that runs ${cafeName} on ${dateTimeText(effectiveAt, timeZone)}, because of ${why(reasonLabel, note)}.`,
+        ),
+        p(
+          "Until then nothing changes. If the matter is settled before that date, the suspension won't happen.",
+        ),
+        p(
+          "A suspension doesn't stop your site: customers can still order. It stops your sign-in to CafeMenu, and CafeMenu's updates to your site, until the account is reactivated.",
+        ),
+        CONTACT,
+      ],
+      footer: SERVICE_NOTE,
+    }),
+
+  "account-suspended": ({ cafeName, reasonLabel, note }) =>
+    assemble({
+      subject: `Your CafeMenu account is suspended`,
+      paragraphs: [
+        p(
+          `CafeMenu has suspended the account that runs ${cafeName}, because of ${why(reasonLabel, note)}.`,
+        ),
+        p(
+          "Your site keeps running and customers can still order. Until the account is reactivated you can't sign in to CafeMenu, and CafeMenu makes no updates to your site.",
+        ),
+        p(
+          "Your menu, orders and staff are in your own Firebase project, as always: nothing there has changed.",
+        ),
+        CONTACT,
+      ],
+      footer: SERVICE_NOTE,
+    }),
+
+  "account-reactivated": ({ cafeName, reasonLabel, note, updatesUrl }) =>
+    assemble({
+      subject: `Your CafeMenu account is active again`,
+      paragraphs: [
+        p(
+          `CafeMenu has reactivated the account that runs ${cafeName}: ${why(reasonLabel, note)}.`,
+        ),
+        p(
+          "You can sign in again, and your site gets CafeMenu's updates as before.",
+        ),
+        link(`Updates for ${cafeName}:`, updatesUrl),
+      ],
+      footer: SERVICE_NOTE,
+    }),
+
+  "account-deleted": ({ cafeName, reasonLabel, note }) =>
+    assemble({
+      subject: `Your CafeMenu account has been deleted`,
+      paragraphs: [
+        p(
+          `CafeMenu has deleted the account that ran ${cafeName}, and its records of your cafe, because of ${why(reasonLabel, note)}.`,
+        ),
+        p(
+          "Nothing in your own Firebase project was touched: your site keeps running on its last version, and your menu, orders and staff are where they were. CafeMenu makes no more updates to it.",
+        ),
+        p(
+          "To make sure CafeMenu can't reach your project any more, remove its deploy account from your project's members in the Google Cloud console (IAM).",
+        ),
+        CONTACT,
+      ],
+      footer: SERVICE_NOTE,
+    }),
+
+  "maintenance-on": ({
+    cafeName,
+    reasonLabel,
+    note,
+    message,
+    until,
+    startsAt,
+    endsAt,
+    timeZone,
+  }) =>
+    assemble({
+      subject: `${cafeName}'s site ${startsAt ? "will go" : "is"} into maintenance`,
+      paragraphs: [
+        p(
+          `CafeMenu ${startsAt ? `will put ${cafeName}'s site into maintenance on ${dateTimeText(startsAt, timeZone)}` : `has put ${cafeName}'s site into maintenance`}, because of ${why(reasonLabel, note)}.`,
+        ),
+        p(
+          `While it lasts, customers see a "back soon" page instead of the menu and can't order${message ? `, with this message: "${message}"` : ""}. Orders already placed carry on, and your staff board and dashboard work as usual.`,
+        ),
+        ...(endsAt
+          ? [p(`It ends by itself on ${dateTimeText(endsAt, timeZone)}.`)]
+          : [p("CafeMenu will email you again when it ends.")]),
+        ...(until
+          ? [
+              p(
+                `Customers are told you expect to be back on ${dateTimeText(until, timeZone)}.`,
+              ),
+            ]
+          : []),
+        CONTACT,
+      ],
+      footer: SERVICE_NOTE,
+    }),
+
+  "maintenance-off": ({ cafeName, note }) =>
+    assemble({
+      subject: `${cafeName}'s site is out of maintenance`,
+      paragraphs: [
+        p(
+          `CafeMenu has ended the maintenance on ${cafeName}'s site${note ? ` (${note})` : ""}. Customers can see the menu and order again.`,
+        ),
+      ],
+      footer: SERVICE_NOTE,
+    }),
 };
 
 /**

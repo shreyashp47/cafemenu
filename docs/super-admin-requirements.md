@@ -1,6 +1,7 @@
 # Super admin and maintenance mode: requirements
 
-Status: **draft for review**, 2026-10-25. Builds on the platform admin page
+Status: **draft for review**, 2026-10-25; built in #78 with the provisional
+decisions of section 8. Builds on the platform admin page
 (#30), the backend (#28, running on GitHub Actions per #77) and the plan
 ([PLAN.md](../PLAN.md)).
 
@@ -202,18 +203,40 @@ backend job and keeps the release packages; it stores no owner or cafe data.
       an admin's maintenance; ordering during maintenance; reading the admin
       log as an owner.
 
-## 8. Decisions for you `[[TO DECIDE]]`
+## 8. Decisions: provisional, used in the build
 
-1. **Reasons** that justify suspension or admin maintenance. Suggested: abuse,
-   security, legal request, non-payment (once plans exist), owner's request.
-2. **Notice period:** none for security or abuse; for example 7 days for
-   non-payment.
-3. **Suspension and the site:** should suspending also turn on maintenance
-   automatically, or stay separate? Suggested: separate, the admin chooses.
-4. **Staff board during maintenance:** fully working (suggested) or read-only?
-5. **Delete:** keep a minimal anonymised record for your accounting, or
-   remove everything except the log?
-6. **More admins:** just you for now, or appoint others from day one?
+These were open questions. The build (#78) needed an answer to each, so it
+uses the suggested one, **provisionally**: confirm or change them before the
+first outside cafe signs up. Each lives in one place,
+[`packages/shared/src/admin-policy.mjs`](../packages/shared/src/admin-policy.mjs),
+which the console, the backend and the rules tests all read; changing one is a
+change there (and, for the reason lists, in `apps/console/firestore.rules`,
+which a test keeps in step).
+
+1. **Reasons** that justify suspension or admin maintenance. _Provisional,
+   used in the build:_ abuse, security, legal request, non-payment, owner's
+   request (`SUSPENSION_REASONS`). Admin maintenance also allows a platform
+   migration (`MAINTENANCE_REASONS`). Reactivation takes its own: resolved,
+   payment received, made in error, owner's request.
+2. **Notice period.** _Provisional, used in the build:_ none for security or
+   abuse (or any reason but one); 7 days for non-payment (`NOTICE_DAYS`). A
+   suspension with notice is emailed at once and waits, queued, for its date;
+   reactivating first calls it off. Admin maintenance for non-payment needs
+   the same notice.
+3. **Suspension and the site.** _Provisional, used in the build:_ separate.
+   Suspending does **not** turn maintenance on; the admin chooses
+   (`SUSPEND_TURNS_ON_MAINTENANCE = false`).
+4. **Staff board during maintenance.** _Provisional, used in the build:_ fully
+   working (`STAFF_BOARD_IN_MAINTENANCE = "full"`): the rules refuse only new
+   orders.
+5. **Delete.** _Provisional, used in the build:_ remove everything except the
+   admin log (`DELETE_KEEPS = ["adminLog"]`): the login, the directory entry,
+   the cafes with their setup documents and emails, the deployments and the
+   requests. Nothing in the owner's own project is touched.
+6. **More admins.** _Provisional, used in the build:_ only the first admin for
+   now (`APPOINT_OTHER_ADMINS = false`). Appointing is built in (the console's
+   Admins panel and the backend's `appoint-admin`), and both refuse it while
+   the policy says so; removing an admin works, never the last one.
 
 ## 9. Where it fits and how long
 

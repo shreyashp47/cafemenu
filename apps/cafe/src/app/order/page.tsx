@@ -10,6 +10,7 @@ import {
   itemArtIcon,
   type IconName,
 } from "@/components/icons";
+import { MaintenancePage } from "@/components/MaintenancePage";
 import { Mascot } from "@/components/Mascot";
 import {
   DataProvider,
@@ -24,6 +25,7 @@ import { Sheet } from "@/components/ui/Sheet";
 import { SpeechBubble, WashiNote } from "@/components/ui/SpeechBubble";
 import { useCafeSettings } from "@/hooks/useCafeSettings";
 import { useCart } from "@/hooks/useCart";
+import { useMaintenance } from "@/hooks/useMaintenance";
 import { useTableCode, useTakeKeyFromAddress } from "@/hooks/useTableCode";
 import { useTableQuery } from "@/hooks/useTableQuery";
 import { formatMoney, lineSubtotal, priceCart } from "@/lib/money";
@@ -59,7 +61,11 @@ function OrderScreen() {
   // Save the scanned code (restarting its 3 hours) and take it out of the
   // address bar, so it is not left in history, a bookmark or a shared link.
   useTakeKeyFromAddress(ready, tableNumber, tableKey);
+  // While the site is in maintenance (#78), the "back soon" page instead of
+  // the menu, whatever the table: it takes effect live, without a reload.
+  const { active: maintenance } = useMaintenance();
 
+  if (maintenance) return <MaintenancePage maintenance={maintenance} />;
   if (!ready || loading) return <Loading label={t("order.findingTable")} />;
   if (tableNumber === null) return <ScanPrompt odd={raw !== null} />;
   // A number that parses but is not a table this cafe has. Reachable by editing

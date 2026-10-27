@@ -1,7 +1,8 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-export type Variant = "primary" | "secondary" | "inverse" | "ghost-dark";
+export type Variant =
+  "primary" | "secondary" | "danger" | "inverse" | "ghost-dark";
 
 const base =
   "inline-flex min-h-tap items-center justify-center gap-2 rounded-pill px-5 text-[0.9375rem] font-semibold transition-colors";
@@ -10,6 +11,8 @@ const variants: Record<Variant, string> = {
   primary: "bg-brand text-surface hover:bg-brand-hover",
   secondary:
     "border border-line-strong bg-surface text-ink hover:border-brand hover:text-brand-ink",
+  // What can't be undone: the admin's delete (#78).
+  danger: "bg-danger text-surface hover:opacity-90",
   // For the brand-coloured band.
   inverse: "bg-surface text-brand-ink hover:bg-brand-soft",
   "ghost-dark": "border border-on-dark/60 text-surface hover:bg-surface/10",

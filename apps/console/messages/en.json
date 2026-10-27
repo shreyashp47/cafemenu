@@ -685,6 +685,11 @@
         "open": "Open your dashboard",
         "demo": "In demo mode there is no real site. Your dashboard would be at `{url}`.",
         "site": "Your customers' address: `{site}.web.app`."
+      },
+      "reason": "Why: {reason}.",
+      "maintenance": {
+        "on": "CafeMenu has put your site into maintenance ({reason}). Customers see a “back soon” page and can't order; your cafe's dashboard and staff board work as usual. CafeMenu has emailed you about it, and only CafeMenu can end it.",
+        "scheduled": "CafeMenu will put your site into maintenance {when} ({reason}). It has emailed you about it."
       }
     },
     "updates": {
@@ -938,38 +943,23 @@
       "signOut": "Sign out"
     },
     "eyebrow": "Platform admin",
-    "title": "Every cafe",
-    "lead": "How each cafe is doing, what has been deployed to it, and the releases. Cafes are read-only here: a change goes through the backend. There is no way to sign in as an owner or to see a cafe's orders from this page; those stay in the owner's own project.",
+    "title": "Owners and cafes",
+    "lead": "Every owner and cafe, how each is doing, what has been deployed, and the releases. Changes go through the backend as requests, and every one is written to the admin log. There is no way to sign in as an owner or to see a cafe's orders, customers or staff from this page: those stay in the owner's own project.",
     "account": {
       "signedIn": "Signed in as **{email}**.",
       "signOut": "Sign out"
     },
     "nav": {
       "label": "On this page",
-      "cafes": "Cafes",
+      "cafes": "Owners and cafes",
       "releases": "Releases",
-      "audit": "Audit log"
+      "log": "Admin log",
+      "admins": "Admins",
+      "audit": "Deployments"
     },
     "cafes": {
-      "title": "Cafes",
-      "summary": "{total} cafes · {live} live · {attention} need a look · {busy} in progress",
-      "search": {
-        "label": "Find a cafe",
-        "hint": "By name, web address or the owner's email."
-      },
-      "filter": {
-        "label": "Show",
-        "all": "All",
-        "attention": "Needs a look",
-        "busy": "In progress",
-        "beta": "On beta",
-        "pinned": "Staying on a version"
-      },
       "loading": "Loading the cafes…",
       "error": "What went wrong: {error}",
-      "none": "No cafes yet.",
-      "noMatch": "No cafe matches.",
-      "count": "Showing {shown} of {total}.",
       "field": {
         "health": "Health",
         "owner": "Owner",
@@ -1088,7 +1078,7 @@
       }
     },
     "audit": {
-      "title": "Audit log",
+      "title": "Deployments",
       "lead": "Every setup, deploy, rollback and branding sync: who asked, what, when and how it went. The latest {limit} are loaded.",
       "filter": {
         "cafe": "Cafe",
@@ -1120,6 +1110,312 @@
         "rolled-back": "Rolled back"
       },
       "smoke": "Smoke test: {result}"
+    },
+    "directory": {
+      "title": "Owners and cafes",
+      "summary": "{owners} owners · {total} cafes · {live} live · {suspended} suspended · {maintenance} in maintenance · {attention} need a look",
+      "search": {
+        "label": "Find an owner or cafe",
+        "hint": "By email, owner's or cafe's name, web address or Firebase project ID."
+      },
+      "filters": {
+        "label": "Filters",
+        "status": {
+          "label": "Account",
+          "all": "Any",
+          "active": "Active",
+          "suspended": "Suspended"
+        },
+        "maintenance": {
+          "label": "Maintenance",
+          "all": "Any",
+          "on": "On",
+          "scheduled": "Scheduled",
+          "off": "Off"
+        },
+        "plan": {
+          "label": "Plan",
+          "all": "Any",
+          "free": "Free"
+        },
+        "channel": {
+          "label": "Release channel",
+          "all": "Any",
+          "stable": "Stable",
+          "beta": "Beta",
+          "pinned": "Staying on a version"
+        },
+        "health": {
+          "label": "Health",
+          "all": "Any",
+          "ok": "Healthy",
+          "busy": "In progress",
+          "attention": "Needs a look",
+          "paused": "Paused",
+          "unknown": "Unknown",
+          "not-live": "Not set up"
+        },
+        "clear": "Clear filters"
+      },
+      "export": "Download the list as CSV ({count})",
+      "none": "No owners or cafes yet.",
+      "noMatch": "Nothing matches.",
+      "count": "Showing {shown} of {total}.",
+      "ownersError": "The owners directory couldn't be read: emails and names come from the cafes only.",
+      "ownersLag": "The owners directory is copied from Authentication every hour, so a new account can take that long to appear.",
+      "noCafe": "No cafe yet",
+      "never": "Never",
+      "notKnown": "Not known yet",
+      "field": {
+        "owner": "Owner",
+        "signedUp": "Signed up",
+        "lastSignIn": "Last console sign-in",
+        "account": "Account",
+        "project": "Firebase project",
+        "plan": "Plan",
+        "maintenance": "Maintenance"
+      },
+      "status": {
+        "active": "Active",
+        "suspended": "Suspended"
+      },
+      "maintenance": {
+        "on": "On",
+        "scheduled": "Starts {when}",
+        "off": "Off"
+      },
+      "open": "Open",
+      "openLabel": "Open {name}",
+      "select": "Select for maintenance",
+      "selectLabel": "Select {name} for maintenance",
+      "selected": {
+        "one": "1 cafe selected",
+        "other": "{count} cafes selected"
+      },
+      "bulk": "Maintenance for the selected…",
+      "clearSelection": "Clear selection"
+    },
+    "cafe": {
+      "back": "Back to every owner and cafe",
+      "eyebrow": "Owner and cafe",
+      "notFound": "That cafe is no longer in the list: it may have been deleted.",
+      "statusSince": "{status} since {when}.",
+      "reason": "Reason: {reason}",
+      "note": "Note: {note}",
+      "maintenance": {
+        "on": "CafeMenu's maintenance is on, since {when}.",
+        "scheduled": "CafeMenu's maintenance starts {when}.",
+        "ends": "It ends {when}.",
+        "message": "Customers read: {message}"
+      },
+      "history": {
+        "title": "History",
+        "filter": {
+          "label": "Show",
+          "all": "Everything",
+          "requests": "Requests",
+          "deployments": "Deployments",
+          "status": "Status changes",
+          "maintenance": "Maintenance",
+          "emails": "Emails"
+        },
+        "loading": "Loading the history…",
+        "error": "The history couldn't be read: {error}",
+        "none": "Nothing to show.",
+        "request": "Request: {kind}, {status}",
+        "deployment": "{what}: {status}",
+        "admin": "{action}, by {who}",
+        "email": "Email to the owner: {kind}",
+        "scheduled": "Waiting until {when}.",
+        "windows": {
+          "title": "Maintenance windows",
+          "open": "{from} until now",
+          "closed": "{from} to {to}"
+        }
+      }
+    },
+    "actions": {
+      "title": "Actions",
+      "cannot": "Actions go through the backend on GitHub Actions, which this console isn't set up to use: set `NEXT_PUBLIC_BACKEND=requests` (see the README). Until then this page only reads.",
+      "choose": "What to do",
+      "kinds": {
+        "suspend": "Suspend the owner",
+        "reactivate": "Reactivate the owner",
+        "delete-owner": "Delete the owner",
+        "maintenance-on": "Turn maintenance on",
+        "maintenance-off": "Turn maintenance off"
+      },
+      "explain": {
+        "suspend": "The owner can't sign in to the console, their requests are refused with the reason, rollouts skip their cafes, and they're emailed. Their site keeps running as it is. Reactivating undoes all of it.",
+        "reactivate": "Undoes the suspension: the owner can sign in again, their requests and updates go through, and they're emailed. A suspension still waiting for its date is called off.",
+        "delete-owner": "Deletes the owner's CafeMenu login and their records here: cafes, deployments and requests. The admin log keeps its entries. Nothing in their own Firebase project is touched, and their site keeps running without CafeMenu. This can't be undone.",
+        "maintenance-on": "Customers see a “back soon” page and can't order; orders already placed, the staff board and the owner's dashboard keep working. The owner is emailed with the reason, and only you can end it.",
+        "maintenance-off": "Ordering opens again, and the owner is emailed."
+      },
+      "reason": "Reason",
+      "reasonPick": "Pick a reason",
+      "note": "Note",
+      "noteHint": "Goes in the owner's email and the admin log. Up to 500 characters.",
+      "offNote": "Note to the owner",
+      "effectiveAt": "Takes effect",
+      "effectiveHint": "The cafe's time ({zone}). Leave empty for now.",
+      "notice": "{reason} needs {days} days' notice: not before {when}. The owner is told now.",
+      "deleteReminder": "Before deleting: remove CafeMenu's deploy account from the project **{project}**, or ask the owner to (their Access page shows how), so CafeMenu keeps no access to it.",
+      "deleteNoProject": "This cafe never connected a project, so there's no access to remove.",
+      "confirm": "Type the cafe's web address to confirm",
+      "confirmHint": "{site}.web.app",
+      "message": "Message for customers",
+      "messageHint": "Optional, up to 280 characters. Without one they read “We're making a few changes”.",
+      "until": "Expected back",
+      "untilHint": "Optional: shown to customers. The cafe's time ({zone}).",
+      "startsAt": "Starts",
+      "startsAtHint": "Leave empty to start at the backend's next run. The cafe's time ({zone}).",
+      "endsAt": "Ends by itself",
+      "endsAtHint": "Leave empty to end it yourself. The cafe's time ({zone}).",
+      "submit": {
+        "suspend": "Suspend",
+        "reactivate": "Reactivate",
+        "delete-owner": "Delete for good",
+        "maintenance-on": "Turn maintenance on",
+        "maintenance-off": "Turn maintenance off"
+      },
+      "asking": "Asking…",
+      "asked": "Asked. The backend's next run does it, within about 5 minutes; the history below shows how it went.",
+      "noSite": "This cafe has no site yet, so there's nothing to put into maintenance.",
+      "adminOwner": "This owner is an admin: remove them as admin before suspending or deleting them.",
+      "problems": {
+        "reason": "Pick a reason.",
+        "note-long": "Keep the note under 500 characters.",
+        "notice": "This reason needs notice: pick a time on or after {when}.",
+        "bad-time": "That isn't a date and time.",
+        "confirm": "That isn't this cafe's web address.",
+        "message-long": "Keep the message under 280 characters.",
+        "ended": "That end has already passed.",
+        "ends-first": "The end has to come after the start.",
+        "email": "That doesn't look like an email address."
+      }
+    },
+    "bulk": {
+      "title": "Maintenance on several cafes",
+      "explain": "One request per cafe, all in one batch. The times are read on each cafe's own clock. If this page closes partway, Resume picks up where it stopped; Revert turns maintenance off again on every cafe the batch turned it on.",
+      "cafes": "For: {names}",
+      "kind": {
+        "label": "Turn maintenance",
+        "maintenance-on": "On",
+        "maintenance-off": "Off"
+      },
+      "untilHint": "Optional: shown to customers. Read on each cafe's own clock.",
+      "startsAtHint": "Leave empty to start at the backend's next run. Read on each cafe's own clock.",
+      "endsAtHint": "Leave empty to end it yourself. Read on each cafe's own clock.",
+      "start": {
+        "one": "Ask for 1 cafe",
+        "other": "Ask for {count} cafes"
+      },
+      "cancel": "Cancel",
+      "asking": "Asking… {done} of {total}",
+      "skipped": "Not asked for {name}: {why}",
+      "batches": "Batches from this browser",
+      "batch": "{kind}, started {when}",
+      "progress": "{done} done · {waiting} waiting · {failed} failed · {notAsked} not asked",
+      "finished": "Finished.",
+      "resume": "Resume",
+      "revert": "Revert",
+      "revertNote": "Reverting batch {batch}.",
+      "forget": "Forget"
+    },
+    "log": {
+      "title": "Admin log",
+      "explain": "Every admin action, as the backend did it. Entries are written once and never changed, by anyone, the admin included.",
+      "loading": "Loading the log…",
+      "error": "The log couldn't be read: {error}",
+      "none": "No admin actions yet.",
+      "noMatch": "No entry matches.",
+      "action": {
+        "label": "Action",
+        "all": "All"
+      },
+      "search": {
+        "label": "Find in the log",
+        "hint": "A cafe, an email, a reason or a note."
+      },
+      "export": "Download the log as CSV ({count})",
+      "count": "Showing {shown} of the latest {total}.",
+      "entry": "{action}: {cafe}",
+      "by": "By {who}, {when}.",
+      "owner": "Owner: {email}",
+      "releaseWorkflow": "the release workflow"
+    },
+    "admins": {
+      "title": "Admins",
+      "explain": "Accounts with the admin flag, from the owners directory. The first is set once with `npm run make-admin` (see the platform functions README).",
+      "none": "No admin in the directory yet: it's copied from Authentication every hour.",
+      "you": "(you)",
+      "remove": "Remove as admin",
+      "removeLabel": "Remove {email} as admin",
+      "last": "The only admin can't be removed.",
+      "appoint": {
+        "title": "Appoint an admin",
+        "email": "Their CafeMenu account's email",
+        "note": "Note for the log",
+        "submit": "Appoint",
+        "off": "Appointing more admins is off for now: section 8 of the requirements keeps it to the first admin. It's built in; turning it on is one setting (APPOINT_OTHER_ADMINS in @cafemenu/shared/admin-policy) and the backend's own check."
+      }
+    },
+    "words": {
+      "actions": {
+        "suspend": "Suspended",
+        "reactivate": "Reactivated",
+        "delete-owner": "Deleted the owner",
+        "maintenance-on": "Maintenance on",
+        "maintenance-off": "Maintenance off",
+        "appoint-admin": "Appointed an admin",
+        "remove-admin": "Removed an admin",
+        "publish-release": "Published a release",
+        "promote-release": "Promoted a release to stable",
+        "withdraw-release": "Withdrew a release"
+      },
+      "requests": {
+        "provision": "Set up",
+        "check": "Check the connection",
+        "deploy": "Deploy",
+        "rollback": "Roll back",
+        "sync-branding": "Save branding",
+        "suspend": "Suspend",
+        "reactivate": "Reactivate",
+        "delete-owner": "Delete the owner",
+        "maintenance-on": "Maintenance on",
+        "maintenance-off": "Maintenance off",
+        "appoint-admin": "Appoint an admin",
+        "remove-admin": "Remove an admin"
+      },
+      "requestStatus": {
+        "queued": "waiting for the backend",
+        "running": "in progress",
+        "done": "done",
+        "failed": "failed"
+      },
+      "reasons": {
+        "abuse": "Abuse of the service",
+        "security": "A security problem",
+        "legal-request": "A legal request",
+        "non-payment": "Non-payment",
+        "owner-request": "The owner asked",
+        "migration": "A platform migration",
+        "resolved": "Resolved",
+        "payment-received": "Payment received",
+        "made-in-error": "Made in error"
+      },
+      "emails": {
+        "release-available": "A new release",
+        "deploy-failed": "A deployment failed",
+        "upgrade-required": "An upgrade is needed",
+        "suspension-notice": "Notice of suspension",
+        "account-suspended": "Account suspended",
+        "account-reactivated": "Account reactivated",
+        "account-deleted": "Account deleted",
+        "maintenance-on": "Maintenance on",
+        "maintenance-off": "Maintenance off"
+      }
     }
   },
   "locations": {
@@ -1195,6 +1491,7 @@
     "auth/weak-password": "Use a password of at least 6 characters.",
     "auth/invalid-credential": "That email and password don't match.",
     "auth/too-many-requests": "Too many tries. Wait a minute and try again.",
+    "auth/user-disabled": "This CafeMenu account is suspended. CafeMenu has emailed you why; reply to that email to talk about it.",
     "auth/network-request-failed": "No connection. Check the internet and try again.",
     "permission-denied": "You can't do that here. If you just verified your email, reload the page.",
     "already-exists": "That version is already published.",
@@ -1208,6 +1505,7 @@
     "unavailable": "CafeMenu couldn't reach Google just now. Try again in a minute.",
     "unexpected": "Something unexpected went wrong. Try again in a few minutes.",
     "gave-up": "CafeMenu tried several times and couldn't finish. Try again in a few minutes.",
-    "unknown": "Something went wrong. Try again."
+    "unknown": "Something went wrong. Try again.",
+    "cancelled": "Called off before it was done."
   }
 }

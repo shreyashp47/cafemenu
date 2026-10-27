@@ -5,7 +5,11 @@ import {
   parseCafe,
   parseDeployment,
   parseRelease,
+  parseAdminLogEntry,
+  parseCafeMaintenance,
+  parseOwnerRecord,
   parseRequest,
+  parseSentEmail,
   toMillis,
 } from "../parse";
 import { newCafeRecord } from "../records";
@@ -52,6 +56,9 @@ describe("parseCafe", () => {
         previous: null,
       },
       status: "draft",
+      statusReason: null,
+      statusChangedAt: null,
+      maintenance: null,
       createdAt: 1000,
       updatedAt: 1000,
     });
@@ -244,8 +251,25 @@ describe("parseRequest", () => {
       error: null,
       errorCode: null,
       deploymentId: "d1",
+      notBefore: null,
       finishedAt: null,
     });
+  });
+
+  it("reads an admin request about an account, with no cafe, and one waiting for its date", () => {
+    expect(
+      parseRequest("r2", {
+        ...record,
+        cafeId: null,
+        kind: "appoint-admin",
+        params: { email: "erin@x.test", note: "" },
+      })?.cafeId,
+    ).toBeNull();
+    expect(
+      parseRequest("r3", { ...record, kind: "suspend", notBefore: stamp(9) })
+        ?.notBefore,
+    ).toBe(9);
+    expect(parseRequest("r4", { ...record, cafeId: 7 })).toBeNull();
   });
 
   it("reads a request just written, before the server's time is back, as now", () => {
@@ -261,5 +285,124 @@ describe("parseRequest", () => {
     expect(parseRequest("r1", { ...record, progress: "lots" })?.progress).toBe(
       null,
     );
+  });
+});
+
+describe("the super admin's records (#78)", () => {
+  it("reads a cafe the admin suspended and put into maintenance", () => {
+    const record = newCafeRecord(
+      { uid: "u1", email: "owner@cafe.test" },
+      {
+        site: "toe-cafe",
+        region: "asia-south1",
+        settings: newCafeSettings({ name: "TOE" }),
+      },
+      stamp(1000),
+    );
+    const cafe = parseCafe("c1", {
+      ...record,
+      status: "suspended",
+      statusReason: { code: "abuse", note: "Spam orders." },
+      statusChangedAt: stamp(2000),
+      maintenance: {
+        on: true,
+        by: "admin",
+        message: "Back soon.",
+        until: null,
+        startsAt: stamp(3000),
+        endsAt: null,
+        reason: { code: "migration", note: "" },
+        setAt: stamp(2500),
+        setBy: "admin-uid",
+        batch: "batch-1",
+      },
+    });
+    expect(cafe?.statusReason).toEqual({ code: "abuse", note: "Spam orders." });
+    expect(cafe?.statusChangedAt).toBe(2000);
+    expect(cafe?.maintenance).toEqual({
+      on: true,
+      by: "admin",
+      message: "Back soon.",
+      until: null,
+      startsAt: 3000,
+      endsAt: null,
+      reason: { code: "migration", note: "" },
+      setAt: 2500,
+      setBy: "admin-uid",
+      batch: "batch-1",
+    });
+  });
+
+  it("reads maintenance that is off, or not one, as none", () => {
+    expect(parseCafeMaintenance(null)).toBeNull();
+    expect(parseCafeMaintenance({ on: false })).toBeNull();
+    expect(parseCafeMaintenance("on")).toBeNull();
+  });
+
+  it("reads an owners directory entry, active unless it says otherwise", () => {
+    expect(
+      parseOwnerRecord("u1", {
+        email: "owner@cafe.test",
+        name: "Asha",
+        createdAt: 1000,
+        lastSignInAt: 5000,
+        admin: false,
+        disabled: false,
+      }),
+    ).toEqual({
+      uid: "u1",
+      email: "owner@cafe.test",
+      name: "Asha",
+      createdAt: 1000,
+      lastSignInAt: 5000,
+      admin: false,
+      disabled: false,
+      status: "active",
+      statusReason: null,
+      statusChangedAt: null,
+    });
+    expect(
+      parseOwnerRecord("u1", { email: "o@x.test", status: "suspended" })
+        ?.status,
+    ).toBe("suspended");
+    expect(parseOwnerRecord("u1", { name: "no email" })).toBeNull();
+  });
+
+  it("reads an admin log entry, and drops one with no time or action", () => {
+    const entry = {
+      at: stamp(10),
+      by: "admin-uid",
+      byEmail: "erin@x.test",
+      action: "suspend",
+      cafeId: "c1",
+      ownerUid: "u1",
+      reason: { code: "abuse", note: "" },
+      details: { cafes: ["c1"] },
+      requestId: "r1",
+    };
+    expect(parseAdminLogEntry("r1", entry)).toEqual({
+      id: "r1",
+      at: 10,
+      by: "admin-uid",
+      byEmail: "erin@x.test",
+      action: "suspend",
+      cafeId: "c1",
+      ownerUid: "u1",
+      reason: { code: "abuse", note: "" },
+      details: { cafes: ["c1"] },
+    });
+    expect(parseAdminLogEntry("r1", { ...entry, at: null })).toBeNull();
+    expect(parseAdminLogEntry("r1", { ...entry, action: 3 })).toBeNull();
+  });
+
+  it("reads a sent email", () => {
+    expect(
+      parseSentEmail("e1", {
+        kind: "account-suspended",
+        key: "k",
+        at: stamp(4),
+      }),
+    ).toEqual({ id: "e1", kind: "account-suspended", at: 4 });
+    expect(parseSentEmail("e1", { kind: "x" })).toBeNull();
   });
 });

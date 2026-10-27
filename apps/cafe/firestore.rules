@@ -88,6 +88,44 @@ service cloud.firestore {
       return data.total <= cap && data.items[0].price <= cap;
     }
 
+    // -- maintenance (#78) ---------------------------------------------------
+    // While the cafe's site is in maintenance no new order is taken: not from
+    // the page (which shows "back soon" instead of the menu), and not from a
+    // saved link or a modified page either, because this is where it is
+    // refused. Orders already placed carry on, and the staff board and the
+    // owner's dashboard work as ever (the decision in
+    // packages/shared/src/admin-policy.mjs, STAFF_BOARD_IN_MAINTENANCE: a
+    // read-only board would be a rules change in the staff update below).
+    //
+    // Two records, the same shape ({ on, by, message, until, startsAt,
+    // endsAt }, @cafemenu/shared/maintenance):
+    //
+    //   config/site.maintenance   the admin's, written only by CafeMenu's
+    //                             deploy account, which the owner can't clear
+    //   config/ownerMaintenance   the owner's own, from their dashboard
+    //
+    // Either one in effect refuses the order: on, past its start (if it has
+    // one) and before its end (if it has one), by the server's clock, so a
+    // schedule starts and ends on time whatever the phone says. A record
+    // that doesn't make sense (a start that isn't a time) fails the check,
+    // so the order is refused rather than let through.
+    //
+    // Cost: config/site is already read for the cap (the same document is
+    // billed once per request); config/ownerMaintenance is one more read.
+    function maintenanceOn(m) {
+      return m is map
+        && m.get('on', false) == true
+        && (m.get('startsAt', null) == null || m.startsAt <= request.time)
+        && (m.get('endsAt', null) == null || request.time < m.endsAt);
+    }
+
+    function inMaintenance() {
+      let site = /databases/$(database)/documents/config/site;
+      let own = /databases/$(database)/documents/config/ownerMaintenance;
+      return (exists(site) && maintenanceOn(get(site).data.get('maintenance', null)))
+        || (exists(own) && maintenanceOn(get(own).data));
+    }
+
     function tableOpenOrUnconfirmed() {
       let session = /databases/$(database)/documents/tableSessions/$(string(request.resource.data.tableNumber));
       let ordering = /databases/$(database)/documents/config/ordering;
@@ -224,6 +262,8 @@ service cloud.firestore {
         && request.resource.data.items[request.resource.data.items.size() - 1].qty is int
         && request.resource.data.items[request.resource.data.items.size() - 1].qty >= 1
         && request.resource.data.items[request.resource.data.items.size() - 1].qty <= 20
+        // Not while the site is in maintenance (inMaintenance above).
+        && !inMaintenance()
         // Rate limit. Matching the id means one stamp buys exactly one order:
         // a batch cannot write the throttle doc once and 499 orders beside it,
         // because a document can only be written once per commit. The throttle
@@ -602,12 +642,13 @@ service cloud.firestore {
 
     match /config/{docId} {
       allow read: if true;
-      // config/tables and config/ordering are excluded here and handled
-      // below. Two matching blocks are OR-ed together, so without this
-      // carve-out their shape checks could be bypassed through this broader
-      // rule. config/site is excluded so that nobody writes it at all.
+      // config/tables, config/ordering and config/ownerMaintenance are
+      // excluded here and handled below. Two matching blocks are OR-ed
+      // together, so without this carve-out their shape checks could be
+      // bypassed through this broader rule. config/site is excluded so that
+      // nobody writes it at all.
       allow write: if isOwner()
-        && !(docId in ["tables", "ordering", "site"]);
+        && !(docId in ["tables", "ordering", "site", "ownerMaintenance"]);
     }
 
     // The cafe's settings (CafeSettings in packages/shared): name, theme,
@@ -631,6 +672,33 @@ service cloud.firestore {
       allow create, update: if isOwner()
         && request.resource.data.keys().hasOnly(["confirmNewGuests"])
         && request.resource.data.confirmNewGuests is bool;
+      allow delete: if isOwner();
+    }
+
+    // The owner's own maintenance (#78), from their dashboard: closed for a
+    // holiday, a renovation, a menu change. The same shape as the admin's in
+    // config/site, which the owner can never touch, so turning theirs off
+    // ends only theirs. `by` is always "owner". Public read, like the rest of
+    // config: the customer's page reads it. Staff can't change it.
+    function validOwnerMaintenance() {
+      let m = request.resource.data;
+      return m.keys().hasOnly(["on", "by", "message", "until", "startsAt",
+          "endsAt", "updatedAt"])
+        && m.keys().hasAll(["on", "by", "message", "until", "startsAt",
+          "endsAt", "updatedAt"])
+        && m.on is bool
+        && m.by == "owner"
+        && m.message is string
+        && m.message.size() <= 280
+        && (m.until == null || m.until is timestamp)
+        && (m.startsAt == null || m.startsAt is timestamp)
+        && (m.endsAt == null || m.endsAt is timestamp)
+        && (m.startsAt == null || m.endsAt == null || m.startsAt < m.endsAt)
+        && m.updatedAt == request.time;
+    }
+
+    match /config/ownerMaintenance {
+      allow create, update: if isOwner() && validOwnerMaintenance();
       allow delete: if isOwner();
     }
 

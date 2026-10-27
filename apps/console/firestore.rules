@@ -16,8 +16,11 @@ rules_version = '2';
 //                 (a live cafe's logo too), all only with a verified email;
 //                 asks the backend for things with a `requests` document
 //                 for their own cafe, and reads their own requests
-//   the admin     (custom claim admin: true) reads everything, and asks the
-//                 backend for things for any cafe
+//   the admin     (custom claim admin: true) reads everything (the owners
+//                 directory and the admin log too), and asks the backend for
+//                 things for any cafe, and for what only the admin may ask:
+//                 suspending, reactivating or deleting an owner, maintenance,
+//                 appointing admins (#78)
 //   the backend   writes everything else: release records, deployments, a
 //                 cafe's status, plan and the version it runs, and the
 //                 answers to requests. It uses the platform service account,
@@ -126,6 +129,41 @@ service cloud.firestore {
         && (s.baseUrl == null
           || (s.baseUrl is string && s.baseUrl.matches('https?://[^/?#@ ]+')))
         && s.plan is string;
+    }
+
+    // -- the admin's policy (#78) ---------------------------------------------
+    //
+    // The reasons in @cafemenu/shared/admin-policy (packages/shared/src/
+    // admin-policy.mjs, section 8 of docs/super-admin-requirements.md:
+    // provisional). The rules can't import it; src/lib/__tests__/policy.test.ts
+    // checks these lists are the same.
+
+    function suspensionReasons() {
+      return ['abuse', 'security', 'legal-request', 'non-payment',
+        'owner-request'];
+    }
+
+    function maintenanceReasons() {
+      return suspensionReasons().concat(['migration']);
+    }
+
+    function reactivationReasons() {
+      return ['resolved', 'payment-received', 'made-in-error', 'owner-request'];
+    }
+
+    // REASON_NOTE_MAX in the policy.
+    function isNote(value) {
+      return value is string && value.size() <= 500;
+    }
+
+    function isTimeOrNull(value) {
+      return value == null || value is timestamp;
+    }
+
+    // Bulk maintenance: the requests made together share a batch id.
+    function isBatch(value) {
+      return value == null
+        || (value is string && value.matches('[A-Za-z0-9_-]{1,64}'));
     }
 
     // The owner's half of `release`: which channel, and an optional minor
@@ -370,6 +408,55 @@ service cloud.firestore {
       allow get, list: if isAdmin()
         || (signedIn() && resource.data.by == request.auth.uid);
 
+      // The admin's requests (#78): what each takes. The reasons are the
+      // policy's (above). A suspension may wait out a notice period
+      // (effectiveAt); deleting an owner wants the cafe's web address typed
+      // out; maintenance carries what customers read and when.
+      function isAdminParams(kind, p, cafeId) {
+        return p is map
+          && ((kind == 'suspend'
+              && p.keys().hasOnly(['reason', 'note', 'effectiveAt'])
+              && p.keys().hasAll(['reason', 'note', 'effectiveAt'])
+              && p.reason in suspensionReasons()
+              && isNote(p.note)
+              && isTimeOrNull(p.effectiveAt))
+            || (kind == 'reactivate'
+              && p.keys().hasOnly(['reason', 'note'])
+              && p.keys().hasAll(['reason', 'note'])
+              && p.reason in reactivationReasons()
+              && isNote(p.note))
+            || (kind == 'delete-owner'
+              && p.keys().hasOnly(['reason', 'note', 'confirm'])
+              && p.keys().hasAll(['reason', 'note', 'confirm'])
+              && p.reason in suspensionReasons()
+              && isNote(p.note)
+              && p.confirm
+                == get(/databases/$(database)/documents/cafes/$(cafeId)).data.site)
+            || (kind == 'maintenance-on'
+              && p.keys().hasOnly(['reason', 'note', 'message', 'until',
+                'startsAt', 'endsAt', 'batch'])
+              && p.keys().hasAll(['reason', 'note', 'message', 'until',
+                'startsAt', 'endsAt', 'batch'])
+              && p.reason in maintenanceReasons()
+              && isNote(p.note)
+              && p.message is string && p.message.size() <= 280
+              && isTimeOrNull(p.until)
+              && isTimeOrNull(p.startsAt)
+              && isTimeOrNull(p.endsAt)
+              && isBatch(p.batch))
+            || (kind == 'maintenance-off'
+              && p.keys().hasOnly(['note', 'batch'])
+              && p.keys().hasAll(['note', 'batch'])
+              && isNote(p.note)
+              && isBatch(p.batch))
+            || (kind in ['appoint-admin', 'remove-admin']
+              && p.keys().hasOnly(['email', 'note'])
+              && p.keys().hasAll(['email', 'note'])
+              && p.email is string && p.email.size() <= 254
+              && p.email.matches('[^@ ]+@[^@ ]+[.][^@ ]+')
+              && isNote(p.note)));
+      }
+
       allow create: if verified()
         && request.resource.data.keys().hasOnly([
           'cafeId', 'kind', 'params', 'status', 'createdAt', 'by'])
@@ -378,14 +465,56 @@ service cloud.firestore {
         && request.resource.data.by == request.auth.uid
         && request.resource.data.status == 'queued'
         && request.resource.data.createdAt == request.time
-        && request.resource.data.kind in
-          ['provision', 'check', 'deploy', 'rollback', 'sync-branding']
-        && (ownsCafe(request.resource.data.cafeId)
-          || adminCafe(request.resource.data.cafeId))
-        && isParams(request.resource.data.kind, request.resource.data.params,
-          request.resource.data.cafeId);
+        && (
+          // An owner's, for their own cafe; or the admin's, for any.
+          (request.resource.data.kind in
+              ['provision', 'check', 'deploy', 'rollback', 'sync-branding']
+            && (ownsCafe(request.resource.data.cafeId)
+              || adminCafe(request.resource.data.cafeId))
+            && isParams(request.resource.data.kind,
+              request.resource.data.params, request.resource.data.cafeId))
+          // The admin's alone, about a cafe and its owner.
+          || (request.resource.data.kind in ['suspend', 'reactivate',
+              'delete-owner', 'maintenance-on', 'maintenance-off']
+            && adminCafe(request.resource.data.cafeId)
+            && isAdminParams(request.resource.data.kind,
+              request.resource.data.params, request.resource.data.cafeId))
+          // The admin's alone, about an account: no cafe.
+          || (request.resource.data.kind in ['appoint-admin', 'remove-admin']
+            && isAdmin()
+            && request.resource.data.cafeId == null
+            && isAdminParams(request.resource.data.kind,
+              request.resource.data.params, null)));
 
       allow update, delete: if false;
+    }
+
+    // -- the super admin (#78) -------------------------------------------------
+
+    // Every registered owner, as the backend copies them from the platform's
+    // Auth (email, name, sign-up and last sign-in, admin) with their account's
+    // status (active or suspended, why, when, by whom). The admin's directory:
+    // nobody else reads it, and only the backend writes it.
+    match /owners/{uid} {
+      allow get, list: if isAdmin();
+      allow create, update, delete: if false;
+    }
+
+    // Every action an admin takes (suspend, reactivate, delete, maintenance
+    // on and off, appointing admins): who, what, which cafe, when, why.
+    // Append-only: the backend only ever creates an entry, and no browser,
+    // the admin included, may create, change or delete one. Owners can't read
+    // it.
+    match /adminLog/{entryId} {
+      allow get, list: if isAdmin();
+      allow create, update, delete: if false;
+    }
+
+    // The emails a cafe's owner was sent (kind and when), for the cafe's
+    // history on the admin page. The backend writes them as it sends.
+    match /cafes/{cafeId}/emails/{emailId} {
+      allow get, list: if isAdmin();
+      allow create, update, delete: if false;
     }
 
     // The backend's own bookkeeping (`backend/worker`: which releases it has

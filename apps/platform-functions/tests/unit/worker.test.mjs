@@ -544,6 +544,37 @@ describe("the email and support-window jobs", () => {
 
     await runBackgroundJobs(t.env, { force: true });
     assert.equal(t.outbox.length, 1, "not twice");
+
+    // And each is in the admin log (#78), once; the first run's are not.
+    assert.deepEqual(
+      [...t.store.data.adminLog.keys()],
+      ["publish-release-1.3.0-beta.1", "publish-release-1.3.0"],
+    );
+    assert.deepEqual(
+      t.store.data.adminLog.get("publish-release-1.3.0").details,
+      { version: "1.3.0", channel: "stable" },
+    );
+  });
+
+  it("logs a release promoted to stable or withdrawn", async () => {
+    const t = await withPinned();
+    await runBackgroundJobs(t.env);
+    t.store.data.releases.get("1.2.0").withdrawn = true;
+    t.store.data.releases.get("1.1.0").channel = "beta";
+    await runBackgroundJobs(t.env, { force: true });
+    t.store.data.releases.get("1.1.0").channel = "stable";
+    await runBackgroundJobs(t.env, { force: true });
+    assert.deepEqual(
+      [...t.store.data.adminLog.values()].map((e) => [
+        e.action,
+        e.details.version,
+        e.by,
+      ]),
+      [
+        ["withdraw-release", "1.2.0", "release-workflow"],
+        ["promote-release", "1.1.0", "release-workflow"],
+      ],
+    );
   });
 
   it("looks at the support window once a day", async () => {

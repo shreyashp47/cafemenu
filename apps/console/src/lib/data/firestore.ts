@@ -38,10 +38,13 @@ import { newRequestRecord } from "@cafemenu/shared/requests";
 import type { Cafe, PlatformUser } from "../platform/model";
 import {
   compareVersionsDesc,
+  parseAdminLogEntry,
   parseCafe,
   parseDeployment,
+  parseOwnerRecord,
   parseRelease,
   parseRequest,
+  parseSentEmail,
   parseStartingMenu,
 } from "../platform/parse";
 import {
@@ -74,9 +77,12 @@ import { firebaseCall } from "./functions";
 import {
   CodedError,
   DEPLOYMENT_HISTORY,
+  HISTORY_LIMIT,
   REQUEST_HISTORY,
+  type AdminDirectory,
   type AuthRepository,
   type Backend,
+  type CafeHistory,
   type CafeRepository,
   type DataBundle,
   type DeploymentRepository,
@@ -445,6 +451,141 @@ export function firestoreRequestRepo(connect: Connect): RequestRepository {
   };
 }
 
+/** A query's documents, parsed, the ones that don't parse dropped. */
+function parsed<T>(
+  snap: QuerySnapshot,
+  parse: (id: string, data: unknown) => T | null,
+): T[] {
+  return snap.docs
+    .map((d) => parse(d.id, d.data({ serverTimestamps: "estimate" })))
+    .filter((item): item is T => item !== null);
+}
+
+/**
+ * AdminDirectory (types.ts) on the platform's Firestore. Each read is one the
+ * rules allow only the admin (`isAdmin()`); the queries that filter on a
+ * field and order on another have their indexes in firestore.indexes.json.
+ */
+export function firestoreAdminDirectory(
+  connect: Connect,
+  requests: RequestRepository | null,
+): AdminDirectory {
+  return {
+    canAct: requests !== null,
+    subscribeOwners(listener, onError) {
+      return whenReady(
+        connect,
+        ({ db }) =>
+          onSnapshot(
+            collection(db, "owners"),
+            (snap) => listener(parsed(snap, parseOwnerRecord)),
+            (error) => onError?.(error),
+          ),
+        onError,
+      );
+    },
+    subscribeLog(max, listener, onError) {
+      return whenReady(
+        connect,
+        ({ db }) =>
+          onSnapshot(
+            query(
+              collection(db, "adminLog"),
+              orderBy("at", "desc"),
+              limit(max),
+            ),
+            (snap) => listener(parsed(snap, parseAdminLogEntry)),
+            (error) => onError?.(error),
+          ),
+        onError,
+      );
+    },
+    subscribeHistory(cafeId, listener, onError) {
+      return whenReady(
+        connect,
+        ({ db }) => {
+          // Four live queries; the page hears once each has answered.
+          const have: Partial<CafeHistory> = {};
+          const emit = () => {
+            const { requests, deployments, log, emails } = have;
+            if (requests && deployments && log && emails) {
+              listener({ requests, deployments, log, emails });
+            }
+          };
+          const watch = <K extends keyof CafeHistory>(
+            key: K,
+            q: Parameters<typeof onSnapshot>[0],
+            parse: (id: string, data: unknown) => CafeHistory[K][number] | null,
+          ) =>
+            onSnapshot(
+              q as never,
+              (snap: QuerySnapshot) => {
+                have[key] = parsed(snap, parse) as CafeHistory[K];
+                emit();
+              },
+              (error: Error) => onError?.(error),
+            );
+          const newest = (name: string, field: string) =>
+            query(
+              collection(db, name),
+              where("cafeId", "==", cafeId),
+              orderBy(field, "desc"),
+              limit(HISTORY_LIMIT),
+            );
+          const stops = [
+            watch("requests", newest("requests", "createdAt"), parseRequest),
+            watch(
+              "deployments",
+              newest("deployments", "createdAt"),
+              parseDeployment,
+            ),
+            watch("log", newest("adminLog", "at"), parseAdminLogEntry),
+            watch(
+              "emails",
+              query(
+                collection(db, "cafes", cafeId, "emails"),
+                orderBy("at", "desc"),
+                limit(HISTORY_LIMIT),
+              ),
+              parseSentEmail,
+            ),
+          ];
+          return () => stops.forEach((stop) => stop());
+        },
+        onError,
+      );
+    },
+    subscribeMine(max, listener, onError) {
+      return whenReady(
+        connect,
+        ({ auth, db }) => {
+          const uid = auth.currentUser?.uid ?? "";
+          return onSnapshot(
+            query(
+              collection(db, "requests"),
+              where("by", "==", uid),
+              orderBy("createdAt", "desc"),
+              limit(max),
+            ),
+            (snap) => listener(parsed(snap, parseRequest)),
+            (error) => onError?.(error),
+          );
+        },
+        onError,
+      );
+    },
+    async ask(input) {
+      if (!requests) {
+        throw new CodedError(
+          "backend-pending",
+          "Admin actions need the backend on GitHub Actions.",
+        );
+      }
+      return requests.create(input);
+    },
+  };
+}
+
 export function createFirebaseBundle(
   connect: Connect,
   backend: Exclude<Backend, "demo">,
@@ -485,6 +626,7 @@ export function createFirebaseBundle(
         ? callableDeployRequests(call)
         : pendingDeployRequests,
     requests,
+    directory: firestoreAdminDirectory(connect, requests),
     backend,
   };
 }

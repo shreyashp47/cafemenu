@@ -46,7 +46,10 @@ describe("who sees it", () => {
     });
     press("Sign in");
     expect(
-      await screen.findByRole("heading", { name: "Every cafe", level: 1 }),
+      await screen.findByRole("heading", {
+        name: "Owners and cafes",
+        level: 1,
+      }),
     ).toBeInTheDocument();
     expect(screen.getByText(/sample admin/)).toBeInTheDocument();
   });
@@ -66,16 +69,24 @@ describe("who sees it", () => {
       }),
     ).toBeInTheDocument();
     expect(screen.queryByText(/Lantern Café/)).toBeNull();
-    expect(screen.queryByRole("heading", { name: "Cafes" })).toBeNull();
+    expect(
+      screen.queryByRole("heading", { name: "Owners and cafes" }),
+    ).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Admin log" })).toBeNull();
   });
 });
 
-describe("the cafes", () => {
+/** Picks `value` in the directory's filter called `label`. */
+const filterBy = (label: string, value: string) =>
+  fireEvent.change(screen.getByLabelText(label), { target: { value } });
+
+describe("the owners and cafes", () => {
   it("shows each with how it is doing, those that need a look first", async () => {
     await signInAdmin();
     render(<AdminArea />);
     const cards = await screen.findAllByRole("article");
-    expect(cards.length).toBe(7);
+    // The seven sample cafes, then the admin's own account, which has none.
+    expect(cards.length).toBe(8);
     // Orchard's latest deployment failed its smoke test and was rolled back;
     // Tide's owner removed access.
     const names = cards.map(
@@ -85,8 +96,11 @@ describe("the cafes", () => {
       "Orchard Tea House (sample)",
       "Tide & Toast (sample)",
     ]);
+    expect(names.at(-1)).toBe(DEMO_ADMIN.email);
     expect(
-      screen.getByText(/7 cafes · 4 live · 2 need a look · 1 in progress/),
+      screen.getByText(
+        "8 owners · 7 cafes · 4 live · 0 suspended · 0 in maintenance · 2 need a look",
+      ),
     ).toBeInTheDocument();
 
     const orchard = within(await card("Orchard Tea House"));
@@ -94,14 +108,18 @@ describe("the cafes", () => {
     expect(
       orchard.getByText(/failed its check and was rolled back/),
     ).toBeInTheDocument();
-    expect(
-      orchard.getByText(/Smoke test failed on https:\/\/orchard-tea/i),
-    ).toBeInTheDocument();
     expect(orchard.getByText(/Failed, /)).toBeInTheDocument();
     expect(orchard.getByText("Version").nextElementSibling).toHaveTextContent(
-      "1.1.0 (before: 1.0.0)",
+      "1.1.0",
     );
-    expect(orchard.getByText("owner4@sample.test")).toBeInTheDocument();
+    // The owner: name and email, sign-up, last sign-in; the cafe's project.
+    expect(
+      orchard.getByText("Ravi Menon, owner4@sample.test"),
+    ).toBeInTheDocument();
+    expect(orchard.getByText("orchard-tea-1a23")).toBeInTheDocument();
+    expect(orchard.getByText("Signed up")).toBeInTheDocument();
+    expect(orchard.getByText("Last console sign-in")).toBeInTheDocument();
+    expect(orchard.getByText("Free")).toBeInTheDocument();
 
     const harbour = within(await card("Harbour Beans"));
     expect(harbour.getByText("Healthy")).toBeInTheDocument();
@@ -117,35 +135,86 @@ describe("the cafes", () => {
     expect(moss.getByText("Not set up")).toBeInTheDocument();
   });
 
-  it("filters, and searches by name, address and owner", async () => {
+  it("filters by status, maintenance, plan, channel and health", async () => {
     await signInAdmin();
     render(<AdminArea />);
     await card("Harbour Beans");
 
-    press("Needs a look");
+    filterBy("Health", "attention");
     expect(screen.getAllByRole("article")).toHaveLength(2);
-    press("On beta");
+    filterBy("Release channel", "beta");
+    expect(screen.getByText("Nothing matches.")).toBeInTheDocument();
+    filterBy("Health", "all");
     expect(screen.getAllByRole("article")).toHaveLength(1);
-    press("Staying on a version");
+    filterBy("Release channel", "pinned");
     expect(screen.getAllByRole("article")).toHaveLength(1);
-    press("All");
+    press("Clear filters");
+    expect(screen.getAllByRole("article")).toHaveLength(8);
+    filterBy("Account", "suspended");
+    expect(screen.getByText("Nothing matches.")).toBeInTheDocument();
+    filterBy("Account", "active");
+    filterBy("Maintenance", "on");
+    expect(screen.getByText("Nothing matches.")).toBeInTheDocument();
+    filterBy("Maintenance", "off");
+    filterBy("Plan", "free");
+    // Every cafe is on the free plan; the admin's account has no cafe.
+    expect(screen.getAllByRole("article")).toHaveLength(7);
+  });
 
-    fireEvent.change(screen.getByLabelText("Find a cafe"), {
-      target: { value: "juniper" },
-    });
-    expect(screen.getAllByRole("article")).toHaveLength(1);
-    fireEvent.change(screen.getByLabelText("Find a cafe"), {
-      target: { value: "owner3@" },
-    });
-    expect(
-      within(screen.getAllByRole("article")[0]).getByRole("heading", {
-        level: 3,
-      }),
-    ).toHaveTextContent("Corner Pantry");
-    fireEvent.change(screen.getByLabelText("Find a cafe"), {
-      target: { value: "zzz" },
-    });
-    expect(screen.getByText("No cafe matches.")).toBeInTheDocument();
+  it("searches by email, name, web address and project ID", async () => {
+    await signInAdmin();
+    render(<AdminArea />);
+    await card("Harbour Beans");
+    const search = (value: string) =>
+      fireEvent.change(screen.getByLabelText("Find an owner or cafe"), {
+        target: { value },
+      });
+    const headings = () =>
+      screen
+        .getAllByRole("article")
+        .map((a) => within(a).getByRole("heading", { level: 3 }).textContent);
+
+    search("juniper");
+    expect(headings()).toEqual(["Juniper Kitchen (sample)"]);
+    search("owner3@");
+    expect(headings()).toEqual(["Corner Pantry (sample)"]);
+    search("Mei Lin");
+    expect(headings()).toEqual(["Corner Pantry (sample)"]);
+    search("https://lamp-room.web.app/");
+    expect(headings()).toEqual(["The Lamp Room (sample)"]);
+    search("tide-and-toast-1a24");
+    expect(headings()).toEqual(["Tide & Toast (sample)"]);
+    search("zzz");
+    expect(screen.getByText("Nothing matches.")).toBeInTheDocument();
+  });
+
+  it("downloads what it shows as CSV", async () => {
+    const created: Blob[] = [];
+    const original = URL.createObjectURL;
+    URL.createObjectURL = (blob: Blob) => {
+      created.push(blob);
+      return "blob:csv";
+    };
+    URL.revokeObjectURL = () => {};
+    try {
+      await signInAdmin();
+      render(<AdminArea />);
+      await card("Harbour Beans");
+      filterBy("Health", "attention");
+      press("Download the list as CSV (2)");
+      expect(created).toHaveLength(1);
+      const text = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.readAsText(created[0]);
+      });
+      const lines = text.replace(/^\uFEFF/, "").split("\r\n");
+      expect(lines[0]).toMatch(/^owner_name,owner_email,/);
+      expect(lines).toHaveLength(3);
+      expect(text).toContain("owner4@sample.test");
+    } finally {
+      URL.createObjectURL = original;
+    }
   });
 
   it("changes as the data does", async () => {
@@ -165,9 +234,6 @@ describe("the cafes", () => {
       () => expect(harbour.getByText("Needs a look")).toBeInTheDocument(),
       SLOW,
     );
-    expect(
-      harbour.getByText(/Hosting refused the release/),
-    ).toBeInTheDocument();
   });
 });
 
@@ -267,7 +333,7 @@ describe("the audit log", () => {
   it("lists who asked what, when and how it went", async () => {
     await signInAdmin();
     render(<AdminArea />);
-    const log = await screen.findByRole("region", { name: "Audit log" });
+    const log = await screen.findByRole("region", { name: "Deployments" });
     const items = within(log).getAllByRole("listitem");
     expect(items.length).toBe(12);
     expect(log).toHaveTextContent("Asked by owner1@sample.test");
@@ -285,7 +351,7 @@ describe("the audit log", () => {
   it("narrows to a cafe, or to what didn't go through", async () => {
     await signInAdmin();
     render(<AdminArea />);
-    const log = await screen.findByRole("region", { name: "Audit log" });
+    const log = await screen.findByRole("region", { name: "Deployments" });
     await within(log).findAllByRole("listitem");
     fireEvent.click(
       within(log).getByLabelText("Only those that didn't go through"),

@@ -10,13 +10,27 @@
  */
 
 import type {
+  AdminLogEntry,
+  AdminReason,
+  BackendRequest,
   Cafe,
+  CafeStatus,
   Deployment,
+  OwnerStatus,
   PlatformUser,
   Release,
+  SentEmail,
 } from "../platform/model";
 import type { RolloutStatus } from "./types";
-import { parseCafe, parseDeployment, parseRelease } from "../platform/parse";
+import {
+  parseAdminLogEntry,
+  parseCafe,
+  parseDeployment,
+  parseReason,
+  parseRelease,
+  parseRequest,
+  parseSentEmail,
+} from "../platform/parse";
 import { isPlainObject } from "../platform/validate";
 import { SEED_RELEASES } from "./demo-seed";
 
@@ -32,6 +46,22 @@ export interface DemoAccount {
   isAdmin?: boolean;
 }
 
+/**
+ * What the admin changed about an account (#78): the demo's stand-in for
+ * `owners/{uid}`'s status and Authentication's disabled flag. Accounts with
+ * no entry are active.
+ */
+export interface DemoOwnerState {
+  status: OwnerStatus;
+  statusReason: AdminReason | null;
+  statusChangedAt: number | null;
+  /** Each suspended cafe's status before, for reactivate. */
+  cafesBefore: Record<string, CafeStatus>;
+}
+
+/** An email the demo's backend "sent": recorded, never sent. */
+export type DemoEmail = SentEmail & { cafeId: string };
+
 export interface DemoState {
   accounts: DemoAccount[];
   /** The signed-in account's uid. Shared by every tab, as Firebase's is. */
@@ -41,6 +71,11 @@ export interface DemoState {
   deployments: Deployment[];
   /** The rollout of each version that has one (a stub for #32). */
   rollouts: Record<string, RolloutStatus>;
+  /** The super admin's (#78): their requests, the log, the emails, statuses. */
+  requests: BackendRequest[];
+  adminLog: AdminLogEntry[];
+  emails: DemoEmail[];
+  owners: Record<string, DemoOwnerState>;
 }
 
 export function seedState(): DemoState {
@@ -51,6 +86,10 @@ export function seedState(): DemoState {
     releases: SEED_RELEASES.map((r) => ({ ...r })),
     deployments: [],
     rollouts: {},
+    requests: [],
+    adminLog: [],
+    emails: [],
+    owners: {},
   };
 }
 
@@ -130,6 +169,41 @@ function parseRollouts(value: unknown): Record<string, RolloutStatus> {
   return rollouts;
 }
 
+const CAFE_STATUS_WORDS: readonly unknown[] = [
+  "draft",
+  "provisioning",
+  "live",
+  "failed",
+  "disconnected",
+  "suspended",
+];
+
+function parseOwners(value: unknown): Record<string, DemoOwnerState> {
+  const owners: Record<string, DemoOwnerState> = {};
+  if (!isPlainObject(value)) return owners;
+  for (const [uid, entry] of Object.entries(value)) {
+    if (!isPlainObject(entry)) continue;
+    const before: Record<string, CafeStatus> = {};
+    if (isPlainObject(entry.cafesBefore)) {
+      for (const [id, status] of Object.entries(entry.cafesBefore)) {
+        if (CAFE_STATUS_WORDS.includes(status)) {
+          before[id] = status as CafeStatus;
+        }
+      }
+    }
+    owners[uid] = {
+      status: entry.status === "suspended" ? "suspended" : "active",
+      statusReason: parseReason(entry.statusReason),
+      statusChangedAt:
+        typeof entry.statusChangedAt === "number"
+          ? entry.statusChangedAt
+          : null,
+      cafesBefore: before,
+    };
+  }
+  return owners;
+}
+
 /** A stored state that does not parse is replaced by a fresh seed. */
 export function parseState(raw: string | null): DemoState {
   if (!raw) return seedState();
@@ -162,6 +236,22 @@ export function parseState(raw: string | null): DemoState {
         return doc ? parseDeployment(doc.id as string, doc) : null;
       }),
       rollouts: parseRollouts(data.rollouts),
+      requests: keep(data.requests, (v) => {
+        const doc = withId(v);
+        return doc ? parseRequest(doc.id as string, doc) : null;
+      }),
+      adminLog: keep(data.adminLog, (v) => {
+        const doc = withId(v);
+        return doc ? parseAdminLogEntry(doc.id as string, doc) : null;
+      }),
+      emails: keep(data.emails, (v) => {
+        const doc = withId(v);
+        const email = doc ? parseSentEmail(doc.id as string, doc) : null;
+        return email && typeof doc?.cafeId === "string"
+          ? { ...email, cafeId: doc.cafeId }
+          : null;
+      }),
+      owners: parseOwners(data.owners),
     };
   } catch {
     return seedState();

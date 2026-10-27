@@ -185,6 +185,36 @@ first and give you a chance to fix it. If we close your account, we stop
 deploying to your project, and you should remove the deploy access yourself;
 your site and data stay in your project.
 
+### Suspension and maintenance by CafeMenu
+
+We may **suspend** your account, or put your cafe's site into **maintenance**
+(customers see a "back soon" page and can't place new orders), only for one of
+these reasons: abuse of the service, a security problem, a legal request,
+non-payment (once CafeMenu has paid plans), or because you asked us to. We may
+also put a site into maintenance for a platform migration that needs it.
+
+- **Notice.** For non-payment we give you at least 7 days' notice by email
+  before it takes effect. For abuse or a security problem we may act at once,
+  without notice. For the other reasons we tell you when we act.
+- **We always tell you why.** Each suspension, reactivation and maintenance
+  window is emailed to you with its reason, and recorded in an admin log that
+  nobody can edit.
+- **While suspended**, you can't sign in to the console, your requests
+  (deploys, branding, rollbacks) are refused, and updates skip your cafe. Your
+  site keeps running as it is, unless we also put it into maintenance. We
+  reactivate your account when the reason is resolved.
+- **Maintenance** stops new orders only. Orders already placed, your staff
+  board and your cafe's own dashboard keep working. Only we can end
+  maintenance we started, unless you leave CafeMenu, in which case
+  [Your access, explained](access-explained.md#maintenance-after-leaving) shows
+  how to end it yourself.
+- **Deleting your account** removes your console login and your cafe's records
+  on CafeMenu. We keep only the admin log's entries about it. Nothing in your
+  own Firebase project is touched; remove our deploy access yourself, as
+  section 5 explains.
+
+We never use these powers to read or export your orders, customers or staff.
+
 Sections 3, 7, 8, 10 and 11 still apply after the agreement ends.
 
 ## 10. Changes to these terms

@@ -549,5 +549,36 @@
       "one": "{count} row",
       "other": "{count} rows"
     }
+  },
+  "siteMaintenance": {
+    "staffBanner": "The site is in maintenance: customers can't order from their tables. Orders already placed carry on here as usual.",
+    "adminBanner": "CafeMenu has put your site into maintenance. Customers see a “back soon” page and can't order; this dashboard and the staff board work as usual. The reason is in CafeMenu's email to you and on your cafe's page in the CafeMenu console. Only CafeMenu can end it.",
+    "adminScheduled": "CafeMenu will put your site into maintenance {when}. The reason is in CafeMenu's email to you and on your cafe's page in the CafeMenu console.",
+    "adminLeft": "Left CafeMenu while this was on? <link>How to end it yourself</link>.",
+    "ownerBanner": "Your site is in maintenance: customers see a “back soon” page and can't order.",
+    "title": "Maintenance mode",
+    "explain": "Pause ordering for a holiday, a renovation or a menu change. Customers see a “back soon” page with your message; orders already placed, the staff board and this dashboard keep working.",
+    "message": "Message for customers",
+    "messageHint": "Optional. Up to 280 characters; without one they read “We're making a few changes”.",
+    "until": "Expected back",
+    "untilHint": "Optional: shown to customers. Your cafe's time ({zone}).",
+    "startsAt": "Starts",
+    "startsAtHint": "Leave empty to start now. Your cafe's time ({zone}).",
+    "endsAt": "Ends by itself",
+    "endsAtHint": "Leave empty to end it yourself. Your cafe's time ({zone}).",
+    "turnOn": "Turn maintenance on",
+    "turnOff": "Turn maintenance off",
+    "saving": "Saving…",
+    "onNow": "On now.",
+    "onScheduled": "Starts {when}.",
+    "endsWhen": "Ends {when}.",
+    "adminToo": "CafeMenu's own maintenance is on as well: only CafeMenu can end that one.",
+    "didntSave": "That didn't save. Check the connection and try again.",
+    "problems": {
+      "messageLong": "Keep the message under 280 characters.",
+      "ended": "That end has already passed.",
+      "endsFirst": "The end has to come after the start.",
+      "badTime": "That isn't a date and time."
+    }
   }
 }

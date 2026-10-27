@@ -264,6 +264,7 @@ describe("requests waiting for the backend (#77)", () => {
     error: null,
     errorCode: null,
     deploymentId: null,
+    notBefore: null,
     finishedAt: null,
     ...over,
   });

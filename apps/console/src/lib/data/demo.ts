@@ -33,6 +33,7 @@ import { simulatedConnectionChecker } from "../setup/connection";
 import { DEMO_ADMIN } from "../config";
 import { simulatedSiteChecker } from "./checks";
 import { seedSample } from "./demo-sample";
+import { demoAdminDirectory, isSuspendedAccount } from "./demo-admin";
 import { releaseInputProblems } from "../admin/release-form";
 import {
   demoDeployRequests,
@@ -184,6 +185,10 @@ export const demoAuthRepo: AuthRepository = {
         account.passwordHash !== passwordHash(address, password)
       ) {
         throw new CodedError("auth/invalid-credential");
+      }
+      // Suspended by the admin (#78): Authentication refuses the sign-in.
+      if (isSuspendedAccount(state, account.uid)) {
+        throw new CodedError("auth/user-disabled");
       }
       state.session = account.uid;
     });
@@ -456,6 +461,9 @@ export const demoAdminRepo: AdminRequests = {
   },
 };
 
+/** The super admin's directory and actions (#78), done at once (demo-admin.ts). */
+export const demoDirectory = demoAdminDirectory({ live, isAdmin: isAdminUser });
+
 /** Upgrade, Roll back and Save branding, simulated (demo-deploys.ts). */
 export const demoDeploys = demoDeployRequests(ownCafe);
 
@@ -479,5 +487,6 @@ export const demoBundle: DataBundle = {
   deploys: demoDeploys,
   // Demo mode's backend answers at once (demo-deploys.ts): no requests to wait on.
   requests: null,
+  directory: demoDirectory,
   backend: "demo",
 };

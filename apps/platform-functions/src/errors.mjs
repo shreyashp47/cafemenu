@@ -32,3 +32,18 @@ export class MissingAccessError extends Error {
     this.missing = missing;
   }
 }
+
+/**
+ * A request that can't be done yet: a suspension with a notice period waits
+ * for its date. The worker puts it back in the queue with `notBefore`, and
+ * leaves it there, unclaimed, until then.
+ */
+export class Deferred extends Error {
+  name = "Deferred";
+
+  /** `until` in ms; `message` says, in words for the page, what it waits for. */
+  constructor(until, message) {
+    super(message);
+    this.until = until;
+  }
+}

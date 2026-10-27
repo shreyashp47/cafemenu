@@ -3,17 +3,27 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAccount, useDataBundle } from "@/lib/data/hooks";
 import type { DataBundle } from "@/lib/data/types";
-import { fill, messages } from "@/lib/messages";
-import { adminRows } from "@/lib/admin/overview";
-import type { Cafe, Deployment, PlatformUser } from "@/lib/platform/model";
+import { errorText, fill, messages } from "@/lib/messages";
+import { directoryRows } from "@/lib/admin/directory";
+import type {
+  AdminLogEntry,
+  Cafe,
+  Deployment,
+  OwnerRecord,
+  PlatformUser,
+} from "@/lib/platform/model";
 import { DemoNotice } from "../DemoNotice";
 import { Rich } from "../Rich";
 import { StageHeading } from "../StageHeading";
 import { TextButton } from "../Button";
 import { SignInForm } from "../setup/SignInForm";
 import { Card } from "../setup/Card";
+import { AdminLogPanel } from "./AdminLogPanel";
+import { AdminsPanel } from "./AdminsPanel";
 import { AuditPanel } from "./AuditPanel";
-import { CafesPanel } from "./CafesPanel";
+import { BulkMaintenance } from "./BulkMaintenance";
+import { CafeDetail } from "./CafeDetail";
+import { DirectoryPanel } from "./DirectoryPanel";
 import { ReleasesPanel } from "./ReleasesPanel";
 
 const { admin: text } = messages;
@@ -22,10 +32,13 @@ const { admin: text } = messages;
 export const AUDIT_LIMIT = 200;
 
 /**
- * The platform admin (#30): every cafe and how it is doing, the releases, and
- * an audit log of deployments. Only for an account with the `admin` claim;
- * the rules refuse everyone else these reads, so this is a courtesy, not the
- * lock. Read-only for cafes, and no way to be an owner or see an order.
+ * The platform admin (#30) and super admin (#78): every owner and cafe and
+ * how each is doing, one cafe's history and the actions on it (suspend,
+ * reactivate, delete, maintenance, one cafe or several), the admin log, the
+ * admins, the releases, and the deployments. Only for an account with the
+ * `admin` claim; the rules refuse everyone else these reads, so this is a
+ * courtesy, not the lock. Every change is a request the backend does and
+ * logs; there is no way to be an owner or see an order.
  */
 export function AdminArea() {
   const data = useDataBundle();
@@ -72,6 +85,9 @@ export function AdminArea() {
 
 type Load<T> = { state: "loading" | "error" | "ready"; value: T };
 
+/** How many admin log entries the page reads. */
+export const LOG_LIMIT = 500;
+
 function Console({ data, user }: { data: DataBundle; user: PlatformUser }) {
   const [cafes, setCafes] = useState<Load<Cafe[]>>({
     state: "loading",
@@ -81,6 +97,18 @@ function Console({ data, user }: { data: DataBundle; user: PlatformUser }) {
     state: "loading",
     value: [],
   });
+  const [owners, setOwners] = useState<Load<OwnerRecord[]>>({
+    state: "loading",
+    value: [],
+  });
+  const [log, setLog] = useState<Load<AdminLogEntry[]>>({
+    state: "loading",
+    value: [],
+  });
+  const [logError, setLogError] = useState<string | null>(null);
+  const [opened, setOpened] = useState<string | null>(null);
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  const [bulkOpen, setBulkOpen] = useState(false);
 
   useEffect(
     () =>
@@ -99,17 +127,50 @@ function Console({ data, user }: { data: DataBundle; user: PlatformUser }) {
       ),
     [data],
   );
+  useEffect(
+    () =>
+      data.directory.subscribeOwners(
+        (value) => setOwners({ state: "ready", value }),
+        () => setOwners({ state: "error", value: [] }),
+      ),
+    [data],
+  );
+  useEffect(
+    () =>
+      data.directory.subscribeLog(
+        LOG_LIMIT,
+        (value) => setLog({ state: "ready", value }),
+        (error) => {
+          setLogError(errorText(error));
+          setLog({ state: "error", value: [] });
+        },
+      ),
+    [data],
+  );
 
   const rows = useMemo(
-    () => adminRows(cafes.value, deployments.value),
-    [cafes.value, deployments.value],
+    () =>
+      directoryRows(cafes.value, owners.value, deployments.value, Date.now()),
+    [cafes.value, owners.value, deployments.value],
+  );
+  const lookups = useMemo(
+    () => ({
+      cafes: new Map(cafes.value.map((c) => [c.id, c])),
+      owners: new Map(owners.value.map((o) => [o.uid, o])),
+    }),
+    [cafes.value, owners.value],
   );
   const cafesState =
     cafes.state === "error"
       ? "error"
-      : cafes.state === "ready" && deployments.state !== "loading"
+      : cafes.state === "ready" &&
+          deployments.state !== "loading" &&
+          owners.state !== "loading"
         ? "ready"
         : "loading";
+  const openRow = opened ? rows.find((r) => r.cafe?.id === opened) : undefined;
+  // Only cafes still in the list stay selected.
+  const selectedIds = [...selected].filter((id) => lookups.cafes.has(id));
 
   return (
     <>
@@ -121,6 +182,8 @@ function Console({ data, user }: { data: DataBundle; user: PlatformUser }) {
             {(
               [
                 ["cafes", "admin-cafes"],
+                ["log", "admin-log"],
+                ["admins", "admin-admins"],
                 ["releases", "admin-releases"],
                 ["audit", "admin-audit"],
               ] as const
@@ -128,6 +191,7 @@ function Console({ data, user }: { data: DataBundle; user: PlatformUser }) {
               <li key={key}>
                 <a
                   href={`#${id}-title`}
+                  onClick={() => setOpened(null)}
                   className="text-brand-ink min-h-tap inline-flex items-center font-medium underline underline-offset-4"
                 >
                   {text.nav[key]}
@@ -145,7 +209,73 @@ function Console({ data, user }: { data: DataBundle; user: PlatformUser }) {
           </TextButton>
         </p>
       </div>
-      <CafesPanel rows={rows} state={cafesState} />
+      {opened ? (
+        <CafeDetail
+          data={data}
+          row={
+            openRow ?? {
+              key: opened,
+              cafe: null,
+              owner: null,
+              ownerUid: "",
+              email: "",
+              status: "active",
+              health: null,
+              last: null,
+              smoke: null,
+              maintenance: "off",
+            }
+          }
+          onBack={() => setOpened(null)}
+        />
+      ) : (
+        <>
+          <BulkMaintenance
+            data={data}
+            cafes={lookups.cafes}
+            selected={selectedIds}
+            open={bulkOpen}
+            onClose={() => {
+              setBulkOpen(false);
+              setSelected(new Set());
+            }}
+          />
+          <DirectoryPanel
+            rows={rows}
+            state={cafesState}
+            ownersFailed={owners.state === "error"}
+            canAct={data.directory.canAct}
+            selected={new Set(selectedIds)}
+            onSelect={(id, on) =>
+              setSelected((was) => {
+                const next = new Set(was);
+                if (on) next.add(id);
+                else next.delete(id);
+                return next;
+              })
+            }
+            onClearSelection={() => {
+              setSelected(new Set());
+              setBulkOpen(false);
+            }}
+            onBulk={() => {
+              setBulkOpen(true);
+              document
+                .getElementById("admin-bulk-title")
+                ?.scrollIntoView?.({ block: "start" });
+            }}
+            onOpen={setOpened}
+          />
+        </>
+      )}
+      <AdminLogPanel
+        entries={log.value}
+        state={log.state}
+        error={logError}
+        limit={LOG_LIMIT}
+        lookups={lookups}
+      />
+      <AdminsPanel data={data} user={user} owners={owners.value} />
       <ReleasesPanel data={data} />
       <AuditPanel
         cafes={cafes.value}
