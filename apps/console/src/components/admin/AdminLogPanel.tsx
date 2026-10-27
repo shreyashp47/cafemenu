@@ -5,6 +5,7 @@ import { formatDateTime } from "@/lib/format";
 import { fill, messages } from "@/lib/messages";
 import {
   LOG_ACTIONS,
+  RELEASE_WORKFLOW,
   filterLog,
   logCafeName,
   logCsv,
@@ -135,7 +136,10 @@ export function AdminLogPanel({
                   </p>
                   <p className="text-muted text-sm">
                     {fill(text.by, {
-                      who: entry.byEmail ?? entry.by,
+                      who:
+                        entry.by === RELEASE_WORKFLOW
+                          ? text.releaseWorkflow
+                          : (entry.byEmail ?? entry.by),
                       when: formatDateTime(entry.at),
                     })}
                   </p>

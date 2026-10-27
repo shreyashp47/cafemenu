@@ -14,6 +14,11 @@
  *                    (upgrade-required). An email goes once per line and
  *                    date, so a day that finds nothing new sends nothing.
  *
+ *   the admin log    each release that is new, promoted or withdrawn since
+ *                    the last look is written to the admin log (#78), which
+ *                    lists publishing a release among the admin's actions.
+ *                    The entry's id says what changed, so it is written once.
+ *
  *   the directory    at the same hourly pace, every account in the platform's
  *                    Auth is copied to `owners/{uid}` (email, name, sign-up
  *                    and last sign-in, admin, disabled), for the admin's
@@ -58,6 +63,35 @@ const changedSince = (seen, release) =>
   !seen ||
   seen.channel !== (release.channel ?? null) ||
   seen.withdrawn !== (release.withdrawn === true);
+
+/**
+ * What changed about a release, as the admin log's action: published,
+ * promoted to stable, or withdrawn. Null for nothing the log keeps.
+ */
+export function releaseAction(before, release) {
+  if (!before) return "publish-release";
+  if (release.withdrawn === true && before.withdrawn !== true)
+    return "withdraw-release";
+  if (release.channel === "stable" && before.channel !== "stable")
+    return "promote-release";
+  return null;
+}
+
+/** The release workflow's entry: no person to name, the version instead. */
+async function logRelease(env, action, release) {
+  const id = `${action}-${release.version}`;
+  await env.store.addAdminLog(id, {
+    at: env.now(),
+    by: "release-workflow",
+    byEmail: null,
+    action,
+    cafeId: null,
+    ownerUid: null,
+    reason: null,
+    details: { version: release.version, channel: release.channel ?? null },
+    requestId: null,
+  });
+}
 
 const total = (results, key) =>
   results.reduce((n, result) => n + result[key].length, 0);
@@ -119,6 +153,8 @@ export async function runBackgroundJobs(env, { force = false } = {}) {
       const before = seen[release.version] ?? null;
       if (!changedSince(before, release)) continue;
       announced.push(release.version);
+      const action = releaseAction(before, release);
+      if (action) await logRelease(env, action, release);
       results.push(
         await notifyRelease(env, {
           before: before && { ...before, version: release.version },

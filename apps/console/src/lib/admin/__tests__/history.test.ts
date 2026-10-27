@@ -135,6 +135,13 @@ describe("the admin log", () => {
       ownerUid: null,
       details: { email: "ada@platform.test" },
     }),
+    entry("publish-release-1.3.0", "publish-release", 0, {
+      by: "release-workflow",
+      byEmail: null,
+      cafeId: null,
+      ownerUid: null,
+      details: { version: "1.3.0", channel: "stable" },
+    }),
   ];
 
   it("filters by action and by what an entry is about", () => {
@@ -142,7 +149,10 @@ describe("the admin log", () => {
       filterLog(log, { action: action as "all", query }, lookups).map(
         (e) => e.id,
       );
-    expect(ids("all")).toEqual(["1", "2", "3"]);
+    expect(ids("all")).toEqual(["1", "2", "3", "publish-release-1.3.0"]);
+    // A release is found by its version.
+    expect(ids("publish-release")).toEqual(["publish-release-1.3.0"]);
+    expect(ids("all", "1.3.0")).toEqual(["publish-release-1.3.0"]);
     expect(ids("suspend")).toEqual(["1"]);
     expect(ids("all", "tea room")).toEqual(["1"]);
     expect(ids("all", "OWEN@")).toEqual(["1"]);

@@ -1342,7 +1342,8 @@
       "count": "Showing {shown} of the latest {total}.",
       "entry": "{action}: {cafe}",
       "by": "By {who}, {when}.",
-      "owner": "Owner: {email}"
+      "owner": "Owner: {email}",
+      "releaseWorkflow": "the release workflow"
     },
     "admins": {
       "title": "Admins",
@@ -1368,7 +1369,10 @@
         "maintenance-on": "Maintenance on",
         "maintenance-off": "Maintenance off",
         "appoint-admin": "Appointed an admin",
-        "remove-admin": "Removed an admin"
+        "remove-admin": "Removed an admin",
+        "publish-release": "Published a release",
+        "promote-release": "Promoted a release to stable",
+        "withdraw-release": "Withdrew a release"
       },
       "requests": {
         "provision": "Set up",

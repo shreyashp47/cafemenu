@@ -16,6 +16,9 @@ export const LOG_ACTIONS = [
   "maintenance-off",
   "appoint-admin",
   "remove-admin",
+  "publish-release",
+  "promote-release",
+  "withdraw-release",
 ] as const;
 export type LogAction = (typeof LOG_ACTIONS)[number];
 
@@ -30,13 +33,21 @@ export interface LogLookups {
   owners: ReadonlyMap<string, OwnerRecord>;
 }
 
-/** The cafe's name, or what the entry kept of a cafe that has been deleted. */
+/**
+ * What an entry is about: the cafe's name, what the entry kept of a cafe
+ * that has been deleted, or the release's version.
+ */
 export function logCafeName(entry: AdminLogEntry, { cafes }: LogLookups) {
   const cafe = entry.cafeId ? cafes.get(entry.cafeId) : undefined;
   if (cafe) return cafe.settings.name;
-  const site = entry.details.site;
-  return typeof site === "string" ? `${site}.web.app` : (entry.cafeId ?? "");
+  const { site, version } = entry.details;
+  if (typeof site === "string") return `${site}.web.app`;
+  if (typeof version === "string") return version;
+  return entry.cafeId ?? "";
 }
+
+/** Who did it: the admin, or the release workflow for a release. */
+export const RELEASE_WORKFLOW = "release-workflow";
 
 export function logOwnerEmail(entry: AdminLogEntry, { owners }: LogLookups) {
   const owner = entry.ownerUid ? owners.get(entry.ownerUid) : undefined;
