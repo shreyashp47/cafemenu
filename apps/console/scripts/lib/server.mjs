@@ -43,8 +43,20 @@ async function signInAdmin(page) {
   await page.getByLabel("Email").fill("admin@cafemenu.demo");
   await page.getByLabel("Password").fill("demo-admin");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await page.getByRole("heading", { name: "Every cafe", level: 1 }).waitFor();
+  await page
+    .getByRole("heading", { name: "Owners and cafes", level: 1 })
+    .waitFor();
   await page.getByRole("article").first().waitFor();
+}
+
+/** Signs in as the demo's admin and opens one sample cafe (#78). */
+async function openSampleCafe(page) {
+  await signInAdmin(page);
+  await page
+    .getByRole("button", { name: "Open Orchard Tea House (sample)" })
+    .click();
+  const history = page.getByRole("region", { name: "History" });
+  await history.getByText(/Roll back to 1\.0\.0/).waitFor();
 }
 
 /**
@@ -87,6 +99,54 @@ export const ROUTES = [
       await page.getByLabel("Version").fill("1.1.1");
       await page.getByRole("button", { name: /publish release/i }).click();
       await page.getByRole("alert").first().waitFor();
+    },
+  },
+  // The super admin (#78): one cafe's history and actions.
+  { path: "/admin", name: "admin-cafe", act: openSampleCafe },
+  {
+    path: "/admin",
+    name: "admin-action-errors",
+    // Maintenance asked for with nothing filled in, and an end before now.
+    act: async (page) => {
+      await openSampleCafe(page);
+      await page.getByLabel("What to do").selectOption("maintenance-on");
+      await page.getByRole("button", { name: "Turn maintenance on" }).click();
+      await page.getByText("Pick a reason.").waitFor();
+    },
+  },
+  {
+    path: "/admin",
+    name: "admin-delete",
+    // Delete: the reminder, and a web address that doesn't match.
+    act: async (page) => {
+      await openSampleCafe(page);
+      await page.getByLabel("What to do").selectOption("delete-owner");
+      await page.getByLabel("Reason").selectOption("owner-request");
+      await page
+        .getByLabel("Type the cafe's web address to confirm")
+        .fill("orchard");
+      await page.getByRole("button", { name: "Delete for good" }).click();
+      await page.getByText("That isn't this cafe's web address.").waitFor();
+    },
+  },
+  {
+    path: "/admin",
+    name: "admin-bulk",
+    // Two cafes picked for maintenance, and the form for both.
+    act: async (page) => {
+      await signInAdmin(page);
+      await page
+        .getByLabel("Select Harbour Beans (sample) for maintenance")
+        .check();
+      await page
+        .getByLabel("Select The Lamp Room (sample) for maintenance")
+        .check();
+      await page
+        .getByRole("button", { name: "Maintenance for the selected…" })
+        .click();
+      await page
+        .getByRole("region", { name: "Maintenance on several cafes" })
+        .waitFor();
     },
   },
   { path: "/setup", name: "setup-signin" },
