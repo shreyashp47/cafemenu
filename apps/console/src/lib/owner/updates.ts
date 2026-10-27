@@ -10,6 +10,7 @@
  */
 
 import type {
+  BackendRequest,
   Cafe,
   CafeRelease,
   Deployment,
@@ -19,6 +20,7 @@ import type {
 } from "../platform/model";
 import { compareVersionsDesc } from "../platform/parse";
 import { minorLineOf, type ReleaseChoice } from "../platform/validate";
+import { hasOpenRequest } from "./requests";
 
 // -- how the cafe follows releases ---------------------------------------------
 
@@ -177,15 +179,18 @@ export type RequestState =
   | "ready"
   /** Not live: nothing is deployed to upgrade or roll back. */
   | "not-live"
-  /** Another deployment is queued or running: one at a time. */
+  /** Another deployment is queued or running, or asked for: one at a time. */
   | "busy";
 
 export function requestState(
   cafe: Pick<Cafe, "status">,
   deployments: readonly Deployment[],
+  requests: readonly BackendRequest[] = [],
 ): RequestState {
   if (cafe.status !== "live") return "not-live";
-  return activeDeployment(deployments) ? "busy" : "ready";
+  return activeDeployment(deployments) || hasOpenRequest(requests)
+    ? "busy"
+    : "ready";
 }
 
 /** The newest deployment that has finished, if any: how the last one went. */

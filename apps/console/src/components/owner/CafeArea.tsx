@@ -6,7 +6,8 @@ import { useAccount, useDataBundle } from "@/lib/data/hooks";
 import type { DataBundle } from "@/lib/data/types";
 import { fill, messages } from "@/lib/messages";
 import { cafeToShow } from "@/lib/owner/area";
-import type { Cafe, Deployment } from "@/lib/platform/model";
+import { requestToShow } from "@/lib/owner/requests";
+import type { BackendRequest, Cafe, Deployment } from "@/lib/platform/model";
 import { Button } from "../Button";
 import { DemoNotice } from "../DemoNotice";
 import { Rich } from "../Rich";
@@ -16,6 +17,7 @@ import { Card } from "../setup/Card";
 import { AccessPanel } from "./AccessPanel";
 import { BrandingPanel } from "./BrandingPanel";
 import { CafeHeader } from "./CafeHeader";
+import { RequestStatus } from "./RequestStatus";
 import { UpdatesPanel } from "./UpdatesPanel";
 
 const { cafe: text } = messages;
@@ -151,6 +153,16 @@ function Draft({ data, cafe }: { data: DataBundle; cafe: Cafe }) {
   );
 }
 
+/** The time, as of now and every `everyMs` after, for what changes by waiting. */
+function useNow(everyMs: number): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), everyMs);
+    return () => clearInterval(timer);
+  }, [everyMs]);
+  return now;
+}
+
 function Sections({
   data,
   cafe,
@@ -171,6 +183,19 @@ function Sections({
     [data, id, ownerUid],
   );
 
+  // And one on the requests, which the backend answers in minutes (not in demo
+  // mode, which answers at once and has none).
+  const [requests, setRequests] = useState<BackendRequest[]>([]);
+  useEffect(
+    () =>
+      data.requests.subscribeForCafe({ id, ownerUid }, setRequests, () =>
+        setRequests([]),
+      ),
+    [data, id, ownerUid],
+  );
+  const now = useNow(60_000);
+  const waiting = requestToShow(requests, now);
+
   return (
     <>
       <CafeHeader
@@ -179,8 +204,19 @@ function Sections({
         demo={data.backend === "demo"}
         onSignOut={() => void data.auth.signOut()}
       />
-      <UpdatesPanel data={data} cafe={cafe} deployments={deployments} />
-      <BrandingPanel data={data} cafe={cafe} deployments={deployments} />
+      {waiting && <RequestStatus view={waiting} />}
+      <UpdatesPanel
+        data={data}
+        cafe={cafe}
+        deployments={deployments}
+        requests={requests}
+      />
+      <BrandingPanel
+        data={data}
+        cafe={cafe}
+        deployments={deployments}
+        requests={requests}
+      />
       <AccessPanel cafe={cafe} />
     </>
   );

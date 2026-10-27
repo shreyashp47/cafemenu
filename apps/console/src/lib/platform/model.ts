@@ -13,6 +13,9 @@
  *   releases/{version}     one per published release. Written by the backend.
  *   deployments/{id}       one per setup, deploy, rollback or branding sync.
  *                          Written by the backend.
+ *   requests/{id}          one per thing the console asks of the backend: the
+ *                          owner or admin writes the question, the backend
+ *                          (a worker on GitHub Actions) writes the answer.
  *
  * firestore.rules is the real boundary; the checks in validate.ts mirror it so
  * the console can say what is wrong before a write is refused. Change all
@@ -239,6 +242,62 @@ export interface Deployment {
   steps: DeploymentStep[];
   /** What went wrong, in words an owner can act on; null unless it failed. */
   error: string | null;
+  createdAt: number;
+  finishedAt: number | null;
+}
+
+// -- requests ------------------------------------------------------------------
+
+/**
+ * What an owner may ask the backend for, about their own cafe. The backend
+ * answers on the same document (apps/platform-functions/src/requests.mjs).
+ *
+ *   check          is CafeMenu's deploy account let into the project? params {projectId}
+ *   provision      set the cafe up                                       params {}
+ *   deploy         move the cafe to a version                            params {version}
+ *   rollback       back to the version before                            params {}
+ *   sync-branding  put the saved settings and logo on the site           params {}
+ */
+export const REQUEST_KINDS = [
+  "check",
+  "provision",
+  "deploy",
+  "rollback",
+  "sync-branding",
+] as const;
+export type RequestKind = (typeof REQUEST_KINDS)[number];
+
+/** What only the admin asks for; the backend does not run these yet (#30, #32). */
+export const ADMIN_REQUEST_KINDS = ["publish", "rollout"] as const;
+
+/** queued → running (a worker has it) → done, or failed. */
+export const REQUEST_STATUSES = [
+  "queued",
+  "running",
+  "done",
+  "failed",
+] as const;
+export type RequestStatus = (typeof REQUEST_STATUSES)[number];
+
+export interface BackendRequest {
+  id: string;
+  /** Null for the admin's release requests, which belong to no cafe. */
+  cafeId: string | null;
+  /** Who asked: the rules need it to let them read their own. */
+  ownerUid: string;
+  kind: RequestKind | (typeof ADMIN_REQUEST_KINDS)[number];
+  status: RequestStatus;
+  /** What is happening, as a deployment shows it. Empty until the backend starts. */
+  steps: DeploymentStep[];
+  /** What it is doing now, in a few words; null when it isn't. */
+  detail: string | null;
+  /** The answer: a check's ConnectionResult, or {deploymentId, status, siteUrl}. */
+  result: unknown;
+  /** Why it failed, in words an owner can act on, and a Firebase-style code. */
+  error: string | null;
+  errorCode: string | null;
+  /** The deployment a setup, deploy, rollback or sync made. */
+  deploymentId: string | null;
   createdAt: number;
   finishedAt: number | null;
 }

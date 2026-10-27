@@ -9,11 +9,14 @@
 
 import type { CafeSettings } from "@cafemenu/shared";
 import type {
+  BackendRequest,
   Cafe,
   Deployment,
+  DeploymentStep,
   PlatformUser,
   Release,
   ReleaseChannel,
+  RequestStatus,
   StartingMenu,
 } from "../platform/model";
 import type { NewCafeInput, ReleaseChoice } from "../platform/validate";
@@ -140,12 +143,45 @@ export interface DeploymentRepository {
   ): Unsubscribe;
 }
 
+/**
+ * Requests the backend has not answered yet, and the ones it has: what the
+ * owner area shows while "This takes a few minutes". Only the real platform
+ * has any; demo mode answers at once and keeps none.
+ */
+export interface RequestRepository {
+  /**
+   * One cafe's requests, live, newest first. Takes the cafe rather than its
+   * id because the query has to name the owner for the rules to allow it.
+   */
+  subscribeForCafe(
+    cafe: Pick<Cafe, "id" | "ownerUid">,
+    listener: Listener<BackendRequest[]>,
+    onError?: ErrorListener,
+  ): Unsubscribe;
+}
+
+/** How a request is going, for a page that waits on it. */
+export interface RequestProgress {
+  status: RequestStatus;
+  steps: DeploymentStep[];
+  /** What the backend is doing now, in a few words. */
+  detail: string | null;
+}
+
+/** How many requests a cafe's page watches. */
+export const REQUEST_HISTORY = 10;
+
 /** How many deployments a cafe's history shows. */
 export const DEPLOYMENT_HISTORY = 20;
 
-/** The record a request creates: where its progress shows up. */
+/**
+ * What a request leaves behind, where its progress shows up: the deployment
+ * a backend that answers at once (callables, demo mode) has already queued,
+ * or the request a backend that works on a schedule will answer later.
+ */
 export interface DeployReceipt {
-  deploymentId: string;
+  deploymentId?: string;
+  requestId?: string;
 }
 
 /**
@@ -261,6 +297,8 @@ export interface DataBundle {
   connection: ConnectionChecker;
   releases: ReleaseRepository;
   deployments: DeploymentRepository;
+  /** What the backend has been asked and not yet done, in the owner area. */
+  requests: RequestRepository;
   /** Upgrade, Roll back and Save branding in the owner area. */
   deploys: DeployRequests;
   backend: Backend;

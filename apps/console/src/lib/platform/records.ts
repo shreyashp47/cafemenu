@@ -6,7 +6,7 @@
  */
 
 import type { CafeSettings } from "@cafemenu/shared";
-import type { CafeRelease, StartingMenu } from "./model";
+import type { CafeRelease, RequestKind, StartingMenu } from "./model";
 import { releaseChoiceOf, type ReleaseChoice } from "./validate";
 
 export interface CafeRecord<Time> {
@@ -91,5 +91,40 @@ export function startingMenuRecord<Time>(
       available: item.available,
     })),
     updatedAt: now,
+  };
+}
+
+export interface RequestRecord<Time> {
+  cafeId: string;
+  ownerUid: string;
+  by: string;
+  kind: RequestKind;
+  params: Record<string, string>;
+  status: "queued";
+  createdAt: Time;
+}
+
+/**
+ * A question for the backend, about the signed-in owner's own cafe. Only
+ * these keys: the backend adds the answer (steps, result, error…) itself, and
+ * the rules refuse a request that already has one. `createdAt` is
+ * serverTimestamp() for Firestore, whose rules require it, and Date.now()
+ * elsewhere. scripts/rules-test.mjs writes the same shape.
+ */
+export function newRequestRecord<Time>(
+  owner: { uid: string },
+  cafeId: string,
+  kind: RequestKind,
+  params: Record<string, string>,
+  createdAt: Time,
+): RequestRecord<Time> {
+  return {
+    cafeId,
+    ownerUid: owner.uid,
+    by: owner.uid,
+    kind,
+    params,
+    status: "queued",
+    createdAt,
   };
 }
