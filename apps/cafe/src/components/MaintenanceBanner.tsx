@@ -38,7 +38,7 @@ export function MaintenanceBanner({ who }: { who: "staff" | "owner" }) {
     return (
       <div role="status" className={BOX}>
         <p className="font-semibold">{t("siteMaintenance.adminBanner")}</p>
-        <p className="text-muted mt-1">
+        <p className="text-ink mt-1">
           {rich("siteMaintenance.adminLeft", {
             link: (words) => (
               <a
