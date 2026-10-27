@@ -41,6 +41,7 @@ import {
   preloadFirestore,
   type DataBundle,
 } from "@/lib/data";
+import { setOwnerMaintenance, setSiteMaintenance } from "@/lib/maintenance";
 import { setLiveSettings } from "@/lib/settings";
 import type {
   AuthRepository,
@@ -141,11 +142,22 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("online", retry);
   }, [unreachable, retry]);
 
-  // The cafe's live settings (config/site) for the whole page.
+  // The cafe's live settings (config/site) for the whole page, and its
+  // maintenance mode: the admin's, a field of config/site, and the owner's
+  // own (#78).
   const bundle = state.status === "ready" ? state.bundle : null;
   useEffect(() => {
     if (!bundle) return;
-    return bundle.config.subscribeSite(setLiveSettings);
+    const stopSite = bundle.config.subscribeSite((raw) => {
+      setLiveSettings(raw);
+      setSiteMaintenance(raw?.maintenance ?? null);
+    });
+    const stopOwner =
+      bundle.config.subscribeOwnerMaintenance(setOwnerMaintenance);
+    return () => {
+      stopSite();
+      stopOwner();
+    };
   }, [bundle]);
 
   const value = useMemo<DataContextValue>(() => ({ bundle }), [bundle]);

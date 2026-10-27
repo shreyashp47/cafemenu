@@ -1106,6 +1106,7 @@ if (FIXTURE) console.log(`  (seeded as fixtures/${FIXTURE}.json)`);
 // Plain JSON to the REST API's typed values.
 const restValue = (v) => {
   if (v === null) return { nullValue: null };
+  if (v instanceof Date) return { timestampValue: v.toISOString() };
   if (typeof v === "boolean") return { booleanValue: v };
   if (typeof v === "number")
     return Number.isInteger(v)
@@ -2712,6 +2713,235 @@ await t(
   "the owner can clear away a used invite",
   allowed(() => deleteDoc(doc(ownerC.db, "invites", staffInvite))),
 );
+
+// -- maintenance (#78) -------------------------------------------------------
+// While config/site.maintenance (the admin's) or config/ownerMaintenance (the
+// owner's) is in effect, no new order is taken, from any client; everything
+// else works. Each order below is a raw client write (commitOrder), as a saved
+// link or a modified page would send it.
+console.log("\n maintenance mode (the admin's and the owner's)");
+{
+  const HOUR = 3_600_000;
+  const ago = (ms) => new Date(Date.now() - ms);
+  const ahead = (ms) => new Date(Date.now() + ms);
+  const adminMaintenance = (o = {}) => ({
+    on: true,
+    by: "admin",
+    message: "Back after a short update.",
+    until: null,
+    startsAt: null,
+    endsAt: null,
+    ...o,
+  });
+  const ownerMaintenanceDoc = (c) => doc(c.db, "config", "ownerMaintenance");
+  const ownerMaintenance = (o = {}) => ({
+    on: true,
+    by: "owner",
+    message: "Closed for Diwali.",
+    until: null,
+    startsAt: null,
+    endsAt: null,
+    updatedAt: serverTimestamp(),
+    ...o,
+  });
+  await adminDoc("config/ownerMaintenance", { method: "DELETE" });
+
+  // An order placed before, by a customer of its own, to see their status
+  // screen and the staff board carry on with it.
+  const regular = app("maintenance-regular");
+  await signInAnonymously(regular.auth);
+  const before = await commitOrder(regular);
+
+  await setSite({ maintenance: adminMaintenance() });
+  await t(
+    "the admin's maintenance: a new order is refused, even sent straight to the database",
+    denied(() => placeAs(publicC)),
+  );
+  await t(
+    "…and a pending one too",
+    denied(() => placeAs(publicC, { status: "pending" })),
+  );
+  await t(
+    "an order placed before still shows its live status to its customer",
+    allowed(() => getDoc(doc(regular.db, "orders", before.id))),
+  );
+  await t(
+    "the staff board still reads the orders",
+    allowed(() => getDocs(collection(staffC.db, "orders"))),
+  );
+  await t(
+    "…and moves an order placed before along",
+    allowed(() =>
+      setDoc(
+        doc(staffC.db, "orders", before.id),
+        { status: "ready" },
+        { merge: true },
+      ),
+    ),
+  );
+  await t(
+    "the owner's dashboard still edits the menu",
+    allowed(() =>
+      setDoc(doc(ownerC.db, "menu", "maintenance-test"), {
+        name: "Chai",
+        price: 3000,
+        category: "Tea",
+        available: true,
+      }),
+    ),
+  );
+  await t(
+    "anyone can read the maintenance, for the customer's page",
+    allowed(async () => {
+      const snap = await getDoc(siteDoc(nobodyC));
+      if (snap.data().maintenance?.on !== true) throw new Error("not there");
+    }),
+  );
+  await t(
+    "the owner cannot clear the admin's maintenance",
+    denied(() => updateDoc(siteDoc(ownerC), { maintenance: null })),
+  );
+  await t(
+    "…nor overwrite config/site",
+    denied(() => setDoc(siteDoc(ownerC), { name: "Mine" })),
+  );
+  await t(
+    "…nor delete it",
+    denied(() => deleteDoc(siteDoc(ownerC))),
+  );
+  await t(
+    "…nor can staff",
+    denied(() => updateDoc(siteDoc(staffC), { maintenance: null })),
+  );
+
+  // The schedule, by the server's clock.
+  await setSite({ maintenance: adminMaintenance({ startsAt: ahead(HOUR) }) });
+  await t(
+    "scheduled: before its start, orders are taken",
+    allowed(() => placeAs(publicC)),
+  );
+  await setSite({
+    maintenance: adminMaintenance({
+      startsAt: ago(HOUR),
+      endsAt: ahead(HOUR),
+    }),
+  });
+  await t(
+    "scheduled: between its start and its end, they're refused",
+    denied(() => placeAs(publicC)),
+  );
+  await setSite({
+    maintenance: adminMaintenance({
+      startsAt: ago(2 * HOUR),
+      endsAt: ago(HOUR),
+    }),
+  });
+  await t(
+    "scheduled: after its end, they're taken again",
+    allowed(() => placeAs(publicC)),
+  );
+  await setSite({ maintenance: adminMaintenance({ startsAt: "8pm" }) });
+  await t(
+    "a schedule that isn't one refuses orders rather than guess",
+    denied(() => placeAs(publicC)),
+  );
+  await setSite({ maintenance: { ...adminMaintenance(), on: false } });
+  await t(
+    "maintenance switched off: orders are taken",
+    allowed(() => placeAs(publicC)),
+  );
+  await setSite({ maintenance: null });
+  await t(
+    "no maintenance at all: orders are taken",
+    allowed(() => placeAs(publicC)),
+  );
+
+  // The owner's own.
+  await t(
+    "the owner turns their own maintenance on from the dashboard",
+    allowed(() => setDoc(ownerMaintenanceDoc(ownerC), ownerMaintenance())),
+  );
+  await t(
+    "…and a new order is refused",
+    denied(() => placeAs(publicC)),
+  );
+  await t(
+    "…while staff keep working",
+    allowed(() => getDocs(collection(staffC.db, "orders"))),
+  );
+  await t(
+    "anyone can read it, for the customer's page",
+    allowed(() => getDoc(ownerMaintenanceDoc(nobodyC))),
+  );
+  await t(
+    "the owner turns it off",
+    allowed(() =>
+      setDoc(ownerMaintenanceDoc(ownerC), ownerMaintenance({ on: false })),
+    ),
+  );
+  await t(
+    "…and orders are taken again",
+    allowed(() => placeAs(publicC)),
+  );
+  await t(
+    "the owner schedules theirs",
+    allowed(() =>
+      setDoc(
+        ownerMaintenanceDoc(ownerC),
+        ownerMaintenance({ startsAt: ahead(HOUR), endsAt: ahead(3 * HOUR) }),
+      ),
+    ),
+  );
+  await t(
+    "…and it hasn't started yet",
+    allowed(() => placeAs(publicC)),
+  );
+  for (const [what, fields] of [
+    ["as if it were the admin's", { by: "admin" }],
+    ["with a message too long", { message: "x".repeat(281) }],
+    [
+      "ending before it starts",
+      { startsAt: ahead(2 * HOUR), endsAt: ahead(HOUR) },
+    ],
+    ["with a start that isn't a time", { startsAt: "8pm" }],
+    ["dated by the phone's clock", { updatedAt: new Date() }],
+    ["with more than it takes", { reason: "abuse" }],
+  ]) {
+    await t(
+      `the owner cannot save theirs ${what}`,
+      denied(() =>
+        setDoc(ownerMaintenanceDoc(ownerC), ownerMaintenance(fields)),
+      ),
+    );
+  }
+  await t(
+    "staff cannot turn the owner's maintenance on or off",
+    denied(() => setDoc(ownerMaintenanceDoc(staffC), ownerMaintenance())),
+  );
+  await t(
+    "nor can a customer",
+    denied(() => setDoc(ownerMaintenanceDoc(publicC), ownerMaintenance())),
+  );
+
+  // Both on: the owner ending theirs leaves the admin's in force.
+  await setDoc(ownerMaintenanceDoc(ownerC), ownerMaintenance());
+  await setSite({ maintenance: adminMaintenance() });
+  await t(
+    "the owner can delete their own maintenance",
+    allowed(() => deleteDoc(ownerMaintenanceDoc(ownerC))),
+  );
+  await t(
+    "…but with the admin's still on, orders are still refused",
+    denied(() => placeAs(publicC)),
+  );
+  await setSite({ maintenance: null });
+  await t(
+    "once the admin ends theirs, orders are taken",
+    allowed(() => placeAs(publicC)),
+  );
+  await deleteDoc(doc(ownerC.db, "menu", "maintenance-test"));
+  await deleteApp(regular.a);
+}
 
 console.log(`\n${pass} passed, ${failures.length} failed`);
 for (const f of failures) console.log(`  - ${f}`);

@@ -360,6 +360,17 @@ export const demoConfigRepo: ConfigRepository = {
   subscribeSite(listener) {
     return store.subscribeState((state) => listener(store.selectSite(state)));
   },
+  subscribeOwnerMaintenance(listener) {
+    return store.subscribeState((state) =>
+      listener(store.selectOwnerMaintenance(state)),
+    );
+  },
+  async saveOwnerMaintenance(record) {
+    if (readSession()?.role !== "owner") {
+      throw new store.DemoRulesRefusal("only the owner changes this");
+    }
+    store.demoSaveOwnerMaintenance(record ? { ...record } : null);
+  },
   subscribeTables(listener) {
     return store.subscribeState((state) => listener(store.selectTables(state)));
   },

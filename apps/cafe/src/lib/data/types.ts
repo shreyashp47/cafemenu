@@ -147,6 +147,16 @@ export interface AuthRepository {
   current(): StaffUser | null;
 }
 
+/** The owner's maintenance as saved: maintenanceRecord's, with Dates. */
+export interface OwnerMaintenance {
+  on: true;
+  by: "owner";
+  message: string;
+  until: Date | null;
+  startsAt: Date | null;
+  endsAt: Date | null;
+}
+
 export interface ConfigRepository {
   subscribe(listener: Listener<SpecialOffer>): Unsubscribe;
   save(offer: SpecialOffer): Promise<void>;
@@ -159,6 +169,19 @@ export interface ConfigRepository {
   subscribeSite(
     listener: Listener<Record<string, unknown> | null>,
   ): Unsubscribe;
+  /**
+   * config/ownerMaintenance (#78): the owner's own maintenance mode, raw, or
+   * null when there is none. Anyone may read it (the customer's page does).
+   */
+  subscribeOwnerMaintenance(
+    listener: Listener<Record<string, unknown> | null>,
+  ): Unsubscribe;
+  /**
+   * Owner only: turns the owner's maintenance on with `record`
+   * (maintenanceRecord from @cafemenu/shared/maintenance, `by: "owner"`), or
+   * off with null. The admin's, in config/site, is never theirs to change.
+   */
+  saveOwnerMaintenance(record: OwnerMaintenance | null): Promise<void>;
   /**
    * The owner's saved table list, or `null` while nothing has been saved (the
    * app then falls back to the `tables` in the cafe's settings). Live, so a

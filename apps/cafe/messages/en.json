@@ -206,5 +206,11 @@
     "defaultTitle": "Order from your table",
     "titleWithName": "{first} · {second}",
     "description": "Scan, order, and pay at the counter. Fresh brews and warm bites served straight to your table."
+  },
+  "maintenance": {
+    "title": "We'll be back soon",
+    "defaultMessage": "We're making a few changes, so ordering from your table is paused for now.",
+    "backAt": "Expected back {when}.",
+    "placedOrders": "Already ordered? Your order carries on as usual."
   }
 }

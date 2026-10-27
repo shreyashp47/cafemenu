@@ -10,6 +10,7 @@
  * two-tab sync can't interleave a half-written state.
  */
 
+import { activeMaintenance } from "@cafemenu/shared/maintenance";
 import { dayKeyIn } from "@cafemenu/shared";
 
 import {
@@ -94,6 +95,11 @@ interface DemoState {
    * Firestore; demoSetSite stands in for the platform in tests.
    */
   site: Record<string, unknown> | null;
+  /**
+   * config/ownerMaintenance (#78): the owner's own maintenance, raw, or null.
+   * The admin's is `maintenance` in `site`, which only demoSetSite writes.
+   */
+  ownerMaintenance: Record<string, unknown> | null;
   /** staff/{uid}: the demo barista and owner, then whoever joins. */
   staff: Record<string, Omit<StaffMember, "uid">>;
   /** invites/{id}, without the id. */
@@ -126,6 +132,7 @@ function emptyState(): DemoState {
     tableSessions: {},
     ordering: parseOrderingSettings(undefined),
     site: null,
+    ownerMaintenance: null,
     staff: seedStaff(),
     invites: {},
     accounts: {},
@@ -143,6 +150,7 @@ function seedState(): DemoState {
     tableSessions: {},
     ordering: parseOrderingSettings(undefined),
     site: null,
+    ownerMaintenance: null,
     staff: seedStaff(),
     invites: {},
     accounts: {},
@@ -212,6 +220,8 @@ function load(): DemoState {
       // States from before cafe settings have none: the defaults, exactly
       // like a Firestore project the platform has not written to yet.
       site: parseSite((parsed as DemoState)?.site),
+      // States from before maintenance mode have none: the site is open.
+      ownerMaintenance: parseSite((parsed as DemoState)?.ownerMaintenance),
       // States from before invites have the two demo accounts and no one else.
       staff: parseStaff((parsed as DemoState)?.staff),
       invites: parseInvites((parsed as DemoState)?.invites),
@@ -362,6 +372,24 @@ export function selectSite(state: DemoState): Record<string, unknown> | null {
   return state.site;
 }
 
+export function selectOwnerMaintenance(
+  state: DemoState,
+): Record<string, unknown> | null {
+  return state.ownerMaintenance;
+}
+
+/** Saves (or, with null, removes) the owner's maintenance, config/ownerMaintenance. */
+export function demoSaveOwnerMaintenance(
+  record: Record<string, unknown> | null,
+): void {
+  // Through JSON, as the device keeps it: times become strings, which the
+  // reader (@cafemenu/shared/maintenance) takes as well as timestamps.
+  mutate((state) => ({
+    ...state,
+    ownerMaintenance: record ? JSON.parse(JSON.stringify(record)) : null,
+  }));
+}
+
 function parseSite(raw: unknown): Record<string, unknown> | null {
   return typeof raw === "object" && raw !== null && !Array.isArray(raw)
     ? (raw as Record<string, unknown>)
@@ -446,6 +474,16 @@ export function selectOrdersInRange(
 export function demoCreateOrder(input: NewOrderInput): Order {
   const now = Date.now();
   const state = load();
+  // Mirrors the rules' inMaintenance(): no new order while either the
+  // admin's or the owner's maintenance is in effect (#78).
+  if (
+    activeMaintenance(
+      { site: state.site?.maintenance ?? null, owner: state.ownerMaintenance },
+      now,
+    )
+  ) {
+    throw new DemoRulesRefusal("the site is in maintenance");
+  }
   // Mirrors the order create rule: a table with a code needs that code.
   const expected = state.tableKeys[input.tableNumber];
   if (expected && input.tableKey !== expected) {

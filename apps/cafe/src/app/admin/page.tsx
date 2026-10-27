@@ -23,6 +23,7 @@ import {
 
 import { CategoryPicker } from "@/components/CategoryPicker";
 import { MenuImportCard, StarterMenuPicker } from "@/components/MenuImport";
+import { MaintenanceSetting } from "@/components/MaintenanceSetting";
 import { NewGuestsSetting } from "@/components/NewGuestsSetting";
 import { Icon, categoryIcon, itemArtIcon } from "@/components/icons";
 import {
@@ -113,6 +114,7 @@ export default function AdminMenuPage() {
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_19rem] lg:items-start">
         <aside className="flex flex-col gap-4 lg:col-start-2 lg:row-start-1">
           <NewGuestsSetting />
+          <MaintenanceSetting />
           <SpecialOfferCard />
         </aside>
 

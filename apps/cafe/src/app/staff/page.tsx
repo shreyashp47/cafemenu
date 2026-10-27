@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "@/components/icons";
 import { InstallHint } from "@/components/Pwa";
 import { CafeMark } from "@/components/CafeMark";
+import { MaintenanceBanner } from "@/components/MaintenanceBanner";
 import { Mascot } from "@/components/Mascot";
 import { NotSetUp } from "@/components/NotSetUp";
 import { OpenTables } from "@/components/OpenTables";
@@ -387,6 +388,7 @@ function StaffScreen() {
       <InstallHint appName={cafeName} />
 
       <main className="shell-wide pt-4">
+        <MaintenanceBanner who="staff" />
         {error ? (
           <p
             role="alert"
