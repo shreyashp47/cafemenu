@@ -83,6 +83,7 @@ const request = (over: Partial<BackendRequest> = {}): BackendRequest => ({
   error: null,
   errorCode: null,
   deploymentId: null,
+  notBefore: null,
   finishedAt: null,
   ...over,
 });

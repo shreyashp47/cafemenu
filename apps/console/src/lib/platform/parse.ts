@@ -11,13 +11,19 @@ import {
   DEPLOYMENT_STATUSES,
   DEPLOYMENT_TRIGGERS,
   STARTING_MENU_SOURCES,
+  OWNER_STATUSES,
   STEP_STATUSES,
+  type AdminLogEntry,
+  type AdminReason,
   type BackendRequest,
   type Cafe,
+  type CafeMaintenance,
   type CafeRelease,
   type Deployment,
   type DeploymentStep,
+  type OwnerRecord,
   type Release,
+  type SentEmail,
   type StartingMenu,
 } from "./model";
 import {
@@ -95,9 +101,91 @@ export function parseCafe(id: string, data: unknown): Cafe | null {
     settings: parseCafeSettings(data.settings),
     release,
     status: data.status,
+    statusReason: parseReason(data.statusReason),
+    statusChangedAt: toMillis(data.statusChangedAt),
+    maintenance: parseCafeMaintenance(data.maintenance),
     createdAt,
     updatedAt: toMillis(data.updatedAt, now) ?? createdAt,
   };
+}
+
+// -- the super admin's records (#78) ------------------------------------------------
+
+/** A reason as the backend stores it: {code, note}. */
+export function parseReason(value: unknown): AdminReason | null {
+  if (!isPlainObject(value)) return null;
+  return {
+    code: stringOrNull(value.code),
+    note: typeof value.note === "string" ? value.note : "",
+  };
+}
+
+/** A cafe's `maintenance`, or null when it is off or not one. */
+export function parseCafeMaintenance(value: unknown): CafeMaintenance | null {
+  if (!isPlainObject(value) || value.on !== true) return null;
+  return {
+    on: true,
+    by: value.by === "owner" ? "owner" : "admin",
+    message: typeof value.message === "string" ? value.message : "",
+    until: toMillis(value.until),
+    startsAt: toMillis(value.startsAt),
+    endsAt: toMillis(value.endsAt),
+    reason: parseReason(value.reason),
+    setAt: toMillis(value.setAt),
+    setBy: stringOrNull(value.setBy),
+    batch: stringOrNull(value.batch),
+  };
+}
+
+export function parseOwnerRecord(
+  uid: string,
+  data: unknown,
+): OwnerRecord | null {
+  if (!isPlainObject(data) || typeof data.email !== "string") return null;
+  return {
+    uid,
+    email: data.email,
+    name: stringOrNull(data.name),
+    createdAt: toMillis(data.createdAt),
+    lastSignInAt: toMillis(data.lastSignInAt),
+    admin: data.admin === true,
+    disabled: data.disabled === true,
+    status: oneOf(OWNER_STATUSES, data.status) ? data.status : "active",
+    statusReason: parseReason(data.statusReason),
+    statusChangedAt: toMillis(data.statusChangedAt),
+  };
+}
+
+export function parseAdminLogEntry(
+  id: string,
+  data: unknown,
+): AdminLogEntry | null {
+  if (!isPlainObject(data)) return null;
+  const at = toMillis(data.at);
+  if (
+    at === null ||
+    typeof data.by !== "string" ||
+    typeof data.action !== "string"
+  ) {
+    return null;
+  }
+  return {
+    id,
+    at,
+    by: data.by,
+    byEmail: stringOrNull(data.byEmail),
+    action: data.action,
+    cafeId: stringOrNull(data.cafeId),
+    ownerUid: stringOrNull(data.ownerUid),
+    reason: parseReason(data.reason),
+    details: isPlainObject(data.details) ? data.details : {},
+  };
+}
+
+export function parseSentEmail(id: string, data: unknown): SentEmail | null {
+  if (!isPlainObject(data) || typeof data.kind !== "string") return null;
+  const at = toMillis(data.at);
+  return at === null ? null : { id, kind: data.kind, at };
 }
 
 /** A stored starting menu, rows that do not have the shape dropped. */
@@ -224,7 +312,7 @@ function parseProgress(value: unknown): BackendRequest["progress"] {
 export function parseRequest(id: string, data: unknown): BackendRequest | null {
   if (!isPlainObject(data)) return null;
   if (
-    typeof data.cafeId !== "string" ||
+    (typeof data.cafeId !== "string" && data.cafeId !== null) ||
     typeof data.by !== "string" ||
     !oneOf(REQUEST_KINDS, data.kind) ||
     !oneOf(REQUEST_STATUSES, data.status)
@@ -245,6 +333,7 @@ export function parseRequest(id: string, data: unknown): BackendRequest | null {
     error: stringOrNull(data.error),
     errorCode: stringOrNull(data.errorCode),
     deploymentId: stringOrNull(data.deploymentId),
+    notBefore: toMillis(data.notBefore),
     finishedAt: toMillis(data.finishedAt),
   };
 }

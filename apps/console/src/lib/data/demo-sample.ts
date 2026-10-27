@@ -7,6 +7,7 @@
 
 import { newCafeSettings } from "@cafemenu/shared";
 import type {
+  AdminLogEntry,
   Cafe,
   CafeStatus,
   Deployment,
@@ -14,7 +15,7 @@ import type {
   DeploymentStatus,
   DeploymentTrigger,
 } from "../platform/model";
-import type { DemoState } from "./demo-store";
+import type { DemoEmail, DemoState } from "./demo-store";
 import type { RolloutStatus } from "./types";
 
 const MINUTE = 60_000;
@@ -131,6 +132,23 @@ const SPECS: Spec[] = [
 ];
 
 export const isSampleId = (id: string) => id.startsWith("sample-");
+
+/** The sample owners' names, for the admin's directory (#78). */
+const SAMPLE_OWNER_NAMES = [
+  "Asha Rao",
+  "Tom Bell",
+  "Mei Lin",
+  "Ravi Menon",
+  "Sara Holt",
+  "Kofi Mensah",
+  "Lena Novak",
+];
+
+/** A sample owner's name, or null for anyone else. */
+export function sampleOwnerName(uid: string): string | null {
+  const match = /^sample-owner-(\d+)$/.exec(uid);
+  return match ? (SAMPLE_OWNER_NAMES[Number(match[1]) - 1] ?? null) : null;
+}
 
 /** The sample cafes, created `now`. */
 export function sampleCafes(now: number): Cafe[] {
@@ -288,11 +306,77 @@ export const SAMPLE_ROLLOUTS: Record<string, RolloutStatus> = {
   "1.2.0-beta.1": "running",
 };
 
+/** Emails the sample owners were sent, for the cafes' histories (#78). */
+export function sampleEmails(now: number): DemoEmail[] {
+  return [
+    {
+      id: "sample-e1",
+      cafeId: "sample-harbour",
+      kind: "release-available",
+      at: now - 6 * DAY,
+    },
+    {
+      id: "sample-e2",
+      cafeId: "sample-orchard",
+      kind: "deploy-failed",
+      at: now - 2 * HOUR,
+    },
+    {
+      id: "sample-e3",
+      cafeId: "sample-orchard",
+      kind: "maintenance-on",
+      at: now - 10 * DAY,
+    },
+    {
+      id: "sample-e4",
+      cafeId: "sample-orchard",
+      kind: "maintenance-off",
+      at: now - 10 * DAY + 2 * HOUR,
+    },
+  ];
+}
+
+/** A past maintenance window on Orchard, in the admin log, by `admin`. */
+export function sampleAdminLog(
+  now: number,
+  admin: { uid: string; email: string },
+): AdminLogEntry[] {
+  const entry = (
+    id: string,
+    action: string,
+    at: number,
+    reason: AdminLogEntry["reason"],
+  ): AdminLogEntry => ({
+    id,
+    at,
+    by: admin.uid,
+    byEmail: admin.email,
+    action,
+    cafeId: "sample-orchard",
+    ownerUid: "sample-owner-4",
+    reason,
+    details: {},
+  });
+  return [
+    entry("sample-log-2", "maintenance-off", now - 10 * DAY + 2 * HOUR, {
+      code: null,
+      note: "Prices moved.",
+    }),
+    entry("sample-log-1", "maintenance-on", now - 10 * DAY, {
+      code: "migration",
+      note: "Moving prices to paise (#21).",
+    }),
+  ];
+}
+
 /** Adds the sample data, once: a second call finds it and does nothing. */
 export function seedSample(state: DemoState, now = Date.now()) {
   if (state.cafes.some((c) => isSampleId(c.id))) return;
   state.cafes.push(...sampleCafes(now));
   state.deployments.push(...sampleDeployments(now));
+  state.emails.push(...sampleEmails(now));
+  const admin = state.accounts.find((a) => a.isAdmin);
+  if (admin) state.adminLog.push(...sampleAdminLog(now, admin));
   for (const [version, status] of Object.entries(SAMPLE_ROLLOUTS)) {
     state.rollouts[version] ??= status;
   }

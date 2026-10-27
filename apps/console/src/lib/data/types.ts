@@ -8,14 +8,18 @@
  */
 
 import type { CafeSettings } from "@cafemenu/shared";
+import type { AdminRequestKind } from "@cafemenu/shared/requests";
 import type {
+  AdminLogEntry,
   BackendRequest,
   Cafe,
   Deployment,
+  OwnerRecord,
   PlatformUser,
   Release,
   ReleaseChannel,
   RequestKind,
+  SentEmail,
   StartingMenu,
 } from "../platform/model";
 import type { NewCafeInput, ReleaseChoice } from "../platform/validate";
@@ -168,7 +172,8 @@ export interface RequestRepository {
    * refuse it.
    */
   create(input: {
-    cafeId: string;
+    /** Null only for a request about an account (appoint-admin). */
+    cafeId: string | null;
     kind: RequestKind;
     params?: Record<string, unknown>;
   }): Promise<string>;
@@ -286,6 +291,70 @@ export interface AdminRequests {
   rollout(version: string, action: RolloutAction): Promise<void>;
 }
 
+/** Everything the admin's page shows of one cafe (#78), newest first each. */
+export interface CafeHistory {
+  /** Every request about the cafe: the owner's and the admin's. */
+  requests: BackendRequest[];
+  deployments: Deployment[];
+  /** The admin log's entries about it: status changes, maintenance… */
+  log: AdminLogEntry[];
+  emails: SentEmail[];
+}
+
+/** How much of a cafe's history the admin's page reads, per kind. */
+export const HISTORY_LIMIT = 50;
+
+/**
+ * The super admin's directory and actions (#78,
+ * docs/super-admin-requirements.md). Reads are admin only: the rules refuse
+ * everyone else `owners/`, `adminLog/`, the emails and other people's
+ * requests. An action is a request (#77) the backend does on its next run,
+ * as it does the owner's, and logs; the page watches it through
+ * `subscribeMine`. Nothing here reads a cafe's orders, customers or staff:
+ * they are in the owner's own project.
+ */
+export interface AdminDirectory {
+  /**
+   * Whether the actions reach a backend that does them: the backend on
+   * GitHub Actions (NEXT_PUBLIC_BACKEND=requests), or the demo's. With the
+   * Cloud Functions or no backend, the page reads but offers no actions.
+   */
+  canAct: boolean;
+  /** Every account in the directory, live. */
+  subscribeOwners(
+    listener: Listener<OwnerRecord[]>,
+    onError?: ErrorListener,
+  ): Unsubscribe;
+  /** The admin log, newest first, at most `limit` entries, live. */
+  subscribeLog(
+    limit: number,
+    listener: Listener<AdminLogEntry[]>,
+    onError?: ErrorListener,
+  ): Unsubscribe;
+  /** One cafe's requests, deployments, log entries and emails, live. */
+  subscribeHistory(
+    cafeId: string,
+    listener: Listener<CafeHistory>,
+    onError?: ErrorListener,
+  ): Unsubscribe;
+  /** The signed-in admin's own requests, newest first, live. */
+  subscribeMine(
+    limit: number,
+    listener: Listener<BackendRequest[]>,
+    onError?: ErrorListener,
+  ): Unsubscribe;
+  /**
+   * Asks the backend for an admin action. Returns the request's id. Fails
+   * with invalid-argument before writing when the params break the shape,
+   * permission-denied when the rules refuse it.
+   */
+  ask(input: {
+    cafeId: string | null;
+    kind: AdminRequestKind;
+    params: Record<string, unknown>;
+  }): Promise<string>;
+}
+
 /** Where the data comes from. */
 export type Backend = "demo" | "emulators" | "firebase";
 
@@ -293,6 +362,8 @@ export interface DataBundle {
   auth: AuthRepository;
   /** Publishing a release and its rollout: the platform admin's. */
   admin: AdminRequests;
+  /** The super admin's directory, history, log and actions (#78). */
+  directory: AdminDirectory;
   cafes: CafeRepository;
   setup: SetupRepository;
   sites: SiteNameChecker;
