@@ -6,6 +6,102 @@ website. The cafe owns its data; you keep shipping updates to every cafe.
 
 _"CafeMenu" is a working name._
 
+## Progress
+
+Updated 2026-10-27 from [GitHub](https://github.com/shreyashp47/cafemenu/issues). ✅ done · 🟡 built, in review · ⏳ waiting · ⬜ not started.
+
+**Live:** <https://getcafemenu.web.app> (CafeMenu website) and <https://getcafemenu-demo.web.app> (demo cafe), both in demo mode.
+**Unmerged work:** branch `feature/backend-and-super-admin` (= #83 + #84). The alternative #77 is #82.
+
+### Phase 0 · Spike (1/7 done)
+
+|     | Issue                                                  | Work                                                                             | PR                                                     | Notes                                             |
+| --- | ------------------------------------------------------ | -------------------------------------------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------- |
+| ✅  | [#1](https://github.com/shreyashp47/cafemenu/issues/1) | Set up the monorepo and bring in TOE v0.3.0 as apps/cafe                         | [#42](https://github.com/shreyashp47/cafemenu/pull/42) |                                                   |
+| ⏳  | [#2](https://github.com/shreyashp47/cafemenu/issues/2) | Create the platform Firebase project, the deploy service account and a test cafe | –                                                      | needs you: deploy account, key, test cafe project |
+| ⏳  | [#3](https://github.com/shreyashp47/cafemenu/issues/3) | Spike: how an owner grants access, and the smallest set of roles                 | –                                                      | needs #2                                          |
+| ⏳  | [#4](https://github.com/shreyashp47/cafemenu/issues/4) | Spike: set up a fresh cafe project from a script                                 | [#49](https://github.com/shreyashp47/cafemenu/pull/49) | code written (#49), real run needs #2             |
+| ⏳  | [#5](https://github.com/shreyashp47/cafemenu/issues/5) | Spike: deploy rules, indexes and a site from a script                            | [#49](https://github.com/shreyashp47/cafemenu/pull/49) | code written (#49), real run needs #2             |
+| ⏳  | [#6](https://github.com/shreyashp47/cafemenu/issues/6) | Spike: create the owner's account and send the set-password email                | [#49](https://github.com/shreyashp47/cafemenu/pull/49) | code written (#49), real run needs #2             |
+| ⏳  | [#7](https://github.com/shreyashp47/cafemenu/issues/7) | Write up the spike results and update PLAN.md (go/no-go)                         | –                                                      | after #3–#6                                       |
+
+### Phase 1 · Config-free cafe app (12/12 done)
+
+|     | Issue                                                    | Work                                                                            | PR                                                     | Notes |
+| --- | -------------------------------------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------ | ----- |
+| ✅  | [#8](https://github.com/shreyashp47/cafemenu/issues/8)   | Read the Firebase config at runtime, not at build time                          | [#51](https://github.com/shreyashp47/cafemenu/pull/51) |       |
+| ✅  | [#9](https://github.com/shreyashp47/cafemenu/issues/9)   | Cafe settings: config/site, site.json and a shared CafeSettings type            | [#51](https://github.com/shreyashp47/cafemenu/pull/51) |       |
+| ✅  | [#10](https://github.com/shreyashp47/cafemenu/issues/10) | Theme presets and accent colour                                                 | [#56](https://github.com/shreyashp47/cafemenu/pull/56) |       |
+| ✅  | [#11](https://github.com/shreyashp47/cafemenu/issues/11) | Per-cafe logo and app icons                                                     | [#56](https://github.com/shreyashp47/cafemenu/pull/56) |       |
+| ✅  | [#12](https://github.com/shreyashp47/cafemenu/issues/12) | Any currency: store money in minor units                                        | [#59](https://github.com/shreyashp47/cafemenu/pull/59) |       |
+| ✅  | [#13](https://github.com/shreyashp47/cafemenu/issues/13) | Any time zone: day keys, daily order numbers and reports                        | [#55](https://github.com/shreyashp47/cafemenu/pull/55) |       |
+| ✅  | [#14](https://github.com/shreyashp47/cafemenu/issues/14) | Move all UI text into messages/en.json                                          | [#64](https://github.com/shreyashp47/cafemenu/pull/64) |       |
+| ✅  | [#15](https://github.com/shreyashp47/cafemenu/issues/15) | Owners add staff by invite link (replaces seed:staff)                           | [#57](https://github.com/shreyashp47/cafemenu/pull/57) |       |
+| ✅  | [#16](https://github.com/shreyashp47/cafemenu/issues/16) | Starter menus and menu import                                                   | [#60](https://github.com/shreyashp47/cafemenu/pull/60) |       |
+| ✅  | [#17](https://github.com/shreyashp47/cafemenu/issues/17) | Plan field and feature flags (no billing yet)                                   | [#53](https://github.com/shreyashp47/cafemenu/pull/53) |       |
+| ✅  | [#18](https://github.com/shreyashp47/cafemenu/issues/18) | Keep TOE working: TOE as a fixture cafe in CI                                   | [#53](https://github.com/shreyashp47/cafemenu/pull/53) |       |
+| ✅  | [#63](https://github.com/shreyashp47/cafemenu/issues/63) | Customer's screen sometimes never shows the day number after Accept (demo mode) | [#65](https://github.com/shreyashp47/cafemenu/pull/65) |       |
+
+### Phase 2 · Release pipeline (4/5 done)
+
+|     | Issue                                                    | Work                                                                 | PR                                                     | Notes                     |
+| --- | -------------------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------ | ------------------------- |
+| ✅  | [#19](https://github.com/shreyashp47/cafemenu/issues/19) | Build a release package on every version tag                         | [#50](https://github.com/shreyashp47/cafemenu/pull/50) |                           |
+| ✅  | [#20](https://github.com/shreyashp47/cafemenu/issues/20) | deployer deploy, rollback and sync-branding                          | [#61](https://github.com/shreyashp47/cafemenu/pull/61) |                           |
+| ✅  | [#21](https://github.com/shreyashp47/cafemenu/issues/21) | Data migrations and schemaVersion (first one: TOE's prices to paise) | [#66](https://github.com/shreyashp47/cafemenu/pull/66) |                           |
+| ✅  | [#22](https://github.com/shreyashp47/cafemenu/issues/22) | Post-deploy smoke test for any cafe                                  | [#67](https://github.com/shreyashp47/cafemenu/pull/67) |                           |
+| ⏳  | [#23](https://github.com/shreyashp47/cafemenu/issues/23) | Move TOE onto the release pipeline (the first cafe and the canary)   | –                                                      | needs #2, at a quiet hour |
+
+### Phase 3 · Console (2/3 done)
+
+|     | Issue                                                    | Work                                  | PR                                                     | Notes                                  |
+| --- | -------------------------------------------------------- | ------------------------------------- | ------------------------------------------------------ | -------------------------------------- |
+| ✅  | [#24](https://github.com/shreyashp47/cafemenu/issues/24) | Console app and the platform database | [#54](https://github.com/shreyashp47/cafemenu/pull/54) |                                        |
+| ✅  | [#25](https://github.com/shreyashp47/cafemenu/issues/25) | Landing page and live demo            | [#54](https://github.com/shreyashp47/cafemenu/pull/54) |                                        |
+| ⏳  | [#31](https://github.com/shreyashp47/cafemenu/issues/31) | Privacy policy and terms              | [#47](https://github.com/shreyashp47/cafemenu/pull/47) | drafted (#47), needs a lawyer's review |
+
+### v1.1 · Self-serve signup and rollouts (9/11 done)
+
+|     | Issue                                                    | Work                                                                                  | PR                                                                                                             | Notes                                                 |
+| --- | -------------------------------------------------------- | ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| ✅  | [#26](https://github.com/shreyashp47/cafemenu/issues/26) | Signup form and email verification                                                    | [#68](https://github.com/shreyashp47/cafemenu/pull/68)                                                         |                                                       |
+| ✅  | [#27](https://github.com/shreyashp47/cafemenu/issues/27) | Onboarding wizard: create the project, grant access, check connection                 | [#70](https://github.com/shreyashp47/cafemenu/pull/70)                                                         |                                                       |
+| ✅  | [#28](https://github.com/shreyashp47/cafemenu/issues/28) | Provisioning job and progress screen                                                  | [#74](https://github.com/shreyashp47/cafemenu/pull/74)                                                         |                                                       |
+| ✅  | [#29](https://github.com/shreyashp47/cafemenu/issues/29) | Owner area: updates, branding and access                                              | [#72](https://github.com/shreyashp47/cafemenu/pull/72)                                                         |                                                       |
+| ✅  | [#30](https://github.com/shreyashp47/cafemenu/issues/30) | Platform admin for you                                                                | [#73](https://github.com/shreyashp47/cafemenu/pull/73)                                                         |                                                       |
+| ✅  | [#32](https://github.com/shreyashp47/cafemenu/issues/32) | Rollout waves when a release is published                                             | [#71](https://github.com/shreyashp47/cafemenu/pull/71)                                                         |                                                       |
+| ✅  | [#33](https://github.com/shreyashp47/cafemenu/issues/33) | Auto-rollback and pause on failures                                                   | [#71](https://github.com/shreyashp47/cafemenu/pull/71)                                                         |                                                       |
+| ✅  | [#34](https://github.com/shreyashp47/cafemenu/issues/34) | Owner emails: new release, required upgrade, failed deploy                            | [#76](https://github.com/shreyashp47/cafemenu/pull/76)                                                         |                                                       |
+| ✅  | [#35](https://github.com/shreyashp47/cafemenu/issues/35) | Support window: only the latest two minor lines                                       | [#76](https://github.com/shreyashp47/cafemenu/pull/76)                                                         |                                                       |
+| 🟡  | [#77](https://github.com/shreyashp47/cafemenu/issues/77) | Run the platform backend on GitHub Actions (free, no Blaze)                           | [#83](https://github.com/shreyashp47/cafemenu/pull/83), [#82](https://github.com/shreyashp47/cafemenu/pull/82) | built twice, green CI, in review                      |
+| 🟡  | [#78](https://github.com/shreyashp47/cafemenu/issues/78) | Super admin: owners directory, suspend/reactivate/delete, maintenance mode, admin log | [#84](https://github.com/shreyashp47/cafemenu/pull/84)                                                         | built, green CI, in review (provisional §8 decisions) |
+
+### v1.0 · Release testing (0/1 done)
+
+|     | Issue                                                    | Work                                                              | PR  | Notes                  |
+| --- | -------------------------------------------------------- | ----------------------------------------------------------------- | --- | ---------------------- |
+| ⏳  | [#41](https://github.com/shreyashp47/cafemenu/issues/41) | v1.0 release testing: test every feature end to end before v1.0.0 | –   | after everything above |
+
+### Later (0/5 done)
+
+|     | Issue                                                    | Work                                                  | PR  | Notes |
+| --- | -------------------------------------------------------- | ----------------------------------------------------- | --- | ----- |
+| ⬜  | [#36](https://github.com/shreyashp47/cafemenu/issues/36) | Connect with Google: create the project for the owner | –   |       |
+| ⬜  | [#37](https://github.com/shreyashp47/cafemenu/issues/37) | Paid plans and billing                                | –   |       |
+| ⬜  | [#38](https://github.com/shreyashp47/cafemenu/issues/38) | More languages and owner-editable customer text       | –   |       |
+| ⬜  | [#39](https://github.com/shreyashp47/cafemenu/issues/39) | Online payments per country (UPI first)               | –   |       |
+| ⬜  | [#40](https://github.com/shreyashp47/cafemenu/issues/40) | Custom domain helper                                  | –   |       |
+
+### Other merged work
+
+| PR                                                                                                                                                                                                                             | What                                                                                          |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
+| [#58](https://github.com/shreyashp47/cafemenu/pull/58)                                                                                                                                                                         | Test fix: longer wait for the day number in the browser flow                                  |
+| [#62](https://github.com/shreyashp47/cafemenu/pull/62)                                                                                                                                                                         | Lean v1.0 scope decision                                                                      |
+| [#43](https://github.com/shreyashp47/cafemenu/pull/43), [#44](https://github.com/shreyashp47/cafemenu/pull/44), [#46](https://github.com/shreyashp47/cafemenu/pull/46), [#52](https://github.com/shreyashp47/cafemenu/pull/52) | Dependabot updates (landed by a cloud session)                                                |
+| [#79](https://github.com/shreyashp47/cafemenu/pull/79), [#80](https://github.com/shreyashp47/cafemenu/pull/80), [#81](https://github.com/shreyashp47/cafemenu/pull/81), [#85](https://github.com/shreyashp47/cafemenu/pull/85) | Docs: super admin requirements, all requirements, the maintainer guide, status updates        |
+| (deploys)                                                                                                                                                                                                                      | getcafemenu.web.app and getcafemenu-demo.web.app deployed with `scripts/deploy-live.sh` steps |
+
 ## Decisions so far
 
 | Question                       | Decision                                                                                                                                                                                                                          |
