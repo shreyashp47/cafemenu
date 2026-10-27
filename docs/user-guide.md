@@ -124,17 +124,21 @@ file is the same shape as
 The backend runs as a GitHub Actions job every 5 minutes (#77), not as Cloud
 Functions, so no paid plan is needed. Once #77 is merged:
 
-1. **Create CafeMenu's deploy account.** In the Google Cloud console for
-   `getcafemenu`, go to IAM & Admin → Service accounts → Create, give it the
-   roles the #77 README lists, then Keys → Add key → JSON.
+1. **Create CafeMenu's deploy account** and its key: the commands and the two
+   roles are in the
+   [worker's README](../apps/platform-functions/README.md#set-it-up-once-by-the-maintainer)
+   (or: Google Cloud console for `getcafemenu` → IAM & Admin → Service
+   accounts → Create → Keys → Add key → JSON).
 2. **Give the key to GitHub, then delete your copy:**
    ```bash
    gh secret set PLATFORM_SERVICE_ACCOUNT --env production < ~/Downloads/key.json
    rm ~/Downloads/key.json
    ```
-3. **Ask Claude to switch the console to real mode:** create the Firestore
-   database (`asia-south1`), turn on Email/Password sign-in, deploy the
-   platform rules, and rebuild the console with its Firebase settings.
+3. **Switch the console to real mode** (or ask Claude to): create the
+   Firestore database (`asia-south1`), turn on Email/Password sign-in, deploy
+   the platform rules, and rebuild the console with its Firebase settings. The
+   steps are in the
+   [console README](../apps/console/README.md#turning-the-real-platform-on).
 4. **Make yourself the super admin** (the one-time command in the console
    README).
 
