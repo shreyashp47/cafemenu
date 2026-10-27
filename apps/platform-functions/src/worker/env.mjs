@@ -20,7 +20,6 @@ import {
 } from "@cafemenu/deployer";
 
 import { createMail } from "../mail/setup.mjs";
-import { createFirestoreStore } from "../store-firestore.mjs";
 import { createGoogleSide, fakeGoogleBase, proxyFetch } from "../runtime.mjs";
 
 /** The settings the worker reads from its environment, checked. */
@@ -58,6 +57,10 @@ export async function workerEnv({ env = process.env, log }) {
   const { getApps, initializeApp, cert } = await import("firebase-admin/app");
   const { getFirestore } = await import("firebase-admin/firestore");
   const { getAuth } = await import("firebase-admin/auth");
+  // Loaded here, not at the top: it needs firebase-admin's Firestore, and
+  // workerSettings above must load without it (the unit tests run on the
+  // repository's Node 20, where that optional dependency isn't installed).
+  const { createFirestoreStore } = await import("../store-firestore.mjs");
 
   const app =
     getApps()[0] ??
