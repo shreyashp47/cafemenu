@@ -42,6 +42,8 @@ import {
   getDoc,
   getDocs,
   getFirestore,
+  limit,
+  orderBy,
   query,
   serverTimestamp,
   setDoc,
@@ -330,6 +332,14 @@ const deployment = (owner, cafeId, o = {}) => ({
 });
 await seed("deployments/dep-a", deployment(ALICE, "cafe-a"));
 await seed("deployments/dep-b", deployment(BOB, "cafe-b"));
+// What apps/platform-functions keeps about a cafe's releases (hosting versions,
+// rules): the backend's, with no rule that lets anyone else near it.
+await seed("cafes/cafe-a/private/deployRecord", {
+  site: "cafe-a",
+  current: null,
+  previous: null,
+  schemaFloor: 1,
+});
 
 // -- helpers ------------------------------------------------------------------
 
@@ -798,6 +808,10 @@ await t(
   denied(() => edit(alice, "cafe-a", { ownerEmail: "someone@else.test" })),
 );
 await t(
+  "owner A cannot switch the release emails off or on (the backend's unsubscribe link does)",
+  denied(() => edit(alice, "cafe-a", { emails: { releaseNotices: false } })),
+);
+await t(
   "owner A cannot rewrite createdAt",
   denied(() => edit(alice, "cafe-a", { createdAt: serverTimestamp() })),
 );
@@ -1029,12 +1043,51 @@ await t(
   ),
 );
 await t(
-  "once setup has started they are fixed (live cafe: logo)",
-  denied(() => putLogo(alice, "cafe-a")),
+  "once setup has started the menu is fixed (live cafe: menu)",
+  denied(() => putMenu(alice, "cafe-a")),
+);
+// The owner area replaces a live cafe's logo, for the backend to deploy.
+await t(
+  "…but a live cafe's logo can be replaced",
+  allowed(() => putLogo(alice, "cafe-a")),
 );
 await t(
-  "…(live cafe: menu)",
-  denied(() => putMenu(alice, "cafe-a")),
+  "…and dropped",
+  allowed(() => deleteDoc(setupDoc(alice, "cafe-a", "logo"))),
+);
+await t(
+  "…and the logo is still checked (not text)",
+  denied(() => putLogo(alice, "cafe-a", { png: "not bytes" })),
+);
+await t(
+  "…and still has to be stamped with the server time",
+  denied(() => putLogo(alice, "cafe-a", { updatedAt: Timestamp.now() })),
+);
+await t(
+  "owner B cannot replace owner A's live cafe's logo",
+  denied(() => putLogo(bob, "cafe-a")),
+);
+await t(
+  "…nor drop it",
+  denied(() => deleteDoc(setupDoc(bob, "cafe-a", "logo"))),
+);
+for (const status of ["provisioning", "failed", "disconnected", "suspended"]) {
+  await seed(
+    `cafes/cafe-a-${status}`,
+    cafeRecord(ALICE, { site: `alice-${status}`, status }),
+  );
+  await t(
+    `a ${status} cafe's logo is fixed`,
+    denied(() => putLogo(alice, `cafe-a-${status}`)),
+  );
+}
+await t(
+  "…and so is dropping it",
+  denied(() => deleteDoc(setupDoc(alice, "cafe-a-suspended", "logo"))),
+);
+await t(
+  "an unverified owner cannot replace a live cafe's logo",
+  denied(() => putLogo(lapsed, "cafe-l")),
 );
 await t(
   "not for a cafe that does not exist",
@@ -1180,6 +1233,23 @@ await t(
   denied(() => getDoc(deploy(bob, "dep-a"))),
 );
 
+// -- the backend's deploy record ---------------------------------------------------
+
+console.log("\n the deploy record (backend only)");
+const record = (c) => doc(c.db, "cafes", "cafe-a", "private", "deployRecord");
+await t(
+  "owner A cannot read their cafe's deploy record",
+  denied(() => getDoc(record(alice))),
+);
+await t(
+  "owner A cannot write it",
+  denied(() => setDoc(record(alice), { site: "cafe-a", schemaFloor: 1 })),
+);
+await t(
+  "the admin cannot read it from a browser",
+  denied(() => getDoc(record(erin))),
+);
+
 // -- the admin --------------------------------------------------------------------
 
 console.log("\n the platform admin (custom claim)");
@@ -1224,6 +1294,70 @@ await t(
       schemaVersion: 1,
       withdrawn: false,
     }),
+  ),
+);
+// What the admin page (#30) asks for: the latest deployments of every cafe.
+const latestDeployments = (c, n = 5) =>
+  getDocs(
+    query(
+      collection(c.db, "deployments"),
+      orderBy("createdAt", "desc"),
+      limit(n),
+    ),
+  );
+await t(
+  "the admin lists the latest deployments of every cafe, newest first",
+  allowed(async () => {
+    const snap = await latestDeployments(erin);
+    expect(
+      snap.size >= 2,
+      `expected both cafes' deployments, got ${snap.size}`,
+    );
+  }),
+);
+await t(
+  "an owner cannot run that query: it is not theirs alone",
+  denied(() => latestDeployments(alice)),
+);
+await t(
+  "…nor can an unverified account with the claim",
+  denied(() => latestDeployments(frank)),
+);
+await t(
+  "the admin cannot start a deploy from a browser",
+  denied(() =>
+    setDoc(deploy(erin, "dep-from-admin"), {
+      ...deployment(BOB, "cafe-b"),
+      createdAt: serverTimestamp(),
+    }),
+  ),
+);
+await t(
+  "the admin cannot withdraw a release from a browser",
+  denied(() => updateDoc(release(erin, "1.1.0"), { withdrawn: true })),
+);
+await t(
+  "the admin cannot edit an owner's settings",
+  denied(() =>
+    edit(erin, "cafe-b", { settings: settings({ name: "Taken over" }) }),
+  ),
+);
+await t(
+  "the admin cannot move a cafe to another owner",
+  denied(() => edit(erin, "cafe-b", { ownerUid: ERIN.uid })),
+);
+// The admin sees the platform's records and nothing else: a cafe's orders
+// are in the owner's own project, and no path here leads to them.
+for (const path of ["orders", "staff", "rollouts"]) {
+  await t(
+    `the admin cannot read or write /${path}: nothing is kept there`,
+    denied(() => getDocs(collection(erin.db, path))),
+  );
+}
+await t(
+  "…nor write a rollout from a browser",
+  denied(() =>
+    setDoc(doc(erin.db, "rollouts", "1.2.0-20261024"), { status: "paused" }),
   ),
 );
 await t(

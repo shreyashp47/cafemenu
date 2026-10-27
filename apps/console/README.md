@@ -8,9 +8,12 @@ they live in the owner's project ([PLAN.md](../../PLAN.md#how-it-fits-together))
 
 Today it has the landing page ([#25](https://github.com/shreyashp47/cafemenu/issues/25)),
 the sign-up form and email check ([#26](https://github.com/shreyashp47/cafemenu/issues/26)),
-and the platform's data model, sign-in and security rules
-([#24](https://github.com/shreyashp47/cafemenu/issues/24)), which onboarding
-(#27), the owner area (#29) and admin (#30) build on.
+onboarding ([#27](https://github.com/shreyashp47/cafemenu/issues/27)), the
+owner area ([#29](https://github.com/shreyashp47/cafemenu/issues/29)), the
+platform admin ([#30](https://github.com/shreyashp47/cafemenu/issues/30)), and
+the platform's data model, sign-in and security rules
+([#24](https://github.com/shreyashp47/cafemenu/issues/24)), which automatic
+setup (#28) builds on.
 
 Same stack as the cafe app, on the same versions: Next.js 15 (static export),
 React 19, TypeScript, Tailwind CSS v4, Firebase 12, Vitest.
@@ -73,6 +76,98 @@ show it. A reload or a return comes back to the same step.
 - **Against the real platform** the page stays "coming soon" until
   `NEXT_PUBLIC_SIGNUP_OPEN=1`, so the landing page can go live first.
 
+### Onboarding
+
+`/setup` is steps 3 and 4: **create a Firebase project** on the free Spark
+plan, then **give CafeMenu access** (paste the project's ID, add the deploy
+account as a member under Settings → Users and permissions, and press
+**Check connection**). It says plainly that the member won't show in the
+Firebase console's list, and links to the Google Cloud IAM page, where it
+does and where it can be removed.
+
+<p align="center">
+  <img src="docs/screens/setup-phone.jpg" width="816" alt="Onboarding on a phone, four views: step 3, Create a Firebase project, with the five steps above it; step 4's Add CafeMenu as a member, with the deploy account's address and a Copy button, the role still to be settled by the Phase 0 spike, and the note that it won't appear in the Firebase console's list; a check that found two permissions missing, each named; and Lantern Café is connected">
+</p>
+
+- The wizard is a state machine in
+  [`src/lib/setup/wizard.ts`](./src/lib/setup/wizard.ts), tested without a
+  browser. The project ID is saved on the cafe before each check; the step
+  and the last answer are kept in this browser; so an owner who leaves comes
+  back to the same step, and on another device to the access step.
+- **Check connection** asks a `ConnectionChecker`
+  ([`src/lib/setup/connection.ts`](./src/lib/setup/connection.ts)), whose
+  answer has the shape of `deployer check`'s: connected, no access, or each
+  missing permission with what it is for. Demo mode and the emulators
+  simulate it (a project ID ending in `-noaccess` or `-missing` shows those
+  answers); against the real platform it waits for the backend's
+  `checkConnection` function, which runs `deployer check` (#28, see the
+  backend switch above).
+- The deploy account's address comes from `NEXT_PUBLIC_DEPLOY_SERVICE_ACCOUNT`
+  (a `demo-` stand-in in demo mode and the emulators). The exact role to pick
+  and the screenshots of Google's consoles are marked `[[SPIKE #3: …]]` in
+  `messages/en.json` until the Phase 0 spike settles them; a test keeps every
+  such placeholder in that form.
+
+### The owner area
+
+`/cafe` is where an owner manages a cafe that is past setup (`?cafe=` picks
+one of several; sign-up and `/setup` link to it). It shows the cafe's name and
+state, a link to the cafe's own dashboard at `https://<site>.web.app/admin`
+(menu, tables, orders and staff are managed there, in the owner's project;
+in demo mode the address is shown, not linked, because there is no real site),
+and three sections:
+
+<p align="center">
+  <img src="docs/screens/cafe-phone.jpg" width="816" alt="The owner area on a phone, four views: Updates, with the version running, the three ways to follow releases (stable, beta, stay on 1.1) and 1.1.1 available; an upgrade under way, with the deployer's steps and the third one running; Branding and locale, with a change of currency to US dollars and the warning that it doesn't convert prices, with the box to tick; and Access, with the deploy account's address, its Copy button and what that allows">
+</p>
+
+- **Updates.** The version running, and how the cafe follows releases: every
+  new stable version, every new beta, or **Stay on 1.4** (patches of that line
+  still apply, so security fixes reach everyone). That choice is saved on the
+  cafe's record, which the rules let the owner write
+  (`release.channel` and `release.pinned`). **Upgrade** offers the newest
+  release the cafe follows that is newer than its own, with its notes from
+  `releases/{version}`; **Roll back** goes to `release.previous`, after asking.
+  A cafe that stays on a line and upgrades past it moves the line it stays on,
+  or the next patch of the old one would undo the upgrade. Below them is what
+  CafeMenu has done to the cafe, from `deployments/`: the latest in full, with
+  the deployer's steps while it runs or if it failed.
+- **Branding and locale.** Name, tagline, logo, theme, accent (with the shared
+  contrast guard, as at sign-up), currency, time zone and language. Save writes
+  the cafe's settings, and a new logo, on the platform, then asks for them to
+  go on the site. Changing the currency says that prices are not converted
+  and wants a tick first. The tables, order cap, address on the QR cards,
+  money unit and plan are not edited here and carry over.
+- **Access.** What CafeMenu can do in the owner's project, how to check it on
+  the Google Cloud IAM page (linked with their project picked), how to remove
+  it, and what leaving means. The words are
+  [docs/legal/access-explained.md](../../docs/legal/access-explained.md)'s, and
+  wait for the same things: the deploy account's role is a `[[SPIKE #3: …]]`.
+
+**Requests to the backend.** The console never deploys anything. Upgrade,
+Roll back and Save in Branding are calls on `DeployRequests`
+([`src/lib/data/types.ts`](./src/lib/data/types.ts)); each becomes a `queued`
+record in `deployments/` that the backend (#28) picks up, runs the deployer for
+(`deployer deploy --version`, `deployer rollback`, `deployer sync-branding`),
+and writes the steps, the result and `release.current`/`previous` back to. The
+page watches that record. Until the backend exists the real platform answers
+`backend-pending` (src/lib/data/deploys.ts, the `TODO(#28)`s name each
+command), and the page says nothing was changed, or that the branding is saved
+and waits. Demo mode simulates the backend
+([`src/lib/data/demo-deploys.ts`](./src/lib/data/demo-deploys.ts)): the
+deployer's own steps, one at a time, then the new version; the demo has no
+backend to finish setup, so a draft cafe in `/cafe` has a "Pretend setup
+finished" button. One request runs at a time per cafe, and the buttons wait.
+
+**The logo.** The rules let an owner replace `cafes/{id}/setup/logo` while the
+cafe is `draft` or `live` (`provisioning`, `failed`, `disconnected` and
+`suspended` cafes' logos are fixed, and the starting menu stays draft-only).
+The backend reads it for `deployer sync-branding --logo`.
+
+What the sections decide is plain data in
+[`src/lib/owner/`](./src/lib/owner) and [`src/lib/notes.ts`](./src/lib/notes.ts)
+(release notes: a small, safe part of Markdown), tested without a browser.
+
 ### Three backends
 
 | Mode          | How                                                           | What it talks to                                                                   |
@@ -89,17 +184,26 @@ fail on permissions. It sends no verification email: `demoVerifyEmail()` in
 The emulators' ports (Auth 9199, Firestore 8180, UI 4010) differ from the cafe
 app's, so both can run at once.
 
+**The platform's backend** (`apps/platform-functions`, #28) is a switch on top
+of the last two modes: with `NEXT_PUBLIC_BACKEND_FUNCTIONS=1`, Check
+connection, Upgrade, Roll back and Save branding call its Cloud Functions
+([`src/lib/data/callables.ts`](./src/lib/data/callables.ts)) instead of
+answering from a stand-in or saying the backend is not there yet. Against the
+emulators, start that app's `npm run emulators` in place of this one's: it
+serves the same Auth and Firestore ports, plus Functions on 5101. Without the
+switch (and always in demo mode) nothing changes.
+
 ## The platform database
 
 Types in [`src/lib/platform/model.ts`](./src/lib/platform/model.ts), rules in
 [`firestore.rules`](./firestore.rules).
 
-| Path                 | What                                                       | Written by                                      | Read by                      |
-| -------------------- | ---------------------------------------------------------- | ----------------------------------------------- | ---------------------------- |
-| `cafes/{cafeId}`     | one per cafe                                               | its owner (some fields), the backend (the rest) | its owner, the admin         |
-| `releases/{version}` | one per published release, id `1.4.2`                      | the backend only                                | any verified account         |
-| `deployments/{id}`   | one per setup, deploy, rollback or branding sync of a cafe | the backend only                                | that cafe's owner, the admin |
-| `cafes/{id}/setup/…` | the logo and starting menu from sign-up                    | its owner, while the cafe is a draft            | its owner, the admin         |
+| Path                 | What                                                       | Written by                                                      | Read by                      |
+| -------------------- | ---------------------------------------------------------- | --------------------------------------------------------------- | ---------------------------- |
+| `cafes/{cafeId}`     | one per cafe                                               | its owner (some fields), the backend (the rest)                 | its owner, the admin         |
+| `releases/{version}` | one per published release, id `1.4.2`                      | the backend only                                                | any verified account         |
+| `deployments/{id}`   | one per setup, deploy, rollback or branding sync of a cafe | the backend only                                                | that cafe's owner, the admin |
+| `cafes/{id}/setup/…` | the logo and starting menu from sign-up                    | its owner, while the cafe is a draft (the logo also while live) | its owner, the admin         |
 
 A cafe:
 
@@ -164,6 +268,65 @@ the only writer of releases, deployments, a cafe's status, its plan and
 `release.current`/`previous`. Upgrade and Roll back (#29) will be requests to
 it, not client writes.
 
+## The platform admin
+
+`/admin` is the maintainer's page: not linked from anywhere, and a sign-in form
+for everyone but an account with the `admin: true` claim (the rules are what
+keep the data from anyone else; the page only declines to ask). It shows:
+
+<p align="center">
+  <img src="docs/screens/admin-phone.jpg" width="816" alt="The platform admin on a phone, four views: Cafes filtered to those that need a look, with Orchard Tea House's rolled-back deployment, its failed smoke test and its error; Publish a release with the version 1.1.1 refused as already published; Published releases with a rollout running, one completed and two not started; and the Audit log of deployments with who asked, what, when, and each smoke test">
+</p>
+
+- **Cafes.** One card per cafe: how it is doing (healthy, in progress, needs a
+  look, paused, not set up), which release it runs and the one before, whether
+  it follows stable, beta or stays on a line, its latest deployment, the last
+  **smoke test** it had and when, the error if something failed, the owner and
+  the address. Cafes that need a look come first; a search (name, address,
+  owner's email) and filters (needs a look, in progress, on beta, staying on a
+  version) narrow them. Health is worked out in
+  [`src/lib/admin/overview.ts`](./src/lib/admin/overview.ts) from the cafe's
+  status and its newest deployment, and the smoke result from the deployment's
+  `smoke` step, the one the deployer records. Cards, not a table, so a phone
+  has nothing to scroll sideways.
+- **Releases.** Publish a release record (version, channel, notes, database
+  schema), checked here for the mistakes that can be seen from here (a bad
+  or already-published version, a pre-release going to stable, no notes) and
+  then **asked of the backend** (`AdminRequests.publishRelease`; the
+  `TODO(#28)` says the backend verifies the package on GitHub against what was
+  entered and only then writes `releases/{version}`). Below, the published
+  releases with a **Start / Pause / Resume** button for each one's rollout:
+  a stub for v1.1's rollout waves ([#32](https://github.com/shreyashp47/cafemenu/issues/32)),
+  which only records the state until the backend runs `deployer rollout` (the
+  `TODO(#32)` names the commands and says the rollouts become `rollouts/{id}`
+  documents, with rules for the admin to read them).
+- **Audit log.** The latest 200 deployments of every cafe, newest first: what
+  (setup, deploy and from which version, rollback, branding sync), the cafe,
+  how it went, who asked (the owner's email, a rollout, or the admin), when,
+  its smoke test and error. Narrowed to one cafe, or to those that didn't go
+  through, 25 at a time.
+
+What it deliberately lacks: **no way to sign in as an owner** (the
+authentication repository has no such call, and a test keeps it so) **and no way
+to read a cafe's orders**: they live in the owner's own project, and no path in
+the platform database leads to them (the rules test tries `/orders`, `/staff`
+and `/rollouts`, and is refused). Cafes are read-only: the admin cannot edit
+one, move it to another owner, withdraw a release or start a deploy from a
+browser, only ask the backend, which writes with its own account.
+
+**The latest 200.** One query feeds the log and each cafe's last deploy
+(`DeploymentRepository.subscribeRecent`: newest first, no filter, which only the
+admin's claim lets through). A cafe whose newest deployment is older than the
+latest 200 reads as having none, which is fine for dozens of cafes and is the
+place to start if there are ever thousands (a `lastDeployment` on the cafe,
+written by the backend).
+
+**Demo mode** has an admin of its own, made on first sign-in: `admin@cafemenu.demo`
+with the password `demo-admin` (the page says so). It sees seven sample cafes in
+every state, with their deployments, written once into the demo store and
+belonging to no account; an owner in the same browser never sees them. Nobody
+can sign up as it.
+
 ## Checks
 
 ```bash
@@ -195,7 +358,7 @@ npm run screenshot           # every page at 4 widths into .screenshots/; fails 
 npm run audit                # WCAG 2.1 A/AA with axe, in Chromium and WebKit
 
 Both look at the steps behind a page too (the form's problems, the accent
-warning, the email check), from demo states in
+warning, the email check, each onboarding step), from demo states in
 [`scripts/lib/demo-states.mjs`](./scripts/lib/demo-states.mjs) and the
 routes in `scripts/lib/server.mjs`.
 ```

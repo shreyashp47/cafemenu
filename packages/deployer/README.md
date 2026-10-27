@@ -38,7 +38,16 @@ deployer deploy    --project <id> --rules firestore.rules --indexes firestore.in
 deployer migrate   --project <id> --to <n>
 deployer rollback  --project <id> --site <name>
 deployer sync-branding --project <id> --site <name> --settings <cafe-settings.json> [--logo <png>]
+deployer rollout   --version <x.y.z> --cafes <cafes.json> [--batch-size <n>] [--failure-threshold <percent>] [--releases <file>]
+deployer rollout   --resume <rollout-id> --cafes <cafes.json>
 deployer owner     --project <id> --email <email> --name <name>
+```
+
+and, on its own and needing no key, the [smoke test](#smoke-test-is-the-cafe-up)
+that `deploy --version` runs:
+
+```bash
+node packages/deployer/bin/smoke.mjs https://lantern-cafe.web.app --cafe "Lantern Cafe" --project lantern-cafe-1a2b
 ```
 
 From the repo root, `npm run deployer -w @cafemenu/deployer -- <command> …`
@@ -49,7 +58,7 @@ Every command takes:
 
 | Option           | What it does                                                                 |
 | ---------------- | ---------------------------------------------------------------------------- |
-| `--project <id>` | The cafe's Firebase project ID. Required.                                    |
+| `--project <id>` | The cafe's Firebase project ID. Required, except for `rollout`.              |
 | `--key <path>`   | The service-account JSON key. Defaults to `$GOOGLE_APPLICATION_CREDENTIALS`. |
 | `--dry-run`      | Read everything, print what would change, change nothing.                    |
 
@@ -149,9 +158,9 @@ a run that failed part way is finished by running it again.
    from `--settings` and `--logo`: `site.json`, `manifest.webmanifest`,
    `logo.png` (only with a logo) and every app icon. Only files Hosting
    doesn't have are uploaded.
-7. **Smoke test.** `smokeTest` in `src/smoke-test.mjs`, the hook
-   [#22](https://github.com/shreyashp47/cafemenu/issues/22) fills in; skipped
-   for now.
+7. **Smoke test.** Checks the live site, read-only (see
+   [below](#smoke-test-is-the-cafe-up)). If it fails, the deploy is
+   recorded as failed and the release is rolled back at once.
 8. **Record.** The release becomes current in the deploy log and the one it
    replaced becomes previous. A failed run is recorded as failed, with the
    step it stopped at. Once Hosting is live, the release counts as current even if
@@ -213,6 +222,83 @@ units has nothing to change. It never reads `dayCounters`, `tableKeys` or
 `staff`. Until `config/site` changes, open pages show the migrated amounts
 100 times too large and the rules refuse big orders, so run it with the cafe
 closed; `site.json` follows on the next deploy or `sync-branding`.
+
+### Smoke test: is the cafe up?
+
+After Hosting is released, `deploy --version` asks the cafe's own address
+(`https://<site>.web.app`) whether it works and is the release that was just
+deployed. It makes plain `GET` requests and nothing else: it never places an
+order or signs in (`apps/cafe/scripts/flow.mjs` does, which is why that one
+stays demo-only). `src/smoke-check.mjs` has the checks, `src/smoke-test.mjs`
+the step that runs them.
+
+| Check                                        | Passes when                                                                                                                 |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `home`, `order`, `staff`, `admin`, `offline` | `/`, `/order?table=<the cafe's first table>`, `/staff`, `/admin` and `/offline` each answer 200, with no redirect           |
+| `service-worker`                             | `/sw.js` carries the cache version stamped into the package's own `site/sw.js`: it is that build being served               |
+| `site-json`                                  | `/site.json` is valid settings for `@cafemenu/shared` (`validateSiteFile`), isn't marked `"demo": true`, and names the cafe |
+| `firebase-init`                              | `/__/firebase/init.json` is the cafe's project (`--project`), with the `apiKey` and `appId` the app starts from             |
+| `headers`                                    | the headers of firebase.json's `**` rule (the security headers) are on all five pages                                       |
+| `not-found`                                  | an address that isn't a page still answers 404 (no catch-all rewrite)                                                       |
+
+A release takes a short while to reach every edge, so a failing run is
+repeated, waiting 5, 10, 15, 20 and 25 seconds, for six tries in all (75
+seconds at most). A failure after that is a `SmokeTestError`: the deploy is
+recorded as failed with the release as current, then the existing
+[`rollback`](#rollback) runs, and records a rollback of its own, so the deploy
+log shows both. What the person sees:
+
+```
+The smoke test failed on https://lantern-cafe.web.app after 6 tries. The staff
+board: /staff answered 500. 1.1.0 was rolled back: lantern-cafe.web.app runs
+CafeMenu 1.0.0 again.
+```
+
+It exits 1. If there is nothing to go back to (a cafe's first release) or the
+data has been migrated past the previous release, the rollback refuses, and the
+message says that the release is still live (`Rolling back failed too (…)`).
+A package whose `sw.js` has no cache version to look for counts as a failure
+too (there would be nothing to call the site good against) and is rolled back
+the same way. A dry run doesn't touch the site.
+
+The same checks are a command, for a person or a script:
+
+```bash
+node packages/deployer/bin/smoke.mjs <url> [--cafe <name>] [--project <id>] \
+     [--sw-version <v> | --build apps/cafe/out] [--firebase-json apps/cafe/firebase.json] \
+     [--table <n>] [--demo] [--attempts <n>] [--wait <seconds>] [--browser]
+```
+
+It prints the result as JSON on stdout (one line per check goes to stderr) and
+exits **0** when every check passed, **1** when one failed, **2** when it could
+not run (bad arguments, an unreadable file). A check whose expectation isn't
+given (`--cafe`, `--project`, `--firebase-json`) is `skip` if its file isn't
+there and still judges it if it is, so a build served as it is passes
+without them. Reading `site.json` needs `@cafemenu/shared`, so it needs Node
+22.18 or later.
+
+```json
+{
+  "ok": false,
+  "url": "https://lantern-cafe.web.app",
+  "attempts": 6,
+  "failed": ["staff"],
+  "expect": { "cafe": "Lantern Cafe", "swVersion": "3f2a9c1b7d40", "…": "…" },
+  "checks": [
+    {
+      "id": "staff",
+      "label": "The staff board",
+      "status": "fail",
+      "detail": "/staff answered 500"
+    }
+  ]
+}
+```
+
+`--browser` adds one check that needs a real browser: it runs
+[`apps/cafe/scripts/entry.mjs`](../../apps/cafe/README.md#check-the-live-site-not-just-the-deploy-output)
+(Playwright) against the same address, after the plain checks pass. The
+deployer doesn't use it, so it keeps its zero dependencies.
 
 ### `deploy`: rules, indexes and a folder
 
@@ -310,6 +396,146 @@ unit stays the data's, as in a deploy.
 deployer sync-branding --project lantern-cafe-1a2b --site lantern-cafe \
   --settings lantern.json --logo lantern.png
 ```
+
+### `rollout`: a release to every cafe that should get it
+
+`deploy --version` puts a release on one cafe. `rollout` works out which cafes
+should get a version, from each one's channel and pin, and runs
+`deploy --version` on them in waves, so a bad release meets the canary before
+it meets anyone else. There is no `--project`: every cafe in the list has its
+own, and one service-account key serves them all.
+
+```bash
+deployer rollout --version 1.5.0 --cafes cafes.json --dry-run
+deployer rollout --version 1.5.0 --cafes cafes.json
+deployer rollout --resume 1.5.0-20261024T101500Z --cafes cafes.json
+```
+
+**Who gets it.** Each cafe's `release` says what it follows (PLAN.md,
+[Releases](../../PLAN.md#releases-versions)):
+
+| Version                              | Gets it                                                                                                                                                       |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| a beta or rc (`1.5.0-beta.1`)        | Beta cafes only. Stable cafes and pinned ones never see it.                                                                                                   |
+| a stable minor (`1.5.0`)             | Stable and beta cafes. A cafe pinned to `1.4` stays on it.                                                                                                    |
+| a stable patch (`1.4.3`)             | The same, and cafes pinned to `1.4`, since it is a release of their line.                                                                                     |
+| a stable release of a supported line | Also a cafe pinned to a line that is no longer supported, once its upgrade-by date has passed: the [support window](#the-support-window-and-the-forced-move). |
+| any version                          | Never a cafe whose `current` is the version or newer: a cafe never moves down. Only `live` cafes.                                                             |
+
+#### The support window and the forced move
+
+Only the latest two minor lines are supported
+([docs/releases.md](../../docs/releases.md#the-support-window)). A cafe pinned
+to an older one is told to upgrade by a date, and a stable rollout of a
+supported line moves it once that date is over (the day after the last day to
+upgrade, in UTC). Such a cafe is deployed like any other, in the stable wave,
+and then **its pin moves to the new line** (`recordRelease(id, {current,
+previous, pinned})`), or the next patch would skip it for being a release of
+another line. The plan marks it, the rollout state keeps why in the cafe's
+`forced` (`{from, upgradeBy, reason}`), and the log and the closing summary say
+it ("Moved off an unsupported line"). Before the date, the cafe is skipped and
+its reason says when it will move; `--dry-run` shows both.
+
+The window is worked out from the published releases, by
+`@cafemenu/shared/support-window` (the function the console and the backend use
+too): GitHub's
+releases by default (`src/release-list.mjs`, no token), or `--releases <file>`,
+a JSON list of `{version, channel, publishedAt, withdrawn}` such as the
+platform's `releases` collection exports. It is read only when some live cafe
+is pinned to another line and the version is stable. When it can't be read, the
+rollout warns, moves nobody off a line and goes on. A beta never moves a
+pinned cafe, and neither does a version of a line that is itself out of the
+window.
+
+**In what order.** The canary first: the cafe marked `"canary": true`, which
+is TOE. Then the beta cafes, then the stable and pinned cafes, the last two in
+batches of `--batch-size` (default 5) that go one after another. Each cafe is a
+full `deploy --version`: package check, schema guard, migrations, rules,
+indexes, Hosting, then the [smoke test](#smoke-test-is-the-cafe-up), which
+rolls the cafe back by itself when it fails. The canary gets a release only if
+its own channel and pin say so, so give TOE `"channel": "beta"` to have it try
+every release. With no canary in a rollout it says so and goes on.
+
+**When it stops.** A failure is a cafe that was rolled back after a failed
+smoke test, or whose deploy failed any other way. The rollout **pauses**,
+before the next cafe, when the canary fails at all, or when more than
+`--failure-threshold` percent of a batch has failed (default 20: more than 1
+in 5, so 2 of 5 or 3 of 10; a batch of 4 or fewer pauses on its first
+failure). It prints why and how to resume, and exits 3, which it also does
+when it finishes with cafes rolled back or failed. The platform's admin page
+and an email to you are Phase 4's later work; for now the exit code and the
+summary are how you are told.
+
+**Resuming.** `--resume <id>` plans again from the current cafe list for the
+same version: cafes that are done stay done, and the others, including the
+ones that failed, are tried again in the plan's order, so a failed canary is
+tried before anything else. A cafe whose owner has since pinned to another line
+is skipped, as in a new rollout. `--batch-size` and `--failure-threshold` can be
+changed on the way (to carry on past a failure you've looked at). `--dry-run`
+prints the plan and does nothing else, with no sign-in, no Google calls, and no
+change to any file.
+
+It ends with a summary, whatever happened:
+
+```
+Rollout 1.5.0-20261024T101500Z: CafeMenu 1.5.0 PAUSED
+  Done (2): toe, b1
+  Rolled back (1):
+    s1: The smoke test failed on https://s1.web.app. … s1 was rolled back: … runs CafeMenu 1.4.2 again.
+  Skipped (2):
+    pin: pinned to 1.3, and 1.5.0 is a release of 1.5
+    s4: runs 1.6.0, which is newer: a cafe never moves down
+  Not reached (2): s2, s3
+
+  ! The rollout is paused: 1 of 3 cafes in stable batch 1 failed, which is more than 20%.
+  deployer rollout --resume 1.5.0-20261024T101500Z --cafes cafes.json
+```
+
+**The cafe list** is a JSON file standing in for the platform's `cafes`
+collection (see the `CafeDirectory` interface in `src/cafe-directory.mjs`).
+Paths are relative to the file:
+
+```jsonc
+{
+  "cafes": [
+    {
+      "id": "toe",
+      "name": "TOE", // default: the id
+      "projectId": "toe-cafe-1a2b",
+      "site": "toe-cafe",
+      "settingsFile": "toe/settings.json", // CafeSettings JSON, as for deploy --settings
+      "logoFile": "toe/logo.png", // optional
+      "canary": true, // optional
+      "status": "live", // default; only live cafes get releases
+      "release": {
+        "channel": "beta", // "stable" (default) or "beta"
+        "pinned": null, // or a minor line: "1.4"
+        "current": "1.4.2", // null for a cafe with no release yet
+        "previous": "1.4.1",
+      },
+    },
+  ],
+}
+```
+
+The rollout writes `release.current` and `previous` back after each cafe, so
+the next rollout's "never moves down" sees where everything is. A cafe that was
+rolled back keeps the `current` it had.
+
+**The rollout state** is `--rollouts <file>` (default `cafemenu-rollouts.json`),
+saved before and after every cafe, so a crash is resumed the same way as a
+pause. Each rollout has its `status` (`running`, `paused`, `completed`) and, per
+cafe, its wave, `status` (`pending`, `running`, `done`, `rolled-back`,
+`failed`, `skipped`), the reason, and the number of attempts. The
+`RolloutStore` interface is in `src/rollout-store.mjs`. All the cafes share the
+deploy log, `--log`. `--package` and `--sha256` apply to every cafe: with a
+local package, nothing is downloaded per cafe.
+
+TODO(#28): the platform has no backend yet, so the list, the state and the
+pause live in local files. Its versions will read the console's `cafes`
+collection, keep each rollout as a `rollouts/{id}` document for the admin page
+to list, pause and resume, and give each cafe's deploy a `deployments/{id}`
+with `trigger: "rollout"`.
 
 ### The deploy log
 
@@ -558,6 +784,12 @@ Each item is a `// UNVERIFIED: run in spike #N` comment above the call in
   come back the way it was sent.
 - Confirm `/__/firebase/init.json` on the new site serves the linked web
   app's config.
+- The smoke test against the real `<site>.web.app`: that the headers of
+  firebase.json's `**` rule arrive on every page with the values written there
+  (compared ignoring case and spacing), that `/order`, `/staff`, `/admin` and
+  `/offline` answer 200 with no redirect, that an unknown address answers 404
+  (`404.html`), and how long a release takes to be served everywhere (the
+  retries allow 75 seconds). A wrong guess here rolls back a good release.
 - Hosting `versions.get` (a rollback reads the old version's `config`).
 - `sync-branding` and `rollback` make a version from another version's file
   list, uploading only the cafe's files or nothing at all: check that
@@ -584,13 +816,16 @@ Each item is a `// UNVERIFIED: run in spike #N` comment above the call in
 
 ## Not in this draft
 
-- **The smoke test:** a hook only, filled in by
-  [#22](https://github.com/shreyashp47/cafemenu/issues/22).
 - **Migrating down.** Migrations only go forward; a rollback over one is
   refused by the schema floor instead.
+- **Turning the smoke test off or tuning it** from the command line: it always
+  runs, six tries over 75 seconds.
 - **The platform-Firestore deploy log** for the console (Phase 3).
 - **Choosing a version** by channel and minor line from the releases API:
-  `deploy --version` takes an exact version.
+  `deploy --version` and `rollout --version` take an exact version; `rollout`
+  chooses the cafes, not the version.
+- **Parallel deploys in a batch.** A rollout deploys one cafe at a time, so it
+  can stop before the next one.
 - **Index `fieldOverrides`:** reported and skipped.
 - **Rewrites to Cloud Functions or Cloud Run:** a cafe site is static, so
   only rewrites to a path are supported.
@@ -616,11 +851,21 @@ a stateful model of the documented API behaviour: a second run sees what the
 first one did, and every request is recorded. They cover the token exchange,
 idempotent re-runs, a taken site name, Hosting uploading only the hashes it
 asks for, dry runs making no write calls, and `check` reporting a missing
-permission. `tests/release.test.mjs` covers the release commands with packages
+permission. `tests/smoke-check.test.mjs`, `smoke-cli.test.mjs` and
+`smoke-test.test.mjs` cover the [smoke test](#smoke-test-is-the-cafe-up): every
+way a check fails, a retry that then passes, the command's exit codes, and a
+failed smoke test rolling a deploy back; the fake Google serves
+`<site>.web.app` from the live release for them (`tests/helpers/fake-site.mjs`).
+`tests/release.test.mjs` covers the release commands with packages
 built by `scripts/release/package.mjs`: a deploy end to end, a tampered
 package, the schema guards, rollback, `sync-branding` touching only the
 cafe's files, and dry runs writing neither Google nor the deploy log.
-`tests/migrations.test.mjs` covers the runner and 0002: order, a refused
+`tests/rollout-plan.test.mjs` and `tests/rollout.test.mjs` cover
+[`rollout`](#rollout-a-release-to-every-cafe-that-should-get-it): channel and
+pin selection, wave order, a canary failure stopping everything, a batch over
+the threshold pausing, resuming, and a dry run deploying nothing, with a
+scripted deploy per cafe, and once through the real `deploy --version` on the
+fake Google. `tests/migrations.test.mjs` covers the runner and 0002: order, a refused
 `from`, a run cut off halfway and carried on, a dry run, documents created
 mid-run, and a cafe already in minor units. `tests/emulator/migrate.test.mjs`
 runs 0002 on the Firestore emulator over TOE's settings, a menu and a month of
@@ -633,18 +878,25 @@ runs the real one.
 
 ```
 bin/deployer.mjs        the CLI entry point
+bin/smoke.mjs           the smoke test as a command
 src/cli.mjs             argument parsing, exit codes
 src/auth.mjs            service-account key → JWT → access token
 src/http.mjs            the one place requests are made (token, dry run, errors, retries, operations)
 src/apis/*.mjs          one file per Google API, one function per call, each with its reference URL
-src/commands/*.mjs      check, provision, deploy, migrate, rollback, owner, and
-                        release.mjs: deploy --version and sync-branding
+src/commands/*.mjs      check, provision, deploy, migrate, rollback, owner,
+                        release.mjs: deploy --version and sync-branding, and
+                        rollout.mjs: waves, pause and resume
 src/release-package.mjs fetch a release package and verify it (scripts/release/verify.mjs)
 src/cafe-files.mjs      a cafe's site.json, manifest, logo and icons (@cafemenu/shared)
 src/deploy-log.mjs      the DeployLog interface and its JSON-file implementation
+src/cafe-directory.mjs  the CafeDirectory interface and the cafes.json implementation
+src/rollout-plan.mjs    who gets a version and in what order; the pause threshold
+src/rollout-store.mjs   the RolloutStore interface and its JSON-file implementation
 src/migrations.mjs      config/meta's schema version; loading, chaining and running migrations
 src/migration-db.mjs    what a migration's up(db) gets: pages, commits, progress in config/meta
-src/smoke-test.mjs      the smoke-test hook (#22)
+src/smoke-check.mjs     the smoke test's checks, retries and JSON result (fetch only)
+src/smoke-test.mjs      the deploy's smoke step, and the rollback after a failure
+src/smoke-cli.mjs      the `smoke` command (bin/smoke.mjs)
 src/hosting-files.mjs   gzip + SHA-256 of the build, firebase.json → ServingConfig
 src/permissions.mjs     what each command needs, and why
 ```

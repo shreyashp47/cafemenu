@@ -12,8 +12,8 @@ rules_version = '2';
 //
 //   an owner      reads their own cafes and those cafes' deployments, edits
 //                 their cafe's settings and release choice, creates new
-//                 cafes, and gives a draft cafe its logo and starting menu,
-//                 all only with a verified email
+//                 cafes, and gives a draft cafe its logo and starting menu
+//                 (a live cafe's logo too), all only with a verified email
 //   the admin     (custom claim admin: true) reads everything
 //   the backend   writes everything else: release records, deployments, a
 //                 cafe's status, plan and the version it runs. It uses the platform
@@ -215,10 +215,13 @@ service cloud.firestore {
       //
       // Kept here until provisioning (#28) copies them into the owner's own
       // project: the logo into the site as /logo.png and its icons, the menu
-      // into its /menu. Only while the cafe is a draft; after that, the cafe's
-      // own dashboard is where they change. The rules cannot look inside every
-      // menu row or decode a PNG, so the deployer checks both again before
-      // using them, as it does the settings.
+      // into its /menu. The menu only while the cafe is a draft; after that,
+      // the cafe's own dashboard is where it changes. The logo also while the
+      // cafe is live, because the owner area's Branding section replaces it
+      // here and asks the backend to put it on the site (`deployer
+      // sync-branding --logo`). The rules cannot look inside every menu row
+      // or decode a PNG, so the deployer checks both again before using
+      // them, as it does the settings.
       match /setup/{part} {
         function cafe() {
           return get(/databases/$(database)/documents/cafes/$(cafeId)).data;
@@ -228,6 +231,15 @@ service cloud.firestore {
           return verified()
             && cafe().ownerUid == request.auth.uid
             && cafe().status == 'draft';
+        }
+
+        // The logo may be replaced while the cafe is live as well: its site
+        // is then updated by the backend. Not while it is being set up, has
+        // failed, was disconnected or is suspended: nothing can deploy it.
+        function ownLogoEditable() {
+          return verified()
+            && cafe().ownerUid == request.auth.uid
+            && (cafe().status == 'draft' || cafe().status == 'live');
         }
 
         // A PNG fits a 1 MiB document: SETUP_LOGO_MAX_BYTES in model.ts.
@@ -263,13 +275,12 @@ service cloud.firestore {
         allow get: if isAdmin()
           || (signedIn() && cafe().ownerUid == request.auth.uid);
         allow list: if isAdmin();
-        allow create, update: if ownDraft()
-          && request.resource.data.updatedAt == request.time
-          && ((part == 'logo' && isLogo(request.resource.data))
-            || (part == 'menu' && isStartingMenu(request.resource.data)));
+        allow create, update: if request.resource.data.updatedAt == request.time
+          && ((part == 'logo' && ownLogoEditable() && isLogo(request.resource.data))
+            || (part == 'menu' && ownDraft() && isStartingMenu(request.resource.data)));
         // An owner may drop the logo. The menu is replaced, never removed:
         // "blank" is a choice too.
-        allow delete: if ownDraft() && part == 'logo';
+        allow delete: if part == 'logo' && ownLogoEditable();
       }
     }
 

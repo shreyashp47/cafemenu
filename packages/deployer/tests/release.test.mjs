@@ -117,9 +117,14 @@ describe("deploy --version", () => {
       [...files.keys()].sort(),
       [
         ...CAFE_PATHS,
+        "/404.html",
         "/_next/static/app.js",
         "/_next/static/shared.js",
+        "/admin.html",
         "/index.html",
+        "/offline.html",
+        "/order.html",
+        "/staff.html",
         "/sw.js",
       ].sort(),
     );

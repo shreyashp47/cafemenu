@@ -13,9 +13,11 @@ import type {
   Deployment,
   PlatformUser,
   Release,
+  ReleaseChannel,
   StartingMenu,
 } from "../platform/model";
 import type { NewCafeInput, ReleaseChoice } from "../platform/validate";
+import type { ConnectionChecker } from "../setup/connection";
 
 export type Unsubscribe = () => void;
 export type Listener<T> = (value: T) => void;
@@ -126,21 +128,141 @@ export interface DeploymentRepository {
     listener: Listener<Deployment[]>,
     onError?: ErrorListener,
   ): Unsubscribe;
+  /**
+   * The latest deployments of every cafe, live, newest first, at most
+   * `limit`. Admin only: the rules refuse an owner's query that does not
+   * name their own cafe.
+   */
+  subscribeRecent(
+    limit: number,
+    listener: Listener<Deployment[]>,
+    onError?: ErrorListener,
+  ): Unsubscribe;
 }
 
 /** How many deployments a cafe's history shows. */
 export const DEPLOYMENT_HISTORY = 20;
+
+/** The record a request creates: where its progress shows up. */
+export interface DeployReceipt {
+  deploymentId: string;
+}
+
+/**
+ * What an owner asks the backend to do to their cafe (#29). The console never
+ * deploys anything itself: a request becomes a `queued` record in
+ * `deployments/{id}` (kind, version, trigger "owner"), and the backend picks
+ * it up, runs the deployer, and writes the steps and the result back, along
+ * with `release.current` and `previous`. The page watches that record through
+ * DeploymentRepository.
+ *
+ * Each call fails with a Firebase-style code before queueing anything:
+ *   permission-denied    not the owner's cafe, or an unverified account
+ *   failed-precondition  the cafe is not live, another deployment is queued
+ *                        or running, or there is nothing to roll back to
+ *   invalid-argument     not a release the cafe may be moved to
+ *   backend-pending      the backend does not take requests yet (see below)
+ */
+export interface DeployRequests {
+  /**
+   * Deploy `version` now: the Upgrade button.
+   * TODO(#28): the backend runs `deployer deploy --version <version>
+   * --project <projectId> --site <site> --settings <the cafe's settings>`.
+   * A cafe that stays on a minor line is moved to the new version's line, so
+   * the next patch of the old one does not undo it.
+   */
+  upgrade(cafe: Pick<Cafe, "id">, version: string): Promise<DeployReceipt>;
+  /**
+   * Go back to the version before the current one: the Roll back button.
+   * TODO(#28): the backend runs `deployer rollback --project <projectId>
+   * --site <site>`.
+   */
+  rollback(cafe: Pick<Cafe, "id">): Promise<DeployReceipt>;
+  /**
+   * Put the cafe's saved settings (and logo) on its site. The owner has
+   * already saved them on the cafe's record; this asks for them to go live.
+   * TODO(#28): the backend runs `deployer sync-branding --project
+   * <projectId> --site <site> --settings <the cafe's settings> --logo <the
+   * cafe's setup/logo, when there is one>`.
+   */
+  syncBranding(cafe: Pick<Cafe, "id">): Promise<DeployReceipt>;
+}
+
+/** What the admin sends to publish a release record (#30). */
+export interface PublishReleaseInput {
+  /** "1.4.2", or a pre-release such as "1.5.0-beta.1". */
+  version: string;
+  /** The channel it is published to: beta first, then stable. */
+  channel: ReleaseChannel;
+  /** Release notes, as Markdown. */
+  notes: string;
+  /** The cafe database schema the release expects. */
+  schemaVersion: number;
+}
+
+/**
+ * Where a release is on its way to every cafe that should have it. The
+ * deployer's own rollout states (packages/deployer, `rollout`): it
+ * pauses by itself when a canary or too much of a batch fails.
+ */
+export type RolloutStatus = "running" | "paused" | "completed";
+
+export type RolloutAction = "start" | "pause";
+
+/**
+ * What only the platform admin asks of the backend (#30). Like
+ * DeployRequests, these are requests: the backend writes `releases/` and
+ * the rollouts, and the page watches the result. Each call fails before
+ * changing anything with:
+ *   permission-denied  not the admin
+ *   already-exists     that version is already published
+ *   backend-pending    the backend does not take requests yet
+ */
+export interface AdminRequests {
+  /**
+   * Publish the release record `releases/{version}` for a release package
+   * that is already on GitHub, so owners can read its notes and the rollout
+   * can pick it up.
+   * TODO(#28): the backend fetches `v<version>` from GitHub, checks it with
+   * verifyPackage (scripts/release/verify.mjs) against `version`, `channel`
+   * and `schemaVersion`, and only then writes the record.
+   */
+  publishRelease(input: PublishReleaseInput): Promise<void>;
+  /**
+   * The rollout of each version that has one, live. A stub for v1.1's
+   * rollout waves (#32): until the backend keeps them, none.
+   */
+  subscribeRollouts(
+    listener: Listener<Record<string, RolloutStatus>>,
+    onError?: ErrorListener,
+  ): Unsubscribe;
+  /**
+   * Start a version's rollout, or pause it. Starting one that is paused
+   * resumes it.
+   * TODO(#32): the backend runs `deployer rollout --version <version>
+   * --cafes <the cafes collection>` to start, and `deployer rollout --resume
+   * <rollout-id>` to resume; a pause holds the next cafe back. Each rollout
+   * becomes a `rollouts/{id}` document the admin reads (add its rules then).
+   */
+  rollout(version: string, action: RolloutAction): Promise<void>;
+}
 
 /** Where the data comes from. */
 export type Backend = "demo" | "emulators" | "firebase";
 
 export interface DataBundle {
   auth: AuthRepository;
+  /** Publishing a release and its rollout: the platform admin's. */
+  admin: AdminRequests;
   cafes: CafeRepository;
   setup: SetupRepository;
   sites: SiteNameChecker;
+  /** "Check connection" in onboarding; see src/lib/setup/connection.ts. */
+  connection: ConnectionChecker;
   releases: ReleaseRepository;
   deployments: DeploymentRepository;
+  /** Upgrade, Roll back and Save branding in the owner area. */
+  deploys: DeployRequests;
   backend: Backend;
 }
 

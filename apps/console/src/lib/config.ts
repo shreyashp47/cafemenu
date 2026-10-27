@@ -26,6 +26,8 @@ export const EMULATOR_HOSTS = {
   host: "127.0.0.1",
   authPort: 9199,
   firestorePort: 8180,
+  /** apps/platform-functions' emulator, when the functions switch is on. */
+  functionsPort: 5101,
 } as const;
 
 const useEmulators = ["1", "true"].includes(
@@ -55,6 +57,21 @@ export const firebaseConfig: Record<string, string> | null = firebaseKeysFilled
     }
   : null;
 
+/**
+ * Whether Check connection, Upgrade, Roll back and Save branding call the
+ * platform's Cloud Functions (apps/platform-functions) instead of answering
+ * from a stand-in (the emulators) or saying the backend is not there yet
+ * (the real platform). Off unless set, and it changes nothing in demo mode,
+ * which always simulates its backend.
+ */
+export const useBackendFunctions = ["1", "true"].includes(
+  read(process.env.NEXT_PUBLIC_BACKEND_FUNCTIONS).toLowerCase(),
+);
+
+/** The region the platform's functions are deployed to (CAFEMENU_REGION there). */
+export const functionsRegion =
+  read(process.env.NEXT_PUBLIC_FUNCTIONS_REGION) || "us-central1";
+
 /** Emulators win over a real config, so a stray .env.local cannot leak in. */
 export const backend: Backend = useEmulators
   ? "emulators"
@@ -77,5 +94,33 @@ export const signupOpen =
     read(process.env.NEXT_PUBLIC_SIGNUP_OPEN).toLowerCase(),
   );
 
+/**
+ * The stand-in deploy account demo mode and the emulators show. A `demo-`
+ * project never exists in real Google Cloud, so adding this address to a
+ * real project fails rather than granting anyone anything.
+ */
+export const DEMO_DEPLOY_ACCOUNT =
+  "deploy@demo-cafemenu.iam.gserviceaccount.com";
+
+/**
+ * The platform's deploy service account, which each owner adds as a member
+ * of their own project (PLAN.md, the owner's step 4). It is settled with the
+ * platform project (#2) and set with NEXT_PUBLIC_DEPLOY_SERVICE_ACCOUNT;
+ * null against the real platform until then, and the setup page says so.
+ */
+export const deployAccount: string | null =
+  read(process.env.NEXT_PUBLIC_DEPLOY_SERVICE_ACCOUNT) ||
+  (backend === "firebase" ? null : DEMO_DEPLOY_ACCOUNT);
+
 /** The public repository, for "read the code" and "run it yourself" links. */
 export const REPO_URL = "https://github.com/shreyashp47/cafemenu";
+
+/**
+ * Demo mode's platform admin, so /admin has someone to sign in as. The real
+ * admin is an account the backend marks with the `admin: true` claim; the
+ * demo's only exists in this browser and sees sample cafes.
+ */
+export const DEMO_ADMIN = {
+  email: "admin@cafemenu.demo",
+  password: "demo-admin",
+} as const;

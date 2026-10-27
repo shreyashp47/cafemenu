@@ -92,6 +92,11 @@ Work that is built but not yet merged is tracked in
 - `firestore.rules`: `/invites` (public `get` by id, owner `list` and write),
   and a new account may create its own `/staff` record only in the batch that
   spends an open invite with exactly that role.
+- **`test:entry` checks any cafe** (#22): `--url` (or `BASE_URL`) for its
+  address, `--table` for a table it has, and `--sw-version` for the cache
+  version `/sw.js` must carry, so the deployer's smoke test can run it against
+  a cafe just deployed. A menu is recognised by a price in any currency, not
+  only the rupee. CI runs it as before.
 
 ### Fixed
 

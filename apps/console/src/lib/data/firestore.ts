@@ -56,8 +56,17 @@ import {
   releaseChoiceProblems,
   startingMenuProblems,
 } from "../platform/validate";
+import { useBackendFunctions } from "../config";
+import {
+  pendingConnectionChecker,
+  simulatedConnectionChecker,
+} from "../setup/connection";
+import { pendingAdminRequests } from "./admin";
+import { callableConnectionChecker, callableDeployRequests } from "./callables";
 import { pendingSiteChecker, simulatedSiteChecker } from "./checks";
+import { pendingDeployRequests } from "./deploys";
 import { getFirebase, type FirebaseHandles } from "./firebase";
+import { firebaseCall } from "./functions";
 import {
   CodedError,
   DEPLOYMENT_HISTORY,
@@ -334,22 +343,61 @@ export function firestoreDeploymentRepo(
         onError,
       );
     },
+    subscribeRecent(max, listener, onError) {
+      return whenReady(
+        connect,
+        ({ db }) =>
+          onSnapshot(
+            // No owner filter: only the admin's claim lets this through.
+            query(
+              collection(db, "deployments"),
+              orderBy("createdAt", "desc"),
+              limit(max),
+            ),
+            (snap) =>
+              listener(
+                snap.docs
+                  .map((d) => parseDeployment(d.id, d.data()))
+                  .filter((d) => d !== null),
+              ),
+            (error) => onError?.(error),
+          ),
+        onError,
+      );
+    },
   };
 }
 
 export function createFirebaseBundle(
   connect: Connect,
   backend: Exclude<Backend, "demo">,
+  { functions = useBackendFunctions }: { functions?: boolean } = {},
 ): DataBundle {
+  // With the backend's functions on, the connection check and the deploy
+  // requests are theirs; otherwise the stand-ins below.
+  const call = functions
+    ? firebaseCall(connect, backend === "emulators")
+    : null;
   return {
     auth: firebaseAuthRepo(connect),
+    // Neither the emulators nor the real platform has a backend to ask yet.
+    admin: pendingAdminRequests,
     cafes: firestoreCafeRepo(connect),
     setup: firestoreSetupRepo(connect),
     // The emulators know nothing of real Firebase's names either.
     sites:
       backend === "emulators" ? simulatedSiteChecker() : pendingSiteChecker,
+    // The emulators cannot reach Google's IAM either.
+    connection: call
+      ? callableConnectionChecker(call)
+      : backend === "emulators"
+        ? simulatedConnectionChecker(600)
+        : pendingConnectionChecker,
     releases: firestoreReleaseRepo(connect),
     deployments: firestoreDeploymentRepo(connect),
+    // Without the backend's functions, neither the emulators nor the real
+    // platform can run the deployer.
+    deploys: call ? callableDeployRequests(call) : pendingDeployRequests,
     backend,
   };
 }
