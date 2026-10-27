@@ -184,7 +184,10 @@ connection check, a setup, an upgrade, a rollback and a branding sync; the
 refusals; two workers at once never taking the same request; and the upgrade
 notice a cafe on a dropped line gets. The worker refuses to start for a pull
 request (`GITHUB_EVENT_NAME`) and without a key, and logs only a line's
-message and the ids it is about: the workflow's logs are public.
+message and the ids it is about: the workflow's logs are public. To find out
+why something failed, set the repository variable `WORKER_VERBOSE` to `1` for
+a run (it adds one line of each error, which may name a project), and remove
+it afterwards.
 
 ## What it does (Cloud Functions)
 

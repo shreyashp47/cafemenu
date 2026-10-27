@@ -248,6 +248,20 @@ describe("the program", () => {
     ]);
   });
 
+  it("adds the reason for an error, one line of it, only when asked to", () => {
+    const lines = [];
+    const log = createLog((line) => lines.push(line), { verbose: true });
+    log("error", "Request failed", {
+      request: "r1",
+      error: "Error: Permission denied on lantern-cafe-1a2b\n    at stack",
+    });
+    log("info", "Plain");
+    assert.deepEqual(lines, [
+      "[error] Request failed (request=r1) - Error: Permission denied on lantern-cafe-1a2b",
+      "[info] Plain",
+    ]);
+  });
+
   it("says that an email was not sent, without saying to whom", async () => {
     const lines = [];
     const log = createLog((line) => lines.push(line));

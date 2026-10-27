@@ -87,6 +87,8 @@ jobs:
           CONSOLE_URL: ${{ vars.CONSOLE_URL }}
           UNSUBSCRIBE_URL: ${{ vars.UNSUBSCRIBE_URL }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          # Set to 1 for a run to log why an error happened (not public-safe).
+          WORKER_VERBOSE: ${{ vars.WORKER_VERBOSE }}
         run: |
           key="$RUNNER_TEMP/platform-key.json"
           umask 077

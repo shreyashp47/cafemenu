@@ -11,7 +11,7 @@
  *
  * The repository is public and so are the logs of this workflow, so what is
  * logged is the message of each line and nothing else: ids, never an owner's
- * address or an email's text.
+ * address or an email's text. (WORKER_VERBOSE=1 adds the reason for an error.)
  *
  * Exit code: 0, whatever became of the requests (a request that fails is
  * answered on the request); 1 when the platform could not be reached or a job
@@ -26,14 +26,23 @@ import { runWorker } from "./worker.mjs";
 
 const FALLBACK_ACCOUNT = "CafeMenu's deploy account";
 
-/** Log lines for a public log: the level and the message, and the ids a line is about. */
-export function createLog(write = console.log) {
+/**
+ * Log lines for a public log: the level and the message, and the ids a line is
+ * about. `verbose` (WORKER_VERBOSE=1, for finding out why something failed)
+ * adds the first line of an error's message, which can name a project or an
+ * address: switch it on for a run, then off.
+ */
+export function createLog(write = console.log, { verbose = false } = {}) {
   const ID_FIELDS = ["request", "deployment", "cafe", "kind", "key"];
   return (level, message, fields = {}) => {
     const ids = ID_FIELDS.filter((name) => typeof fields[name] === "string")
       .map((name) => `${name}=${fields[name]}`)
       .join(" ");
-    write(`[${level}] ${message}${ids ? ` (${ids})` : ""}`);
+    const why =
+      verbose && typeof fields.error === "string"
+        ? ` - ${fields.error.split("\n")[0].slice(0, 300)}`
+        : "";
+    write(`[${level}] ${message}${ids ? ` (${ids})` : ""}${why}`);
   };
 }
 
@@ -101,7 +110,7 @@ export async function main(env = process.env, write = console.log) {
     write(`[error] ${stop}`);
     return 1;
   }
-  const log = createLog(write);
+  const log = createLog(write, { verbose: env.WORKER_VERBOSE === "1" });
   const platform = await createEnv({
     log,
     clientEmail: serviceAccountEmail(env),
