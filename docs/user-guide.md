@@ -2,7 +2,7 @@
 
 For you, the person running CafeMenu. It covers what's live, how to run and
 deploy everything yourself, how to set up a cafe, and what still needs doing.
-**Status 2026-10-27: paused for a few days.** Everything is on GitHub `main`; no session is running. Restart with section 12.
+**Status 2026-10-27: paused.** `main` has everything merged so far. The free backend and super admin are finished but not merged yet: they're on the branch `feature/backend-and-super-admin` (PRs #83 and #84). No session is running. Restart with section 12.
 
 The requirements are in [requirements.md](./requirements.md), the design in
 [PLAN.md](../PLAN.md).
@@ -195,20 +195,28 @@ fallback is `npm run seed:staff -w @cafemenu/cafe -- --email=… --role=owner`.
 
 ## 12. Restarting after a break
 
-Say **"continue"** to Claude in this project, then:
+Say **"continue"** to Claude in this project. Where things stand:
 
-1. **Backend on GitHub Actions (#77).** Its session never started, because the
-   disk was full at the time; there's room now (22 GB free). Restart it from
-   that session, or ask Claude to start it again.
-2. **Your part of #2.** Create the deploy account and its key, then the
-   `PLATFORM_SERVICE_ACCOUNT` GitHub secret (section 7), plus a test cafe
+| Item                                    | State                                                                                                                                                                                                                                                   |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Dependabot updates (#43, #44, #46, #52) | **Merged** by a cloud session                                                                                                                                                                                                                           |
+| Free backend on GitHub Actions (#77)    | Built twice, both with green CI: [#83](https://github.com/shreyashp47/cafemenu/pull/83) (cloud) and [#82](https://github.com/shreyashp47/cafemenu/pull/82) (local). Pick one and close the other.                                                       |
+| Super admin and maintenance mode (#78)  | [#84](https://github.com/shreyashp47/cafemenu/pull/84), green CI, stacked on #83. It uses the **provisional** decisions recorded in [super-admin-requirements.md](./super-admin-requirements.md) §8; change any of them before merging if you disagree. |
+| All unmerged features in one place      | Branch **`feature/backend-and-super-admin`** = #83 + #84 on top of `main`                                                                                                                                                                               |
+
+Next, in order:
+
+1. **Review and merge.** Compare #83 with #82 and merge the better one (if
+   it's #82, #84 needs rebasing onto it), then review #84's database rules
+   and merge it.
+2. **Your part of #2.** The deploy account, its key as the
+   `PLATFORM_SERVICE_ACCOUNT` GitHub secret (section 7), and a test cafe
    project in a spare Google account.
-3. **First real deployer run (#3–#7)** against that test cafe, then a real cafe
-   site live on Firebase with orders across phones.
-4. **Super admin and maintenance mode (#78),** after your six decisions in
-   [super-admin-requirements.md](./super-admin-requirements.md) §8.
-5. **Housekeeping:**
-   - Four Dependabot PRs are waiting: #43, #44, #46, #52. Merge them when CI
-     is green.
-   - Old session worktrees in `.claude/worktrees` can be cleaned up: all their
-     work is on `main`.
+3. **Turn the backend on (section 7):** the `getcafemenu` Firestore database
+   and Email/Password sign-in, then the console in real mode.
+4. **First real deployer run (#3–#7)** against the test cafe, then a real cafe
+   site live with orders across phones.
+5. **Cloud credit:** it expires on **4 November**. Good code-only uses for any
+   balance left: #38 (Hindi) and #40 (custom domain helper).
+6. **Housekeeping:** old session worktrees in `.claude/worktrees` can be
+   cleaned up; all their work is on GitHub.
