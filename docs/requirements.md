@@ -216,13 +216,13 @@ Tracked in the [Later milestone](https://github.com/shreyashp47/cafemenu/milesto
 
 ## 10. Open items
 
-| Item                                                    | Who               | Issue                                                                                                         |
-| ------------------------------------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------- |
-| Platform deploy service account and a test cafe project | You               | [#2](https://github.com/shreyashp47/cafemenu/issues/2)                                                        |
-| First real runs of the deployer against Google          | Claude, after #2  | [#3](https://github.com/shreyashp47/cafemenu/issues/3)–[#7](https://github.com/shreyashp47/cafemenu/issues/7) |
-| Backend on GitHub Actions                               | Claude            | [#77](https://github.com/shreyashp47/cafemenu/issues/77)                                                      |
-| Super admin and maintenance mode                        | Claude, after #77 | [#78](https://github.com/shreyashp47/cafemenu/issues/78)                                                      |
-| Move TOE onto the platform                              | Claude, with you  | [#23](https://github.com/shreyashp47/cafemenu/issues/23)                                                      |
-| Lawyer's review of the terms                            | You               | [#31](https://github.com/shreyashp47/cafemenu/issues/31)                                                      |
-| v1.0 test pass                                          | Both              | [#41](https://github.com/shreyashp47/cafemenu/issues/41)                                                      |
-| Six super-admin decisions                               | You               | [super-admin-requirements.md §8](./super-admin-requirements.md)                                               |
+| Item                                                    | Who                                              | Issue                                                                                                         |
+| ------------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| Platform deploy service account and a test cafe project | You                                              | [#2](https://github.com/shreyashp47/cafemenu/issues/2)                                                        |
+| First real runs of the deployer against Google          | Claude, after #2                                 | [#3](https://github.com/shreyashp47/cafemenu/issues/3)–[#7](https://github.com/shreyashp47/cafemenu/issues/7) |
+| Backend on GitHub Actions                               | Built, in review: #83 (or #82)                   | [#77](https://github.com/shreyashp47/cafemenu/issues/77)                                                      |
+| Super admin and maintenance mode                        | Built, in review: #84 (provisional §8 decisions) | [#78](https://github.com/shreyashp47/cafemenu/issues/78)                                                      |
+| Move TOE onto the platform                              | Claude, with you                                 | [#23](https://github.com/shreyashp47/cafemenu/issues/23)                                                      |
+| Lawyer's review of the terms                            | You                                              | [#31](https://github.com/shreyashp47/cafemenu/issues/31)                                                      |
+| v1.0 test pass                                          | Both                                             | [#41](https://github.com/shreyashp47/cafemenu/issues/41)                                                      |
+| Six super-admin decisions                               | You                                              | [super-admin-requirements.md §8](./super-admin-requirements.md)                                               |
