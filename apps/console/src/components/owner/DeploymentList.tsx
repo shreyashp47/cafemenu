@@ -2,6 +2,7 @@ import { formatDateTime } from "@/lib/format";
 import { fill, messages } from "@/lib/messages";
 import type { Deployment } from "@/lib/platform/model";
 import { ACTIVE_STATUSES } from "@/lib/owner/updates";
+import { StepList } from "./StepList";
 
 const { history: text } = messages.cafe.updates;
 
@@ -43,30 +44,7 @@ function Item({ d, detailed }: { d: Deployment; detailed: boolean }) {
           {fill(text.failed, { error: d.error })}
         </p>
       )}
-      {detailed && (active || bad) && d.steps.length > 0 && (
-        <ol aria-label={text.stepsLabel} className="mt-3 space-y-1 text-sm">
-          {d.steps.map((step) => (
-            <li key={step.id} className="flex gap-2">
-              <span
-                aria-hidden="true"
-                className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${
-                  step.status === "done"
-                    ? "bg-brand"
-                    : step.status === "running"
-                      ? "bg-accent"
-                      : step.status === "failed"
-                        ? "bg-danger"
-                        : "bg-line-strong"
-                }`}
-              />
-              <span className="text-text">
-                {step.label}
-                <span className="text-muted"> ({text.step[step.status]})</span>
-              </span>
-            </li>
-          ))}
-        </ol>
-      )}
+      {detailed && (active || bad) && <StepList steps={d.steps} />}
     </div>
   );
 }

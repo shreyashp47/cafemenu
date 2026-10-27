@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { deployAccount } from "@/lib/config";
+import type { RequestProgress } from "@/lib/data/types";
 import { fill, messages, problemText } from "@/lib/messages";
 import { isProjectId } from "@/lib/platform/validate";
 import type { ConnectionResult } from "@/lib/setup/connection";
@@ -18,6 +19,7 @@ import {
 import { Button, TextButton } from "../Button";
 import { CopyButton } from "../CopyButton";
 import { Words } from "./Words";
+import { StepList } from "../owner/StepList";
 import { StageHeading } from "../StageHeading";
 import { Field, controlClass, controlProps } from "../form/Field";
 import { Card } from "./Card";
@@ -33,6 +35,8 @@ const { access: text } = messages.setup;
 export function GiveAccess({
   state,
   demo,
+  slow = false,
+  progress = null,
   focus,
   onProjectId,
   onCheck,
@@ -40,6 +44,10 @@ export function GiveAccess({
 }: {
   state: WizardState;
   demo: boolean;
+  /** The answer takes minutes, not seconds: say so while it is awaited. */
+  slow?: boolean;
+  /** How far the backend has got with the check, when it says. */
+  progress?: RequestProgress | null;
   focus: boolean;
   onProjectId: (value: string) => void;
   onCheck: () => void;
@@ -172,6 +180,21 @@ export function GiveAccess({
           {checking ? text.checking : text.check}
         </Button>
         <div aria-live="polite">
+          {checking && slow && (
+            <div className="border-line bg-sunk rounded-md border p-3">
+              <p className="text-text">
+                <Words
+                  text={
+                    progress?.status === "running" ? text.working : text.waiting
+                  }
+                />
+              </p>
+              {progress?.status === "running" && progress.detail && (
+                <p className="text-muted mt-1 text-sm">{progress.detail}</p>
+              )}
+              {progress && <StepList steps={progress.steps} />}
+            </div>
+          )}
           {answer.status === "answered" && (
             <CheckAnswer
               result={answer.result}

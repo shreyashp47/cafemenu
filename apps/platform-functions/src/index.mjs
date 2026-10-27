@@ -1,5 +1,7 @@
 /**
- * The platform project's Cloud Functions (2nd gen).
+ * The platform project's Cloud Functions (2nd gen): the Blaze way to run the
+ * backend. The free way is the worker (worker-main.mjs, on GitHub Actions),
+ * which calls the same handlers from the console's requests.
  *
  * Callables, for the console (apps/console/src/lib/data/callables.ts):
  *

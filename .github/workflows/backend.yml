@@ -1,0 +1,97 @@
+name: Backend
+
+# CafeMenu's platform backend, run for free here instead of as Cloud Functions
+# (issue #77): every five minutes, and when started by hand, the worker takes
+# the requests the console wrote to the platform's Firestore (check
+# connection, set a cafe up, upgrade, roll back, sync branding), runs the
+# deployer for each, writes the progress and result back, and sends the owner
+# emails that are due. See apps/platform-functions/README.md.
+#
+# It holds the platform service account's key, and this repository is public.
+# So, on purpose:
+#   - it runs on a schedule and by hand only: never on a push or a pull request
+#     (no trigger below runs code from a branch or a fork), and only on main;
+#   - the key is a secret of the `production` environment, and reaches one step:
+#     the one that runs the worker, after the dependencies are installed;
+#   - nothing in the logs but the worker's own lines, which name no owner and
+#     print no email.
+on:
+  schedule:
+    # GitHub's shortest interval. Runs can start a few minutes late.
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+# One run at a time: a run that is still going when the next is due makes it
+# wait (at most one waits), and is never cancelled halfway through a deploy.
+concurrency:
+  group: backend
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  worker:
+    name: process requests · send emails
+    # `workflow_dispatch` can be started on any branch; only main may use the key.
+    # Forks that copy the workflow have no key and nothing to do.
+    if: github.repository == 'shreyashp47/cafemenu' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # Holds PLATFORM_SERVICE_ACCOUNT. Set the environment to deploy from main only.
+    environment: production
+    # A deploy takes minutes, not an hour. The worker starts no new request
+    # after ten of them, so a run ends inside this.
+    timeout-minutes: 20
+
+    steps:
+      # The key's presence, without exposing it to anything else. Before the
+      # backend is set up (the secret is not there yet) the run says so and
+      # does nothing, rather than failing every five minutes.
+      - name: Is the platform key set?
+        id: key
+        env:
+          PLATFORM_SERVICE_ACCOUNT: ${{ secrets.PLATFORM_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$PLATFORM_SERVICE_ACCOUNT" ]; then
+            echo "::warning title=Backend not set up::The PLATFORM_SERVICE_ACCOUNT secret is not in the production environment, so there is nothing to run. See apps/platform-functions/README.md."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.key.outputs.present == 'true'
+        with:
+          persist-credentials: false
+
+      # firebase-admin needs Node 22, and @cafemenu/shared's TypeScript needs
+      # 22.18 or later to be imported as it is.
+      - uses: actions/setup-node@v7
+        if: steps.key.outputs.present == 'true'
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        if: steps.key.outputs.present == 'true'
+        run: npm ci --omit=dev -w @cafemenu/platform-functions --no-audit --no-fund
+
+      - name: Process requests and send emails
+        if: steps.key.outputs.present == 'true'
+        env:
+          PLATFORM_SERVICE_ACCOUNT: ${{ secrets.PLATFORM_SERVICE_ACCOUNT }}
+          # Emails: `log` (the default) sends nothing. With resend, add
+          # RESEND_API_KEY to the production environment's secrets.
+          MAIL_PROVIDER: ${{ vars.MAIL_PROVIDER }}
+          MAIL_FROM: ${{ vars.MAIL_FROM }}
+          CONSOLE_URL: ${{ vars.CONSOLE_URL }}
+          UNSUBSCRIBE_URL: ${{ vars.UNSUBSCRIBE_URL }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          # Set to 1 for a run to log why an error happened (not public-safe).
+          WORKER_VERBOSE: ${{ vars.WORKER_VERBOSE }}
+        run: |
+          key="$RUNNER_TEMP/platform-key.json"
+          umask 077
+          printf '%s' "$PLATFORM_SERVICE_ACCOUNT" > "$key"
+          trap 'rm -f "$key"' EXIT
+          GOOGLE_APPLICATION_CREDENTIALS="$key" npm run worker -w @cafemenu/platform-functions

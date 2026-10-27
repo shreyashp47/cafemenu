@@ -6,11 +6,15 @@
 
 import { parseCafeSettings } from "@cafemenu/shared";
 import {
+  ADMIN_REQUEST_KINDS,
   DEPLOYMENT_KINDS,
   DEPLOYMENT_STATUSES,
   DEPLOYMENT_TRIGGERS,
+  REQUEST_KINDS,
+  REQUEST_STATUSES,
   STARTING_MENU_SOURCES,
   STEP_STATUSES,
+  type BackendRequest,
   type Cafe,
   type CafeRelease,
   type Deployment,
@@ -176,6 +180,48 @@ export function parseDeployment(id: string, data: unknown): Deployment | null {
     trigger: data.trigger,
     steps,
     error: stringOrNull(data.error),
+    createdAt,
+    finishedAt: toMillis(data.finishedAt),
+  };
+}
+
+/**
+ * A request, with whatever answer the backend has written onto it. `now` is
+ * what a just-written request's pending server time reads as (see toMillis).
+ */
+export function parseRequest(
+  id: string,
+  data: unknown,
+  now: number = Date.now(),
+): BackendRequest | null {
+  if (!isPlainObject(data)) return null;
+  const kinds: readonly string[] = [...REQUEST_KINDS, ...ADMIN_REQUEST_KINDS];
+  if (
+    typeof data.ownerUid !== "string" ||
+    typeof data.kind !== "string" ||
+    !kinds.includes(data.kind) ||
+    !oneOf(REQUEST_STATUSES, data.status)
+  ) {
+    return null;
+  }
+  const createdAt = toMillis(data.createdAt, now);
+  if (createdAt === null) return null;
+  return {
+    id,
+    cafeId: stringOrNull(data.cafeId),
+    ownerUid: data.ownerUid,
+    kind: data.kind as BackendRequest["kind"],
+    status: data.status,
+    steps: Array.isArray(data.steps)
+      ? data.steps
+          .map(parseStep)
+          .filter((step): step is DeploymentStep => step !== null)
+      : [],
+    detail: stringOrNull(data.detail),
+    result: data.result ?? null,
+    error: stringOrNull(data.error),
+    errorCode: stringOrNull(data.errorCode),
+    deploymentId: stringOrNull(data.deploymentId),
     createdAt,
     finishedAt: toMillis(data.finishedAt),
   };

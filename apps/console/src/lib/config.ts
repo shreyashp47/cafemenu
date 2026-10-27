@@ -58,15 +58,35 @@ export const firebaseConfig: Record<string, string> | null = firebaseKeysFilled
   : null;
 
 /**
- * Whether Check connection, Upgrade, Roll back and Save branding call the
- * platform's Cloud Functions (apps/platform-functions) instead of answering
- * from a stand-in (the emulators) or saying the backend is not there yet
- * (the real platform). Off unless set, and it changes nothing in demo mode,
- * which always simulates its backend.
+ * How the console reaches the platform's backend, for Check connection,
+ * Upgrade, Roll back and Save branding:
+ *
+ *   requests   writes a `requests/{id}` and watches it. A worker on GitHub
+ *              Actions answers within minutes (apps/platform-functions): the
+ *              free way, and the one to use. NEXT_PUBLIC_BACKEND=requests
+ *   functions  calls the platform's Cloud Functions, which answer at once but
+ *              need the Blaze plan. NEXT_PUBLIC_BACKEND=functions (or the
+ *              older NEXT_PUBLIC_BACKEND_FUNCTIONS=1)
+ *   none       the stand-ins (the emulators) or "not switched on yet" (the
+ *              real platform). The default; it changes nothing in demo mode,
+ *              which always simulates its backend.
  */
-export const useBackendFunctions = ["1", "true"].includes(
-  read(process.env.NEXT_PUBLIC_BACKEND_FUNCTIONS).toLowerCase(),
-);
+export type BackendMode = "none" | "requests" | "functions";
+
+const backendSetting = read(process.env.NEXT_PUBLIC_BACKEND).toLowerCase();
+
+export const backendMode: BackendMode =
+  backendSetting === "requests"
+    ? "requests"
+    : backendSetting === "functions" ||
+        ["1", "true"].includes(
+          read(process.env.NEXT_PUBLIC_BACKEND_FUNCTIONS).toLowerCase(),
+        )
+      ? "functions"
+      : "none";
+
+/** Whether the callable Cloud Functions are used: the Blaze option. */
+export const useBackendFunctions = backendMode === "functions";
 
 /** The region the platform's functions are deployed to (CAFEMENU_REGION there). */
 export const functionsRegion =

@@ -14,8 +14,9 @@
 import { newCafeSettings, type CafeSettings } from "@cafemenu/shared";
 import { applyActionCode } from "firebase/auth";
 import { setLogLevel } from "firebase/firestore";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type {
+  BackendRequest,
   Cafe,
   Deployment,
   PlatformUser,
@@ -28,7 +29,12 @@ import {
   type FirebaseTarget,
 } from "../firebase";
 import { createFirebaseBundle } from "../firestore";
-import type { DataBundle, Listener, Unsubscribe } from "../types";
+import type {
+  DataBundle,
+  Listener,
+  RequestProgress,
+  Unsubscribe,
+} from "../types";
 
 const PROJECT = process.env.FIRESTORE_EMULATOR_PROJECT ?? "demo-cafemenu";
 const [fsHost, fsPort] = (process.env.FIRESTORE_EMULATOR_HOST ?? "").split(":");
@@ -364,6 +370,172 @@ describe.runIf(PROJECT.startsWith("demo-"))("Firebase adapters", () => {
         steps: [{ id: "rules", label: "Deploy the rules", status: "running" }],
       },
     ]);
+  });
+
+  it("asks the backend through requests, and watches the worker answer", async () => {
+    const asking = createFirebaseBundle(() => apps[0], "emulators", {
+      mode: "requests",
+    });
+    // One live view of the cafe's requests, as the owner area keeps. Nothing
+    // is written until its first answer is in: a write that lands while the
+    // emulator is still setting a listener up is sometimes never reported.
+    let latest: BackendRequest[] = [];
+    const waiting = new Set<() => void>();
+    let ready!: () => void;
+    const first = new Promise<void>((resolve) => (ready = resolve));
+    const stopWatching = asking.requests.subscribeForCafe(cafe, (list) => {
+      latest = list;
+      ready();
+      waiting.forEach((check) => check());
+    });
+    await first;
+    const open = (match: (r: BackendRequest) => boolean) =>
+      new Promise<BackendRequest>((resolve) => {
+        const check = () => {
+          const found = latest.find(match);
+          if (!found) return;
+          waiting.delete(check);
+          resolve(found);
+        };
+        waiting.add(check);
+        check();
+      });
+    /** What the worker does to a request: only its fields, as the service account. */
+    const answer = async (id: string, fields: Record<string, unknown>) => {
+      const mask = Object.keys(fields)
+        .map((k) => `updateMask.fieldPaths=${k}`)
+        .join("&");
+      const res = await fetch(
+        `${FS}/v1/projects/${PROJECT}/databases/(default)/documents/requests/${id}?${mask}`,
+        { method: "PATCH", headers: ADMIN, body: JSON.stringify({ fields }) },
+      );
+      if (!res.ok) throw new Error(`answer ${id}: ${await res.text()}`);
+    };
+    const step = (id: string, label: string, status: string) => ({
+      mapValue: {
+        fields: { id: str(id), label: str(label), status: str(status) },
+      },
+    });
+
+    // Upgrade asks and returns at once: the worker answers minutes later.
+    const receipt = await asking.deploys.syncBranding(cafe);
+    expect(receipt.requestId).toBeTruthy();
+    const queued = await open((r) => r.id === receipt.requestId);
+    expect(queued).toMatchObject({
+      kind: "sync-branding",
+      status: "queued",
+      cafeId: cafe.id,
+      ownerUid: cafe.ownerUid,
+      steps: [],
+    });
+    const progressed = open(
+      (r) => r.id === receipt.requestId && r.status === "running",
+    );
+    await answer(receipt.requestId!, {
+      status: str("running"),
+      detail: str("Putting your settings on the site"),
+      steps: {
+        arrayValue: { values: [step("settings", "Cafe settings", "running")] },
+      },
+    });
+    expect(await progressed).toMatchObject({
+      detail: "Putting your settings on the site",
+      steps: [{ id: "settings", status: "running" }],
+    });
+
+    // A check waits for the worker and reports how it is going.
+    const seen: RequestProgress[] = [];
+    const checking = asking.connection.check(
+      { id: cafe.id, projectId: "alices-cafe-1a2b" },
+      { onProgress: (p) => seen.push(p) },
+    );
+    const check = await open((r) => r.kind === "check");
+    expect(check).toMatchObject({ status: "queued" });
+    // The wait has its first answer (the queued request) before the worker's.
+    await vi.waitFor(() => expect(seen.length).toBeGreaterThan(0));
+    await answer(check.id, {
+      status: str("running"),
+      steps: {
+        arrayValue: { values: [step("check", "Check access", "running")] },
+      },
+    });
+    await answer(check.id, {
+      status: str("done"),
+      result: {
+        mapValue: {
+          fields: {
+            status: str("missing"),
+            missing: {
+              arrayValue: {
+                values: [
+                  {
+                    mapValue: {
+                      fields: {
+                        permission: str("datastore.databases.create"),
+                        why: str("create the Firestore database"),
+                        neededBy: {
+                          arrayValue: { values: [str("provision")] },
+                        },
+                      },
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        },
+      },
+    });
+    expect(await checking).toEqual({
+      status: "missing",
+      missing: [
+        {
+          permission: "datastore.databases.create",
+          why: "create the Firestore database",
+          neededBy: ["provision"],
+        },
+      ],
+    });
+    expect(seen.at(-1)?.status).toBe("done");
+
+    // A request the worker refuses fails the wait with its code and words.
+    const heard: RequestProgress[] = [];
+    const refused = asking.connection.check(
+      { id: cafe.id, projectId: "alices-cafe-1a2b" },
+      { onProgress: (p) => heard.push(p) },
+    );
+    const second = await open((r) => r.kind === "check" && r.id !== check.id);
+    await vi.waitFor(() => expect(heard.length).toBeGreaterThan(0));
+    await answer(second.id, {
+      status: str("failed"),
+      error: str("This isn't your cafe."),
+      errorCode: str("permission-denied"),
+    });
+    await expect(refused).rejects.toMatchObject({
+      code: "permission-denied",
+      message: "This isn't your cafe.",
+    });
+    stopWatching();
+  });
+
+  it("refuses another owner's requests, at the rules, through the same code", async () => {
+    const carl = await owner("carl", "carl@owner.test");
+    apps.push(carl.handles);
+    const asking = createFirebaseBundle(() => carl.handles, "emulators", {
+      mode: "requests",
+    });
+    await expect(asking.deploys.rollback(cafe)).rejects.toMatchObject({
+      code: "permission-denied",
+    });
+    await expect(
+      asking.connection.check({ id: cafe.id, projectId: "alices-cafe-1a2b" }),
+    ).rejects.toMatchObject({ code: "permission-denied" });
+    await expect(
+      next(
+        (l, e) => asking.requests.subscribeForCafe(cafe, l, e),
+        () => true,
+      ),
+    ).rejects.toMatchObject({ code: "permission-denied" });
   });
 
   it("does not let another owner see or touch the cafe", async () => {

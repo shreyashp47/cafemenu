@@ -5,9 +5,10 @@ import {
   parseCafe,
   parseDeployment,
   parseRelease,
+  parseRequest,
   toMillis,
 } from "../parse";
-import { newCafeRecord } from "../records";
+import { newCafeRecord, newRequestRecord } from "../records";
 
 const stamp = (ms: number) => ({ toMillis: () => ms });
 
@@ -201,5 +202,103 @@ describe("compareVersionsDesc", () => {
       "1.9.3",
       "1.2.0",
     ]);
+  });
+});
+
+describe("parseRequest", () => {
+  const base = {
+    cafeId: "cafe1",
+    ownerUid: "owner1",
+    by: "owner1",
+    kind: "deploy",
+    params: { version: "1.2.0" },
+    status: "queued",
+    createdAt: 1000,
+  };
+
+  it("reads a request as the console wrote it, before the backend has answered", () => {
+    expect(parseRequest("r1", base)).toEqual({
+      id: "r1",
+      cafeId: "cafe1",
+      ownerUid: "owner1",
+      kind: "deploy",
+      status: "queued",
+      steps: [],
+      detail: null,
+      result: null,
+      error: null,
+      errorCode: null,
+      deploymentId: null,
+      createdAt: 1000,
+      finishedAt: null,
+    });
+  });
+
+  it("reads the backend's answer, and drops steps that aren't steps", () => {
+    const parsed = parseRequest("r1", {
+      ...base,
+      status: "failed",
+      steps: [
+        { id: "rules", label: "Rules", status: "failed" },
+        { id: "x", status: "nonsense" },
+        "junk",
+      ],
+      detail: "now",
+      result: { deploymentId: "d1", status: "failed" },
+      error: "No.",
+      errorCode: "failed-precondition",
+      deploymentId: "d1",
+      finishedAt: 2000,
+    });
+    expect(parsed).toMatchObject({
+      status: "failed",
+      steps: [{ id: "rules", label: "Rules", status: "failed" }],
+      detail: "now",
+      result: { deploymentId: "d1", status: "failed" },
+      error: "No.",
+      errorCode: "failed-precondition",
+      deploymentId: "d1",
+      finishedAt: 2000,
+    });
+  });
+
+  it("takes the admin's requests, which belong to no cafe", () => {
+    expect(
+      parseRequest("r2", { ...base, kind: "publish", cafeId: null }),
+    ).toMatchObject({ kind: "publish", cafeId: null });
+  });
+
+  it("estimates a time the server hasn't given yet, and drops what isn't a request", () => {
+    expect(
+      parseRequest("r1", { ...base, createdAt: null }, 5000),
+    ).toMatchObject({ createdAt: 5000 });
+    expect(parseRequest("r1", { ...base, kind: "format-disk" })).toBeNull();
+    expect(parseRequest("r1", { ...base, status: "maybe" })).toBeNull();
+    expect(parseRequest("r1", { ...base, ownerUid: 1 })).toBeNull();
+    expect(parseRequest("r1", null)).toBeNull();
+  });
+});
+
+describe("newRequestRecord", () => {
+  it("is exactly what the rules allow a console to write", () => {
+    expect(
+      newRequestRecord(
+        { uid: "owner1" },
+        "cafe1",
+        "check",
+        {
+          projectId: "lantern-cafe-1a2b",
+        },
+        "now",
+      ),
+    ).toEqual({
+      cafeId: "cafe1",
+      ownerUid: "owner1",
+      by: "owner1",
+      kind: "check",
+      params: { projectId: "lantern-cafe-1a2b" },
+      status: "queued",
+      createdAt: "now",
+    });
   });
 });

@@ -3,7 +3,12 @@
 import { useEffect, useState } from "react";
 import type { DataBundle } from "@/lib/data/types";
 import { fill, messages } from "@/lib/messages";
-import type { Cafe, Deployment, Release } from "@/lib/platform/model";
+import type {
+  BackendRequest,
+  Cafe,
+  Deployment,
+  Release,
+} from "@/lib/platform/model";
 import { supportedLines, supportView } from "@/lib/owner/support";
 import { requestState } from "@/lib/owner/updates";
 import { NOTICE_DAYS } from "@cafemenu/shared/support-window";
@@ -27,11 +32,14 @@ export function UpdatesPanel({
   data,
   cafe,
   deployments,
+  requests = [],
   now,
 }: {
   data: DataBundle;
   cafe: Cafe;
   deployments: readonly Deployment[];
+  /** What the owner has asked and the backend has not finished. */
+  requests?: readonly BackendRequest[];
   now?: number;
 }) {
   const [releases, setReleases] = useState<Release[] | null>(null);
@@ -94,7 +102,7 @@ export function UpdatesPanel({
         data={data}
         cafe={cafe}
         releases={releases}
-        state={requestState(cafe, deployments)}
+        state={requestState(cafe, deployments, requests)}
       />
       <DeploymentList deployments={deployments} />
     </FormSection>

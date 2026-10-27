@@ -2,7 +2,7 @@
   "name": "@cafemenu/platform-functions",
   "version": "0.1.0",
   "private": true,
-  "description": "The platform project's backend: Cloud Functions that set cafes up and run their deploys, rollbacks and branding syncs with @cafemenu/deployer.",
+  "description": "The platform project's backend: sets cafes up and runs their deploys, rollbacks and branding syncs with @cafemenu/deployer, as a worker on GitHub Actions (free) or as Cloud Functions (Blaze).",
   "license": "MIT",
   "type": "module",
   "main": "src/index.mjs",
@@ -12,6 +12,8 @@
   "scripts": {
     "test": "node --test",
     "test:emulator": "node scripts/copy-rules.mjs && npx --yes firebase-tools emulators:exec --config firebase.emulators.json --only auth,firestore,functions --project demo-cafemenu \"node --test tests/emulator/*.emulator.mjs\"",
+    "test:worker": "node scripts/copy-rules.mjs && npx --yes firebase-tools emulators:exec --config firebase.emulators.json --only auth,firestore --project demo-cafemenu \"node --test tests/worker/*.emulator.mjs\"",
+    "worker": "node src/worker-main.mjs",
     "emulators": "node scripts/copy-rules.mjs && npx --yes firebase-tools emulators:start --config firebase.emulators.json --only auth,firestore,functions --project demo-cafemenu",
     "stage": "node scripts/stage.mjs",
     "deploy": "node scripts/stage.mjs && npx --yes firebase-tools deploy --only functions",

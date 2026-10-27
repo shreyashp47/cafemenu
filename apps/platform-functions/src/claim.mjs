@@ -3,6 +3,9 @@
  * Firestore trigger, which Cloud Functions delivers at least once and retries
  * after a failure, so two invocations can meet. The one that holds the lease
  * (renewed while it works) runs; the other waits or goes away.
+ *
+ * The same rules claim a request document (requests.mjs), with its own
+ * `finished` statuses.
  */
 
 export const LEASE_MS = 2 * 60_000;
@@ -25,10 +28,16 @@ export const FINISHED = ["succeeded", "failed", "rolled-back"];
  */
 export function decideClaim(
   deployment,
-  { by, now, leaseMs = LEASE_MS, maxAttempts = MAX_ATTEMPTS },
+  {
+    by,
+    now,
+    leaseMs = LEASE_MS,
+    maxAttempts = MAX_ATTEMPTS,
+    finished = FINISHED,
+  },
 ) {
   if (!deployment) return { outcome: "missing" };
-  if (FINISHED.includes(deployment.status)) return { outcome: "finished" };
+  if (finished.includes(deployment.status)) return { outcome: "finished" };
   const held = deployment.lease && deployment.lease.until > now;
   if (deployment.status === "running" && held) return { outcome: "busy" };
   const attempts = deployment.attempts ?? 0;

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { backendMode } from "@/lib/config";
 import type { DataBundle } from "@/lib/data/types";
 import { formatDate } from "@/lib/format";
 import { errorText, fill, messages } from "@/lib/messages";
@@ -76,7 +77,14 @@ export function UpgradeRollback({
     setMessage(null);
     try {
       await ask();
-      setMessage({ ok: true, text: request.sent });
+      // The backend that works on a schedule says it takes a few minutes.
+      setMessage({
+        ok: true,
+        text:
+          backendMode === "requests" && data.backend !== "demo"
+            ? request.sentSlow
+            : request.sent,
+      });
     } catch (error) {
       setMessage({ ok: false, text: errorText(error) });
     } finally {

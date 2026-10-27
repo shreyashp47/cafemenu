@@ -595,6 +595,8 @@
       },
       "check": "Check connection",
       "checking": "Checking your project…",
+      "waiting": "**This takes a few minutes.** CafeMenu checks your project at its next run, within five minutes, and the answer appears here. You can leave this page open.",
+      "working": "CafeMenu is checking your project now.",
       "saved": "Your project ID is saved, so you can leave and come back to this step.",
       "demo": "Demo mode checks nothing: any project ID connects. End one in `-noaccess` or `-missing` to see a failed check.",
       "back": "Back to creating the project",
@@ -682,6 +684,22 @@
         "site": "Your customers' address: `{site}.web.app`."
       }
     },
+    "pending": {
+      "title": {
+        "provision": "Setting your cafe up",
+        "deploy": "Upgrade on its way",
+        "rollback": "Roll back on its way",
+        "sync-branding": "Branding on its way",
+        "check": "Checking your project",
+        "publish": "Publishing",
+        "rollout": "Rolling out"
+      },
+      "waiting": "Waiting for CafeMenu's next run. **This takes a few minutes**: it starts within five minutes of your asking, and then takes a minute or two. You can leave this page; the result will be here when you come back.",
+      "late": "This is taking longer than usual. CafeMenu's updates may be paused for a while; yours will go ahead as soon as they are back, and nothing on your site has been changed yet.",
+      "working": "CafeMenu is working on it now.",
+      "failed": "It didn't go through, and nothing on your site was changed by it. {error}",
+      "failedNoReason": "It didn't go through, and nothing on your site was changed by it."
+    },
     "updates": {
       "title": "Updates",
       "lead": "CafeMenu keeps your cafe's site up to date. An update never touches your menu, orders or staff: they stay in your own project.",
@@ -744,12 +762,13 @@
         "none": "There is no earlier version to go back to yet.",
         "button": "Roll back to {version}",
         "confirm": "Roll back to {version}?",
-        "confirmText": "Your site goes back to {version} within a minute or two.",
+        "confirmText": "Your site goes back to {version} within a few minutes.",
         "yes": "Yes, roll back",
         "cancel": "Cancel"
       },
       "request": {
         "sent": "Asked. Progress is just below.",
+        "sentSlow": "Asked. This takes a few minutes: progress is just below.",
         "busy": "An update is already on its way. You can ask for another when it has finished.",
         "notLive": "Updates open once your cafe is live."
       },
@@ -789,7 +808,7 @@
     },
     "branding": {
       "title": "Branding and locale",
-      "lead": "How your cafe looks and reads to customers. Saving puts the change on your site within a minute or two; your menu and orders aren't touched.",
+      "lead": "How your cafe looks and reads to customers. Saving puts the change on your site within a few minutes; your menu and orders aren't touched.",
       "closed": "You can change these once your cafe is live.",
       "name": {
         "label": "Cafe name"
@@ -1179,6 +1198,10 @@
     "failed-precondition": "That can't be done right now: another update may be running, or the cafe isn't live. Try again in a minute.",
     "invalid-argument": "That version can't be deployed to your cafe.",
     "backend-pending": "Changes from here aren't switched on yet. Nothing was changed on your site.",
+    "deadline-exceeded": "CafeMenu hasn't answered yet. It works through requests every few minutes, so wait a little and try again.",
+    "unavailable": "Google didn't answer just now. Try again in a minute.",
+    "internal": "Something went wrong on CafeMenu's side. Try again in a minute.",
+    "gave-up": "CafeMenu tried several times and could not finish. Try again in a minute.",
     "unknown": "Something went wrong. Try again."
   }
 }

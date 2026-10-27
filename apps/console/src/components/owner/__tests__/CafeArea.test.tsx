@@ -11,7 +11,7 @@ import {
   within,
 } from "@testing-library/react";
 import { newCafeSettings } from "@cafemenu/shared";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DEMO_DEPLOY_ACCOUNT } from "@/lib/config";
 import { demoBundle, demoGoLive, demoVerifyEmail } from "@/lib/data/demo";
 import { demoRun } from "@/lib/data/demo-deploys";
@@ -433,5 +433,52 @@ describe("access", () => {
       "Your site keeps running on its last release",
     );
     expect(access).toHaveTextContent("Updates and security fixes stop.");
+  });
+});
+
+describe("when the backend answers in minutes", () => {
+  const queued = (kind: string, status = "queued") => ({
+    id: "r1",
+    cafeId: "any",
+    ownerUid: "any",
+    kind,
+    status,
+    steps: [],
+    detail: null,
+    result: null,
+    error: null,
+    errorCode: null,
+    deploymentId: null,
+    createdAt: Date.now() - 60_000,
+    finishedAt: null,
+  });
+
+  it("shows the request that is waiting, and says an update is on its way until it is done", async () => {
+    await liveCafe();
+    const watch = vi
+      .spyOn(demoBundle.requests, "subscribeForCafe")
+      .mockImplementation((_cafe, listener) => {
+        listener([queued("deploy")] as never);
+        return () => {};
+      });
+    try {
+      render(<CafeArea />);
+      expect(
+        await screen.findByRole("status", { name: "Upgrade on its way" }),
+      ).toHaveTextContent("This takes a few minutes");
+      const updates = within(screen.getByRole("region", { name: "Updates" }));
+      expect(
+        updates.getByText(/An update is already on its way/),
+      ).toBeVisible();
+    } finally {
+      watch.mockRestore();
+    }
+  });
+
+  it("shows nothing about requests when there are none, as in demo mode", async () => {
+    await liveCafe();
+    render(<CafeArea />);
+    await screen.findByRole("heading", { name: "Updates" });
+    expect(screen.queryByRole("status", { name: /on its way/ })).toBeNull();
   });
 });

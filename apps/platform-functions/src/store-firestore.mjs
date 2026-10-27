@@ -13,6 +13,9 @@
  *   cafes/{id}.emails             {releaseNotices: false} once the owner unsubscribed
  *   releases/{version}            read
  *   deployments/{id}              created, claimed and updated here
+ *   requests/{id}                 written by the console; claimed, progressed
+ *                                 and finished here (requests.mjs)
+ *   state/worker                  when each periodic job last ran (worker.mjs)
  */
 import { FieldPath, FieldValue } from "firebase-admin/firestore";
 
@@ -28,6 +31,12 @@ const ms = (value) =>
 export function createFirestoreStore({ db, auth }) {
   const cafeRef = (id) => db.collection("cafes").doc(id);
   const deployments = db.collection("deployments");
+  const requests = db.collection("requests");
+  const requestOf = (snap) => {
+    if (!snap.exists) return null;
+    const data = snap.data();
+    return { ...data, id: snap.id, createdAt: ms(data.createdAt) };
+  };
   const deploymentOf = (snap) => {
     if (!snap.exists) return null;
     const data = snap.data();
@@ -187,6 +196,63 @@ export function createFirestoreStore({ db, auth }) {
         const { patch, result } = fn(deploymentOf(await tx.get(ref)));
         if (patch) tx.update(ref, patch);
         return result;
+      });
+    },
+
+    // -- requests the console wrote (requests.mjs) --------------------------------
+
+    /** The queued and running requests, oldest first, at most `limit`. */
+    async listOpenRequests(limit) {
+      const snap = await requests
+        .where("status", "in", ["queued", "running"])
+        .orderBy("createdAt", "asc")
+        .limit(limit)
+        .get();
+      return snap.docs.map(requestOf);
+    },
+
+    async getRequest(id) {
+      return requestOf(await requests.doc(id).get());
+    },
+
+    async updateRequest(id, patch) {
+      await requests.doc(id).update(patch);
+    },
+
+    /** Reads the request, lets `fn` decide ({patch, result}), writes the patch: atomically. */
+    transactRequest(id, fn) {
+      return db.runTransaction(async (tx) => {
+        const ref = requests.doc(id);
+        const { patch, result } = fn(requestOf(await tx.get(ref)));
+        if (patch) tx.update(ref, patch);
+        return result;
+      });
+    },
+
+    /** The signed-in account `uid` as the rules would see it: {emailVerified, admin}, or null if it is gone. */
+    async getAccount(uid) {
+      try {
+        const user = await auth.getUser(uid);
+        return {
+          emailVerified: user.emailVerified === true,
+          admin: user.customClaims?.admin === true,
+        };
+      } catch {
+        return null;
+      }
+    },
+
+    /**
+     * Whether this run may do the periodic job `name` now: true, and noted,
+     * when it last ran at least `everyMs` ago. Atomic, so two runs never both do it.
+     */
+    claimJob(name, now, everyMs) {
+      return db.runTransaction(async (tx) => {
+        const ref = db.collection("state").doc("worker");
+        const last = (await tx.get(ref)).data()?.[name];
+        if (typeof last === "number" && now - last < everyMs) return false;
+        tx.set(ref, { [name]: now }, { merge: true });
+        return true;
       });
     },
 

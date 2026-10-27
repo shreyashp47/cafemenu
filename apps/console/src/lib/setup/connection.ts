@@ -10,7 +10,7 @@
  * stand-in demo mode and the emulators use.
  */
 
-import { CodedError } from "../data/types";
+import { CodedError, type RequestProgress } from "../data/types";
 
 /** One permission the deploy account lacks, and what it is for. */
 export interface MissingPermission {
@@ -30,7 +30,15 @@ export type ConnectionResult =
   | { status: "missing"; missing: MissingPermission[] };
 
 export interface ConnectionChecker {
-  check(cafe: { id: string; projectId: string }): Promise<ConnectionResult>;
+  /**
+   * Resolves with the answer. A backend that answers in minutes, not
+   * seconds (the worker on GitHub Actions), reports how it is going to
+   * `onProgress` meanwhile.
+   */
+  check(
+    cafe: { id: string; projectId: string },
+    options?: { onProgress?: (progress: RequestProgress) => void },
+  ): Promise<ConnectionResult>;
 }
 
 /** What `deployer check` returns: {ok, missing: {command: [{permission, why}]}}. */

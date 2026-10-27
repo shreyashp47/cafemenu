@@ -3,8 +3,8 @@ rules_version = '2';
 // ---------------------------------------------------------------------------
 // CafeMenu platform — Firestore security rules
 //
-// The platform project's own database: cafes, releases and deployments (the
-// model is in src/lib/platform/model.ts). A cafe's menu and orders are not
+// The platform project's own database: cafes, releases, deployments and the
+// requests that ask for them (the model is in src/lib/platform/model.ts). A cafe's menu and orders are not
 // here; they live in the owner's own Firebase project, under the cafe app's
 // rules.
 //
@@ -13,12 +13,16 @@ rules_version = '2';
 //   an owner      reads their own cafes and those cafes' deployments, edits
 //                 their cafe's settings and release choice, creates new
 //                 cafes, and gives a draft cafe its logo and starting menu
-//                 (a live cafe's logo too), all only with a verified email
-//   the admin     (custom claim admin: true) reads everything
+//                 (a live cafe's logo too), and asks the backend to check the
+//                 connection, set the cafe up, upgrade, roll back or sync its
+//                 branding (a request, below), all only with a verified email
+//   the admin     (custom claim admin: true) reads everything, and may also
+//                 ask for a release to be published or rolled out
 //   the backend   writes everything else: release records, deployments, a
-//                 cafe's status, plan and the version it runs. It uses the platform
-//                 service account, which Firestore does not hold to these
-//                 rules at all.
+//                 cafe's status, plan and the version it runs, and the answer
+//                 to every request. It uses the platform service account,
+//                 which Firestore does not hold to these rules at all (the
+//                 worker on GitHub Actions: apps/platform-functions).
 //   anyone else   nothing
 //
 // Default closed: a path with no match below is refused.
@@ -77,6 +81,12 @@ service cloud.firestore {
     function isProjectIdOrNull(value) {
       return value == null
         || (value is string && value.matches('[a-z][a-z0-9-]{4,28}[a-z0-9]'));
+    }
+
+    // A release version: "1.4.2", "1.5.0-beta.1".
+    function isVersion(value) {
+      return value is string
+        && value.matches('[0-9]+[.][0-9]+[.][0-9]+(-[0-9A-Za-z.-]+)?');
     }
 
     // CafeSettings from @cafemenu/shared (packages/shared/src/settings.ts):
@@ -304,6 +314,83 @@ service cloud.firestore {
     match /deployments/{deploymentId} {
       allow get, list: if isAdmin() || owns(resource.data);
       allow create, update, delete: if false;
+    }
+
+    // -- requests ------------------------------------------------------------------
+
+    // What the console asks the backend to do, where the backend does it on a
+    // schedule instead of being called (apps/platform-functions, the worker).
+    // The caller writes the question and nothing else: who is asking, what,
+    // and about which cafe. The backend claims it, does it, and writes the
+    // answer onto the same document (status, steps, result, error), which the
+    // console watches. No client may write those, change a request, or
+    // remove one.
+    //
+    // An owner may ask only about a cafe that is theirs, and only for a kind
+    // below with the params it takes. The admin may also ask for a release to
+    // be published or rolled out, which belong to no cafe. The backend looks
+    // the asker up again before it acts, so these rules are the first lock,
+    // not the only one.
+    //
+    // ownerUid is the asker, copied so a list query can filter on it, as on
+    // /cafes and /deployments.
+
+    function isRequestParams(kind, p) {
+      return p is map
+        && (
+          (kind in ['provision', 'rollback', 'sync-branding'] && p.size() == 0)
+          || (kind == 'check'
+            && p.keys().hasOnly(['projectId'])
+            && p.keys().hasAll(['projectId'])
+            && p.projectId is string
+            && p.projectId.matches('[a-z][a-z0-9-]{4,28}[a-z0-9]'))
+          || (kind == 'deploy'
+            && p.keys().hasOnly(['version'])
+            && p.keys().hasAll(['version'])
+            && isVersion(p.version))
+          || (kind == 'publish'
+            && p.keys().hasOnly(['version', 'channel', 'notes', 'schemaVersion'])
+            && p.keys().hasAll(['version', 'channel', 'notes', 'schemaVersion'])
+            && isVersion(p.version)
+            && p.channel in ['stable', 'beta']
+            && p.notes is string && p.notes.size() <= 20000
+            && p.schemaVersion is int && p.schemaVersion >= 1)
+          || (kind == 'rollout'
+            && p.keys().hasOnly(['version', 'action'])
+            && p.keys().hasAll(['version', 'action'])
+            && isVersion(p.version)
+            && p.action in ['start', 'pause'])
+        );
+    }
+
+    match /requests/{requestId} {
+      allow get, list: if isAdmin() || owns(resource.data);
+
+      allow create: if verified()
+        && request.resource.data.keys().hasOnly(['cafeId', 'ownerUid', 'by',
+          'kind', 'params', 'status', 'createdAt'])
+        && request.resource.data.keys().hasAll(['cafeId', 'ownerUid', 'by',
+          'kind', 'params', 'status', 'createdAt'])
+        && request.resource.data.by == request.auth.uid
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.status == 'queued'
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.kind is string
+        && isRequestParams(request.resource.data.kind, request.resource.data.params)
+        && (
+          // About the caller's own cafe.
+          (request.resource.data.kind in ['provision', 'check', 'deploy',
+              'rollback', 'sync-branding']
+            && request.resource.data.cafeId is string
+            && get(/databases/$(database)/documents/cafes/$(request.resource.data.cafeId)).data.ownerUid
+              == request.auth.uid)
+          // About a release, from the admin.
+          || (request.resource.data.kind in ['publish', 'rollout']
+            && request.resource.data.cafeId == null
+            && isAdmin())
+        );
+
+      allow update, delete: if false;
     }
   }
 }

@@ -5,7 +5,7 @@ import { formatMoney, starterPrice } from "@cafemenu/shared";
 import { fromBase64, toBase64 } from "@/lib/bytes";
 import type { DataBundle } from "@/lib/data/types";
 import { errorText, fill, messages } from "@/lib/messages";
-import type { Cafe, Deployment } from "@/lib/platform/model";
+import type { BackendRequest, Cafe, Deployment } from "@/lib/platform/model";
 import {
   brandingChange,
   brandingFormOf,
@@ -67,10 +67,13 @@ export function BrandingPanel({
   data,
   cafe,
   deployments,
+  requests = [],
 }: {
   data: DataBundle;
   cafe: Cafe;
   deployments: readonly Deployment[];
+  /** What the owner has asked and the backend has not finished. */
+  requests?: readonly BackendRequest[];
 }) {
   const base = cafe.settings;
   const [form, setForm] = useState<BrandingForm>(() => brandingFormOf(base));
@@ -97,7 +100,7 @@ export function BrandingPanel({
   }, [data, cafe.id]);
 
   const live = cafe.status === "live";
-  const state = requestState(cafe, deployments);
+  const state = requestState(cafe, deployments, requests);
   const problems = brandingProblems(form);
   const change = brandingChange(base, form);
   const needsConfirm = change.currencyChanged && !confirmed;

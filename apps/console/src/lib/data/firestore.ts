@@ -56,7 +56,7 @@ import {
   releaseChoiceProblems,
   startingMenuProblems,
 } from "../platform/validate";
-import { useBackendFunctions } from "../config";
+import { backendMode, type BackendMode } from "../config";
 import {
   pendingConnectionChecker,
   simulatedConnectionChecker,
@@ -67,6 +67,14 @@ import { pendingSiteChecker, simulatedSiteChecker } from "./checks";
 import { pendingDeployRequests } from "./deploys";
 import { getFirebase, type FirebaseHandles } from "./firebase";
 import { firebaseCall } from "./functions";
+import {
+  requestConnectionChecker,
+  requestDeployRequests,
+} from "./request-backend";
+import {
+  firestoreRequestRepo,
+  firestoreRequestTransport,
+} from "./requests-firestore";
 import {
   CodedError,
   DEPLOYMENT_HISTORY,
@@ -371,13 +379,17 @@ export function firestoreDeploymentRepo(
 export function createFirebaseBundle(
   connect: Connect,
   backend: Exclude<Backend, "demo">,
-  { functions = useBackendFunctions }: { functions?: boolean } = {},
+  { mode = backendMode }: { mode?: BackendMode } = {},
 ): DataBundle {
-  // With the backend's functions on, the connection check and the deploy
-  // requests are theirs; otherwise the stand-ins below.
-  const call = functions
-    ? firebaseCall(connect, backend === "emulators")
-    : null;
+  // With the backend switched on, the connection check and the deploy
+  // requests are its: requests the worker answers in minutes (free), or the
+  // callable functions (Blaze). Otherwise the stand-ins below.
+  const call =
+    mode === "functions"
+      ? firebaseCall(connect, backend === "emulators")
+      : null;
+  const transport =
+    mode === "requests" ? firestoreRequestTransport(connect) : null;
   return {
     auth: firebaseAuthRepo(connect),
     // Neither the emulators nor the real platform has a backend to ask yet.
@@ -388,16 +400,23 @@ export function createFirebaseBundle(
     sites:
       backend === "emulators" ? simulatedSiteChecker() : pendingSiteChecker,
     // The emulators cannot reach Google's IAM either.
-    connection: call
-      ? callableConnectionChecker(call)
-      : backend === "emulators"
-        ? simulatedConnectionChecker(600)
-        : pendingConnectionChecker,
+    connection: transport
+      ? requestConnectionChecker(transport)
+      : call
+        ? callableConnectionChecker(call)
+        : backend === "emulators"
+          ? simulatedConnectionChecker(600)
+          : pendingConnectionChecker,
     releases: firestoreReleaseRepo(connect),
     deployments: firestoreDeploymentRepo(connect),
-    // Without the backend's functions, neither the emulators nor the real
-    // platform can run the deployer.
-    deploys: call ? callableDeployRequests(call) : pendingDeployRequests,
+    requests: firestoreRequestRepo(connect),
+    // Without the backend, neither the emulators nor the real platform can
+    // run the deployer.
+    deploys: transport
+      ? requestDeployRequests(transport)
+      : call
+        ? callableDeployRequests(call)
+        : pendingDeployRequests,
     backend,
   };
 }

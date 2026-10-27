@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
-import type { DataBundle } from "@/lib/data/types";
+import { backendMode } from "@/lib/config";
+import type { DataBundle, RequestProgress } from "@/lib/data/types";
 import { errorText } from "@/lib/messages";
 import type { Cafe } from "@/lib/platform/model";
 import {
@@ -44,17 +45,26 @@ export function SetupWizard({ data, cafe }: { data: DataBundle; cafe: Cafe }) {
     if (state.step !== first.current) setMoved(true);
   }, [state.step]);
 
+  // A backend that works through requests answers in minutes, and says how
+  // far it has got meanwhile.
+  const slow = backendMode === "requests" && data.backend !== "demo";
+  const [progress, setProgress] = useState<RequestProgress | null>(null);
+
   const saved = cafe.projectId;
   const check = useCallback(async () => {
     if (!canCheck(state)) return;
     const projectId = cleanProjectId(state.projectId);
     dispatch({ type: "check-started" });
+    setProgress(null);
     try {
       // Saved first, so it is kept even when the check cannot run yet.
       if (saved !== projectId) {
         await data.cafes.connectProject(cafe.id, projectId);
       }
-      const result = await data.connection.check({ id: cafe.id, projectId });
+      const result = await data.connection.check(
+        { id: cafe.id, projectId },
+        { onProgress: setProgress },
+      );
       dispatch({ type: "check-answered", projectId, result, at: Date.now() });
     } catch (error) {
       dispatch({ type: "check-failed", projectId, error: errorText(error) });
@@ -77,6 +87,8 @@ export function SetupWizard({ data, cafe }: { data: DataBundle; cafe: Cafe }) {
         <GiveAccess
           state={state}
           demo={data.backend !== "firebase"}
+          slow={slow}
+          progress={progress}
           focus={moved}
           onProjectId={(value) => dispatch({ type: "project-id", value })}
           onCheck={check}

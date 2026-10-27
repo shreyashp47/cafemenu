@@ -60,6 +60,7 @@ import {
   type DeploymentRepository,
   type Listener,
   type ReleaseRepository,
+  type RequestRepository,
   type SetupRepository,
 } from "./types";
 
@@ -465,6 +466,14 @@ export const demoDeploys = demoDeployRequests(ownCafe);
  */
 export const demoGoLive = (cafeId: string) => goLive(ownCafe, cafeId);
 
+/** Demo mode answers at once, so there is never a request waiting. */
+const demoRequestRepo: RequestRepository = {
+  subscribeForCafe(_cafe, listener) {
+    listener([]);
+    return () => {};
+  },
+};
+
 export const demoBundle: DataBundle = {
   auth: demoAuthRepo,
   admin: demoAdminRepo,
@@ -476,6 +485,7 @@ export const demoBundle: DataBundle = {
   connection: simulatedConnectionChecker(600),
   releases: demoReleaseRepo,
   deployments: demoDeploymentRepo,
+  requests: demoRequestRepo,
   deploys: demoDeploys,
   backend: "demo",
 };

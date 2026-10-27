@@ -2,7 +2,8 @@ name: Platform functions
 
 # apps/platform-functions, and what it is built from: the deployer it runs,
 # the shared settings package, the release scripts the deployer imports, the
-# platform's Firestore rules (the emulators load a copy) and the lockfile.
+# platform's Firestore rules (the emulators load a copy), the lockfile, and
+# the workflow that runs the worker (backend.yml).
 on:
   push:
     branches: [main]
@@ -15,6 +16,7 @@ on:
       - "scripts/release/**"
       - "package-lock.json"
       - ".github/workflows/platform-functions.yml"
+      - ".github/workflows/backend.yml"
   pull_request:
     branches: [main]
     paths:
@@ -26,6 +28,7 @@ on:
       - "scripts/release/**"
       - "package-lock.json"
       - ".github/workflows/platform-functions.yml"
+      - ".github/workflows/backend.yml"
 
 # Only one run per branch; a new push cancels the run it supersedes.
 concurrency:
@@ -63,7 +66,7 @@ jobs:
   # the deployer's fake Google behind them. firebase-admin needs Node 22, and
   # @cafemenu/shared's TypeScript needs 22.18 or later to be imported as it is.
   emulator:
-    name: provisioning on the emulators
+    name: provisioning and the worker on the emulators
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -87,6 +90,12 @@ jobs:
 
       - name: Provision a cafe on the emulators
         run: npm run test:emulator -w @cafemenu/platform-functions
+
+      # The free backend (#77): requests written under the console's real
+      # rules, processed by `npm run worker` as the workflow runs it, with no
+      # Functions emulator in sight.
+      - name: Process the console's requests with the worker
+        run: npm run test:worker -w @cafemenu/platform-functions
 
   # What `firebase deploy` uploads is not the workspace: it is the staged copy
   # that Cloud Build installs on its own. Make it, install it as Cloud Build
