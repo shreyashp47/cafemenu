@@ -9,7 +9,9 @@
  * owner asking it to do that now (see DeployRequests in data/types.ts).
  */
 
+import { isOpenRequest } from "@cafemenu/shared/requests";
 import type {
+  BackendRequest,
   Cafe,
   CafeRelease,
   Deployment,
@@ -180,12 +182,53 @@ export type RequestState =
   /** Another deployment is queued or running: one at a time. */
   | "busy";
 
+/**
+ * The kinds of request the owner area shows: the ones that change the site.
+ * A connection check is the setup wizard's own.
+ */
+export const SITE_REQUEST_KINDS: readonly BackendRequest["kind"][] = [
+  "provision",
+  "deploy",
+  "rollback",
+  "sync-branding",
+];
+
+/**
+ * The cafe's requests (newest first) the owner area shows on their own: the
+ * ones still waiting for the backend, and the newest if the backend refused
+ * it. Once a request has become a deployment, the deployment list shows it.
+ */
+export function requestsToShow(
+  requests: readonly BackendRequest[],
+): BackendRequest[] {
+  const site = requests.filter((r) => SITE_REQUEST_KINDS.includes(r.kind));
+  return site.filter(
+    (r, i) =>
+      r.deploymentId === null &&
+      (isOpenRequest(r.status) || (i === 0 && r.status === "failed")),
+  );
+}
+
+/** Whether a request to change the site is waiting for the backend or under way. */
+export const hasOpenRequest = (requests: readonly BackendRequest[]) =>
+  requests.some(
+    (r) => SITE_REQUEST_KINDS.includes(r.kind) && isOpenRequest(r.status),
+  );
+
+/**
+ * `requests` are the owner's latest requests for the cafe, when the backend
+ * takes them as documents (#77): one waiting for the backend's next run is
+ * an update on its way too, before any deployment exists.
+ */
 export function requestState(
   cafe: Pick<Cafe, "status">,
   deployments: readonly Deployment[],
+  requests: readonly BackendRequest[] = [],
 ): RequestState {
   if (cafe.status !== "live") return "not-live";
-  return activeDeployment(deployments) ? "busy" : "ready";
+  return activeDeployment(deployments) || hasOpenRequest(requests)
+    ? "busy"
+    : "ready";
 }
 
 /** The newest deployment that has finished, if any: how the last one went. */

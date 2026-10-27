@@ -31,10 +31,11 @@ export function requestParamsProblem(
   params: unknown,
 ): RequestParamsProblem | null;
 
-export interface NewRequest<K extends RequestKind = RequestKind> {
+export interface NewRequest {
   cafeId: string;
-  kind: K;
-  params?: RequestParams[K];
+  kind: RequestKind;
+  /** What the kind takes (RequestParams); checked when the record is made. */
+  params?: Record<string, unknown>;
   by: string;
 }
 

@@ -477,5 +477,7 @@ export const demoBundle: DataBundle = {
   releases: demoReleaseRepo,
   deployments: demoDeploymentRepo,
   deploys: demoDeploys,
+  // Demo mode's backend answers at once (demo-deploys.ts): no requests to wait on.
+  requests: null,
   backend: "demo",
 };

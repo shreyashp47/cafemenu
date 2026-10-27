@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { deployAccount } from "@/lib/config";
 import { fill, messages, problemText } from "@/lib/messages";
+import type { BackendRequest } from "@/lib/platform/model";
 import { isProjectId } from "@/lib/platform/validate";
 import type { ConnectionResult } from "@/lib/setup/connection";
 import {
@@ -28,11 +29,15 @@ const { access: text } = messages.setup;
 /**
  * Step 4: the project's ID, the deploy account added as a member, and
  * Check connection. Says plainly that the member won't show in the Firebase
- * console's list, and links to where it does.
+ * console's list, and links to where it does. When the check is a request
+ * the backend picks up on its next run (`queued`, #77), it says that takes a
+ * few minutes and follows the request (`progress`) until it is answered.
  */
 export function GiveAccess({
   state,
   demo,
+  queued = false,
+  progress = null,
   focus,
   onProjectId,
   onCheck,
@@ -40,6 +45,8 @@ export function GiveAccess({
 }: {
   state: WizardState;
   demo: boolean;
+  queued?: boolean;
+  progress?: BackendRequest | null;
   focus: boolean;
   onProjectId: (value: string) => void;
   onCheck: () => void;
@@ -172,6 +179,16 @@ export function GiveAccess({
           {checking ? text.checking : text.check}
         </Button>
         <div aria-live="polite">
+          {checking && queued && (
+            <div className="border-accent bg-accent-soft rounded-md border-l-4 p-4">
+              <p className="text-ink">{text.queued}</p>
+              <p className="text-muted mt-1 text-sm">
+                {progress?.status === "running"
+                  ? text.progress.running
+                  : text.progress.queued}
+              </p>
+            </div>
+          )}
           {answer.status === "answered" && (
             <CheckAnswer
               result={answer.result}

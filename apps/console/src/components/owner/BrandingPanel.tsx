@@ -5,7 +5,7 @@ import { formatMoney, starterPrice } from "@cafemenu/shared";
 import { fromBase64, toBase64 } from "@/lib/bytes";
 import type { DataBundle } from "@/lib/data/types";
 import { errorText, fill, messages } from "@/lib/messages";
-import type { Cafe, Deployment } from "@/lib/platform/model";
+import type { BackendRequest, Cafe, Deployment } from "@/lib/platform/model";
 import {
   brandingChange,
   brandingFormOf,
@@ -52,6 +52,7 @@ const FOCUS: Record<BrandingField, string> = {
 
 type Result =
   | { kind: "saved" }
+  | { kind: "queued" }
   | { kind: "pending" }
   | { kind: "nothing" }
   | { kind: "error"; text: string }
@@ -67,10 +68,13 @@ export function BrandingPanel({
   data,
   cafe,
   deployments,
+  requests = [],
 }: {
   data: DataBundle;
   cafe: Cafe;
   deployments: readonly Deployment[];
+  /** The owner's latest requests for the cafe (#77), newest first. */
+  requests?: readonly BackendRequest[];
 }) {
   const base = cafe.settings;
   const [form, setForm] = useState<BrandingForm>(() => brandingFormOf(base));
@@ -97,7 +101,7 @@ export function BrandingPanel({
   }, [data, cafe.id]);
 
   const live = cafe.status === "live";
-  const state = requestState(cafe, deployments);
+  const state = requestState(cafe, deployments, requests);
   const problems = brandingProblems(form);
   const change = brandingChange(base, form);
   const needsConfirm = change.currencyChanged && !confirmed;
@@ -217,8 +221,9 @@ export function BrandingPanel({
   /** Asks the backend to put the saved settings on the site. */
   const ask = async () => {
     try {
-      await data.deploys.syncBranding(cafe);
-      setResult({ kind: "saved" });
+      const receipt = await data.deploys.syncBranding(cafe);
+      // A request the backend picks up on its next run takes minutes.
+      setResult({ kind: "requestId" in receipt ? "queued" : "saved" });
     } catch (e) {
       const pending =
         typeof e === "object" &&
@@ -242,13 +247,15 @@ export function BrandingPanel({
   const message = result
     ? result.kind === "saved"
       ? text.saved
-      : result.kind === "pending"
-        ? text.savedPending
-        : result.kind === "nothing"
-          ? text.nothing
-          : result.kind === "unrequested"
-            ? fill(text.unrequested, { error: result.text })
-            : result.text
+      : result.kind === "queued"
+        ? text.savedQueued
+        : result.kind === "pending"
+          ? text.savedPending
+          : result.kind === "nothing"
+            ? text.nothing
+            : result.kind === "unrequested"
+              ? fill(text.unrequested, { error: result.text })
+              : result.text
     : "";
 
   return (

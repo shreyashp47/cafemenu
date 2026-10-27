@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { CafeRelease, Deployment, Release } from "../../platform/model";
+import type {
+  BackendRequest,
+  CafeRelease,
+  Deployment,
+  Release,
+} from "../../platform/model";
 import {
   activeDeployment,
   availableReleases,
@@ -10,6 +15,7 @@ import {
   pinLineOf,
   releaseOf,
   requestState,
+  requestsToShow,
   rollbackTarget,
   sameChoice,
   updateModeOf,
@@ -241,5 +247,59 @@ describe("whether a request may be made", () => {
     expect(lastFinished(list)?.id).toBe("b");
     expect(activeDeployment([])).toBeNull();
     expect(lastFinished([deployment({ status: "queued" })])).toBeNull();
+  });
+});
+
+describe("requests waiting for the backend (#77)", () => {
+  const request = (over: Partial<BackendRequest> = {}): BackendRequest => ({
+    id: "r1",
+    cafeId: "c1",
+    kind: "deploy",
+    params: { version: "1.2.0" },
+    status: "queued",
+    by: "u1",
+    createdAt: 0,
+    progress: null,
+    result: null,
+    error: null,
+    errorCode: null,
+    deploymentId: null,
+    finishedAt: null,
+    ...over,
+  });
+
+  it("make the buttons wait while one is queued or running, as a deployment does", () => {
+    expect(requestState({ status: "live" }, [], [request()])).toBe("busy");
+    expect(
+      requestState({ status: "live" }, [], [request({ status: "running" })]),
+    ).toBe("busy");
+    expect(
+      requestState({ status: "live" }, [], [request({ status: "done" })]),
+    ).toBe("ready");
+    // A connection check is the wizard's, and holds nothing up here.
+    expect(
+      requestState({ status: "live" }, [], [request({ kind: "check" })]),
+    ).toBe("ready");
+  });
+
+  it("are shown until they become a deployment, and the newest if it was refused", () => {
+    const list = [
+      request({ id: "waiting" }),
+      request({ id: "started", status: "running", deploymentId: "d1" }),
+      request({ id: "refused-earlier", status: "failed" }),
+      request({ id: "check", kind: "check" }),
+    ];
+    expect(requestsToShow(list).map((r) => r.id)).toEqual(["waiting"]);
+    expect(
+      requestsToShow([
+        request({ id: "refused", status: "failed", error: "No." }),
+        request({ id: "done", status: "done" }),
+      ]).map((r) => r.id),
+    ).toEqual(["refused"]);
+    expect(
+      requestsToShow([
+        request({ id: "rolled-back", status: "failed", deploymentId: "d2" }),
+      ]),
+    ).toEqual([]);
   });
 });

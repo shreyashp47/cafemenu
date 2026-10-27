@@ -595,6 +595,11 @@
       },
       "check": "Check connection",
       "checking": "Checking your project…",
+      "queued": "This takes a few minutes: CafeMenu checks projects every 5 minutes. Keep this page open, and the answer appears here.",
+      "progress": {
+        "queued": "Waiting for CafeMenu to pick your check up…",
+        "running": "CafeMenu is checking your project now…"
+      },
       "saved": "Your project ID is saved, so you can leave and come back to this step.",
       "demo": "Demo mode checks nothing: any project ID connects. End one in `-noaccess` or `-missing` to see a failed check.",
       "back": "Back to creating the project",
@@ -751,7 +756,27 @@
       "request": {
         "sent": "Asked. Progress is just below.",
         "busy": "An update is already on its way. You can ask for another when it has finished.",
-        "notLive": "Updates open once your cafe is live."
+        "notLive": "Updates open once your cafe is live.",
+        "queued": "Asked. This takes a few minutes: CafeMenu picks requests up every 5 minutes. You can follow it just below, and leave this page if you like."
+      },
+      "requests": {
+        "title": "Your requests",
+        "label": "Requests",
+        "kind": {
+          "provision": "Setup",
+          "check": "Connection check",
+          "deploy": "Upgrade to {version}",
+          "rollback": "Roll back",
+          "sync-branding": "Branding and locale put on your site"
+        },
+        "status": {
+          "queued": "Waiting for CafeMenu. This takes a few minutes: requests are picked up every 5 minutes.",
+          "running": "Starting now…",
+          "done": "Done",
+          "failed": "Not done"
+        },
+        "asked": "asked {when}",
+        "failed": "Why: {error}"
       },
       "history": {
         "title": "What CafeMenu did to your cafe",
@@ -818,6 +843,7 @@
       "discard": "Discard changes",
       "fixFields": "Fix the fields marked first.",
       "saved": "Saved. Your site is being updated: see Updates, below, for how far it has got.",
+      "savedQueued": "Saved. Your site will be updated in a few minutes: see Updates, below, for how far it has got.",
       "savedPending": "Saved on CafeMenu. Your site will pick the change up once updates from here are switched on.",
       "nothing": "Nothing to save: it's as you have it now.",
       "problems": {
@@ -1179,6 +1205,9 @@
     "failed-precondition": "That can't be done right now: another update may be running, or the cafe isn't live. Try again in a minute.",
     "invalid-argument": "That version can't be deployed to your cafe.",
     "backend-pending": "Changes from here aren't switched on yet. Nothing was changed on your site.",
+    "unavailable": "CafeMenu couldn't reach Google just now. Try again in a minute.",
+    "unexpected": "Something unexpected went wrong. Try again in a few minutes.",
+    "gave-up": "CafeMenu tried several times and couldn't finish. Try again in a few minutes.",
     "unknown": "Something went wrong. Try again."
   }
 }

@@ -17,6 +17,7 @@ import {
   type User,
 } from "firebase/auth";
 import {
+  addDoc,
   Bytes,
   collection,
   deleteDoc,
@@ -33,12 +34,14 @@ import {
   where,
   type QuerySnapshot,
 } from "firebase/firestore";
+import { newRequestRecord } from "@cafemenu/shared/requests";
 import type { Cafe, PlatformUser } from "../platform/model";
 import {
   compareVersionsDesc,
   parseCafe,
   parseDeployment,
   parseRelease,
+  parseRequest,
   parseStartingMenu,
 } from "../platform/parse";
 import {
@@ -56,7 +59,7 @@ import {
   releaseChoiceProblems,
   startingMenuProblems,
 } from "../platform/validate";
-import { useBackendFunctions } from "../config";
+import { backendMode, type BackendMode } from "../config";
 import {
   pendingConnectionChecker,
   simulatedConnectionChecker,
@@ -65,11 +68,13 @@ import { pendingAdminRequests } from "./admin";
 import { callableConnectionChecker, callableDeployRequests } from "./callables";
 import { pendingSiteChecker, simulatedSiteChecker } from "./checks";
 import { pendingDeployRequests } from "./deploys";
+import { requestConnectionChecker, requestDeployRequests } from "./requests";
 import { getFirebase, type FirebaseHandles } from "./firebase";
 import { firebaseCall } from "./functions";
 import {
   CodedError,
   DEPLOYMENT_HISTORY,
+  REQUEST_HISTORY,
   type AuthRepository,
   type Backend,
   type CafeRepository,
@@ -77,6 +82,7 @@ import {
   type DeploymentRepository,
   type ErrorListener,
   type ReleaseRepository,
+  type RequestRepository,
   type SetupRepository,
   type Unsubscribe,
 } from "./types";
@@ -368,16 +374,90 @@ export function firestoreDeploymentRepo(
   };
 }
 
+export function firestoreRequestRepo(connect: Connect): RequestRepository {
+  return {
+    async create({ cafeId, kind, params = {} }) {
+      const handles = await connect();
+      const user = requireUser(handles);
+      let record;
+      try {
+        record = newRequestRecord(
+          { cafeId, kind, params, by: user.uid },
+          serverTimestamp(),
+        );
+      } catch (error) {
+        throw new CodedError(
+          "invalid-argument",
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+      const ref = await addDoc(collection(handles.db, "requests"), record);
+      return ref.id;
+    },
+    subscribe(id, listener, onError) {
+      return whenReady(
+        connect,
+        ({ db }) =>
+          onSnapshot(
+            doc(db, "requests", id),
+            (snap) => {
+              const request = parseRequest(
+                snap.id,
+                snap.data({ serverTimestamps: "estimate" }),
+              );
+              if (request) listener(request);
+            },
+            (error) => onError?.(error),
+          ),
+        onError,
+      );
+    },
+    subscribeForCafe(cafe, by, listener, onError) {
+      return whenReady(
+        connect,
+        ({ db }) =>
+          onSnapshot(
+            query(
+              collection(db, "requests"),
+              // The asker filter is what lets the rules prove the query
+              // only returns their own requests (firestore.indexes.json).
+              where("by", "==", by),
+              where("cafeId", "==", cafe.id),
+              orderBy("createdAt", "desc"),
+              limit(REQUEST_HISTORY),
+            ),
+            (snap) =>
+              listener(
+                snap.docs
+                  .map((d) =>
+                    parseRequest(
+                      d.id,
+                      d.data({ serverTimestamps: "estimate" }),
+                    ),
+                  )
+                  .filter((r) => r !== null),
+              ),
+            (error) => onError?.(error),
+          ),
+        onError,
+      );
+    },
+  };
+}
+
 export function createFirebaseBundle(
   connect: Connect,
   backend: Exclude<Backend, "demo">,
-  { functions = useBackendFunctions }: { functions?: boolean } = {},
+  { mode = backendMode }: { mode?: BackendMode } = {},
 ): DataBundle {
-  // With the backend's functions on, the connection check and the deploy
-  // requests are theirs; otherwise the stand-ins below.
-  const call = functions
-    ? firebaseCall(connect, backend === "emulators")
-    : null;
+  // With the backend on (its GitHub Actions job, or its Cloud Functions),
+  // the connection check and the deploy requests are its; otherwise the
+  // stand-ins below.
+  const requests = mode === "requests" ? firestoreRequestRepo(connect) : null;
+  const call =
+    mode === "functions"
+      ? firebaseCall(connect, backend === "emulators")
+      : null;
   return {
     auth: firebaseAuthRepo(connect),
     // Neither the emulators nor the real platform has a backend to ask yet.
@@ -388,16 +468,23 @@ export function createFirebaseBundle(
     sites:
       backend === "emulators" ? simulatedSiteChecker() : pendingSiteChecker,
     // The emulators cannot reach Google's IAM either.
-    connection: call
-      ? callableConnectionChecker(call)
-      : backend === "emulators"
-        ? simulatedConnectionChecker(600)
-        : pendingConnectionChecker,
+    connection: requests
+      ? requestConnectionChecker(requests)
+      : call
+        ? callableConnectionChecker(call)
+        : backend === "emulators"
+          ? simulatedConnectionChecker(600)
+          : pendingConnectionChecker,
     releases: firestoreReleaseRepo(connect),
     deployments: firestoreDeploymentRepo(connect),
-    // Without the backend's functions, neither the emulators nor the real
-    // platform can run the deployer.
-    deploys: call ? callableDeployRequests(call) : pendingDeployRequests,
+    // Without the backend, neither the emulators nor the real platform can
+    // run the deployer.
+    deploys: requests
+      ? requestDeployRequests(requests)
+      : call
+        ? callableDeployRequests(call)
+        : pendingDeployRequests,
+    requests,
     backend,
   };
 }
