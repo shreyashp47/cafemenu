@@ -108,6 +108,15 @@ except adding a new barista's account.
   a table's first order waits for staff to tap **Accept**, and then its orders
   go straight through for 3 hours. See
   [Orders from outside the cafe](#orders-from-outside-the-cafe).
+- **Maintenance mode** — a card on the owner dashboard (`/admin`) pauses
+  ordering for a holiday, a renovation or a menu change: customers see a
+  "back soon" page with your message (and when you expect to be back), now or
+  between two times in the cafe's time zone. Orders already placed, the staff
+  board and the dashboard keep working, and the rules refuse every new order
+  while it's on, whatever a page sends (`config/ownerMaintenance`). CafeMenu
+  can also put the site into maintenance (`config/site.maintenance`, which
+  only its deploy account writes); the dashboard says so, and only CafeMenu
+  can end that one.
 - **Reports** — _Reports_ (`/admin/reports`) shows revenue, order count, average
   order, revenue by day and best sellers for a month or a custom range, with a
   CSV export. Group the CSV by _Order ID_, not _Order #_: order numbers start

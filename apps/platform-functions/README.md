@@ -92,20 +92,21 @@ takes from a few seconds (nothing to do) to a few minutes (a setup).
 
 The console writes `requests/{id}`, and listens to it:
 
-| Field          | Written by | What                                                                                                        |
-| -------------- | ---------- | ----------------------------------------------------------------------------------------------------------- |
-| `cafeId`       | the asker  | the cafe it is about                                                                                        |
-| `kind`         | the asker  | `check`, `provision`, `deploy`, `rollback` or `sync-branding`                                               |
-| `params`       | the asker  | `{projectId}` for a check (only the project saved on the cafe), `{version}` for a deploy, `{}` for the rest |
-| `status`       | both       | `queued` when written; then `running`, and `done` or `failed`                                               |
-| `createdAt`    | the asker  | the server's time                                                                                           |
-| `by`           | the asker  | their uid                                                                                                   |
-| `progress`     | backend    | `{steps: [{id, label, status}], detail}`: the deployment's steps as they move, or the check's one step      |
-| `result`       | backend    | a check's `ConnectionResult`; for the others `{deploymentId, outcome, siteUrl?}`                            |
-| `error`        | backend    | why it failed, in words for the owner (the callables' words, or the deployment's)                           |
-| `errorCode`    | backend    | `permission-denied`, `failed-precondition`, `invalid-argument`, `unavailable`, a deployment's code…         |
-| `deploymentId` | backend    | the deployment it became                                                                                    |
-| (bookkeeping)  | backend    | `attempts`, `lease`, `startedAt`, `finishedAt`, `technical`                                                 |
+| Field          | Written by | What                                                                                                                           |
+| -------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `cafeId`       | the asker  | the cafe it is about; `null` for the admin's `appoint-admin` and `remove-admin`                                                |
+| `kind`         | the asker  | `check`, `provision`, `deploy`, `rollback` or `sync-branding`; the admin's kinds (see [The super admin](#the-super-admin))     |
+| `params`       | the asker  | `{projectId}` for a check (only the project saved on the cafe), `{version}` for a deploy, `{}` for the rest; the admin's below |
+| `status`       | both       | `queued` when written; then `running`, and `done` or `failed`                                                                  |
+| `createdAt`    | the asker  | the server's time                                                                                                              |
+| `by`           | the asker  | their uid                                                                                                                      |
+| `progress`     | backend    | `{steps: [{id, label, status}], detail}`: the deployment's steps as they move, or the check's one step                         |
+| `result`       | backend    | a check's `ConnectionResult`; for the others `{deploymentId, outcome, siteUrl?}`                                               |
+| `error`        | backend    | why it failed, in words for the owner (the callables' words, or the deployment's)                                              |
+| `errorCode`    | backend    | `permission-denied`, `failed-precondition`, `invalid-argument`, `unavailable`, a deployment's code…                            |
+| `deploymentId` | backend    | the deployment it became                                                                                                       |
+| `notBefore`    | backend    | a suspension waiting for its notice period: the run leaves it queued until then                                                |
+| (bookkeeping)  | backend    | `attempts`, `lease`, `startedAt`, `finishedAt`, `technical`                                                                    |
 
 The shape is one module, [`@cafemenu/shared/requests`](../../packages/shared/src/requests.mjs),
 which the console uses to write requests and the rules mirror. The rules
@@ -113,7 +114,7 @@ which the console uses to write requests and the rules mirror. The rules
 [`scripts/rules-test.mjs`](../console/scripts/rules-test.mjs)) let a verified
 owner create one only for their own cafe (the admin, for any cafe), in their
 own name, queued, at the server's time, with a kind and params that fit, and
-nothing the backend writes. Nobody can change or delete a request from a
+nothing the backend writes. Only the admin may write the admin's kinds. Nobody can change or delete a request from a
 browser. Its asker and the admin can read it.
 
 ### One run
@@ -138,7 +139,10 @@ browser. Its asker and the admin can read it.
    to the request as they move. A deployment that has to wait (Google busy,
    out of time) puts the request back in the queue with its `deploymentId`,
    and the next run carries on from there. Anything unexpected fails the
-   request with a reference (its id) and turns the run red.
+   request with a reference (its id) and turns the run red. An owner whose
+   account is suspended has every request refused, with the reason; the
+   admin's kinds go to [`src/worker/admin.mjs`](./src/worker/admin.mjs)
+   (see [The super admin](#the-super-admin)).
 2. **Deployments queued any other way** (a callable on Blaze, a rollout, one a
    request put back) are run too: on Blaze a trigger would.
 3. **Emails and the support window**
@@ -149,7 +153,10 @@ browser. Its asker and the admin can read it.
    no rule lets a browser near), and each new or changed one goes through
    `notifyRelease`, as the `notifyOnRelease` trigger would. Once a day, every
    cafe on a line the support window has dropped is told to upgrade by its
-   date. Every email still goes once per cafe per thing.
+   date. Every email still goes once per cafe per thing. At the same hourly
+   pace, each new, promoted or withdrawn release is written to the admin log,
+   and every account in Authentication is copied to the admin's owners
+   directory (`owners/{uid}`), writing only what changed.
 
 A run starts nothing new after 5 minutes or 25 requests; the rest wait for
 the next run. The workflow stops a run after 20 minutes.
@@ -189,14 +196,19 @@ Firestore database exists and the console is switched to real mode: see the
 
 2. **Give it its platform roles**, in `getcafemenu` only:
 
-   | Role                                                         | For                                                                                      |
-   | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
-   | Cloud Datastore User (`roles/datastore.user`)                | reading and writing the platform's Firestore: requests, cafes, deployments, releases     |
-   | Firebase Authentication Viewer (`roles/firebaseauth.viewer`) | looking up who asked (verified, disabled, admin), and the owner's name and email address |
+   | Role                                                       | For                                                                                                                                                                                |
+   | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+   | Cloud Datastore User (`roles/datastore.user`)              | reading and writing the platform's Firestore: requests, cafes, deployments, releases, the owners directory, the admin log                                                          |
+   | Firebase Authentication Admin (`roles/firebaseauth.admin`) | looking up who asked (verified, disabled, admin) and the owners' names and emails; and, for the super admin, disabling, enabling and deleting an owner's login and setting `admin` |
+
+   The super admin (#78) needs the Admin role: the Viewer role, enough before
+   it, can't suspend, reactivate or delete a login, nor set the `admin` flag.
+   If you set the backend up before #78 with `roles/firebaseauth.viewer`,
+   swap it for `roles/firebaseauth.admin` (and remove the Viewer binding).
 
    ```bash
    SA=cafemenu-deploy@getcafemenu.iam.gserviceaccount.com
-   for role in roles/datastore.user roles/firebaseauth.viewer; do
+   for role in roles/datastore.user roles/firebaseauth.admin; do
      gcloud projects add-iam-policy-binding getcafemenu \
        --member "serviceAccount:$SA" --role "$role"
    done
@@ -237,6 +249,10 @@ Firestore database exists and the console is switched to real mode: see the
    rm ~/cafemenu-deploy.json
    ```
 
+   **Before the `rm`**, make yourself the first super admin with the same key
+   (sign up on the console first, then [The super admin](#the-super-admin)'s
+   `npm run make-admin`), since nothing else can.
+
    The key can rewrite the rules of every connected cafe: it must never be
    committed, pasted anywhere else or kept on disk. Make a new one and delete
    the old one (**Keys** tab) if it might have leaked, and once a year anyway.
@@ -260,6 +276,59 @@ Firestore database exists and the console is switched to real mode: see the
 
 Until step 5, every run stops at its first step, with a notice, and costs
 nothing.
+
+### The super admin
+
+The admin page of the console (`/admin`) asks the backend for these, as
+requests, for an account with the `admin` claim only (the rules refuse
+anyone else; the worker checks again). Each is safe to retry, writes one
+entry to the admin log under the request's id (so a retry logs nothing
+twice), and emails the owner once, with the reason. The policy (the reasons,
+notice periods and section 8's other provisional decisions of
+[docs/super-admin-requirements.md](../../docs/super-admin-requirements.md#8-decisions-provisional-used-in-the-build))
+is [`@cafemenu/shared/admin-policy`](../../packages/shared/src/admin-policy.mjs).
+
+| Kind              | Params                                                      | What the worker does                                                                                                                                                                                                                                                                                                    |
+| ----------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `suspend`         | `{reason, note, effectiveAt}`                               | Disables the owner's login and revokes their sessions, marks each of their cafes `suspended` (keeping what it was), and refuses their requests with the reason from then on. Rollouts skip a cafe that isn't live. A reason with notice (non-payment: 7 days) emails a notice now and waits, queued, for `effectiveAt`. |
+| `reactivate`      | `{reason, note}`                                            | All of that undone; a suspension still waiting for its date is called off.                                                                                                                                                                                                                                              |
+| `delete-owner`    | `{reason, note, confirm}`, `confirm` the cafe's web address | Emails the owner, logs it, then deletes their login, directory entry, cafes (with `setup/` and `emails/`), deployments and requests. The admin log stays. Nothing in the owner's own project is touched. Never an admin's account.                                                                                      |
+| `maintenance-on`  | `{reason, note, message, until, startsAt, endsAt, batch}`   | Writes `config/site.maintenance` in the cafe's own project with the deployer's `maintenance` command (only that field), and the same, with the reason, on `cafes/{id}.maintenance`. The cafe's site follows it live; its rules refuse new orders while it's in effect.                                                  |
+| `maintenance-off` | `{note, batch}`                                             | Clears both.                                                                                                                                                                                                                                                                                                            |
+| `appoint-admin`   | `{email, note}`, no cafe                                    | Sets the `admin` claim on that account, if the policy allows (`APPOINT_OTHER_ADMINS`, off for now).                                                                                                                                                                                                                     |
+| `remove-admin`    | `{email, note}`, no cafe                                    | Clears it, unless it's the last admin.                                                                                                                                                                                                                                                                                  |
+
+`batch` ties a bulk action's requests together, so the console can resume or
+revert it. **Timing:** an action takes effect at the backend's next run, so
+within about 5 minutes on GitHub Actions (section 5 asks this of suspension;
+it asks 1 minute of maintenance, which a 5-minute schedule can't promise: the
+cafe's page then follows the setting within seconds). **Run workflow** does
+it at once.
+
+**The first admin** is made once, by the maintainer, with the platform service
+account's key (or against the emulators):
+
+```bash
+GOOGLE_APPLICATION_CREDENTIALS=~/cafemenu-deploy.json \
+  npm run make-admin -w @cafemenu/platform-functions -- --email you@example.com
+```
+
+It sets the claim on the account with that email (sign up on the console
+first), marks it in the directory, and logs it. Sign out and in again to have
+it. `--remove` takes it away.
+
+**The owners directory** (`owners/{uid}`: email, name, sign-up, last sign-in,
+admin, disabled, status) is copied from Authentication by the hourly jobs,
+since a browser can't list Authentication's accounts. A new account can take
+up to an hour to appear; the console falls back on the cafe's own email.
+
+**Tests:** [`tests/unit/admin.test.mjs`](./tests/unit/admin.test.mjs), and
+end to end on the emulators in
+[`tests/emulator/admin.emulator.mjs`](./tests/emulator/admin.emulator.mjs)
+(part of `npm run test:emulator:worker`): the admin's requests through the
+real rules, the suspended owner's sign-in refused (`auth/user-disabled`) and
+request refused with the reason, maintenance written to the cafe's
+`config/site`, and the log out of the owner's reach.
 
 ### When GitHub pauses the schedule
 
@@ -610,6 +679,12 @@ firestore` from `apps/console`. The functions need no new index.
 - **On GitHub Actions, no `release-available` emails** (no unsubscribe
   function to link to; see [Setting it up](#setting-it-up), step 6), and
   answers take up to 5 minutes, or longer when GitHub's schedule runs late.
+- **The super admin's actions need the worker.** On Blaze, nothing picks up
+  the admin's requests (there is no trigger for `requests/`); run the worker
+  (the workflow, or `npm run worker`) beside the functions.
+- **Rollout starts and pauses aren't in the admin log yet:** rollouts are the
+  deployer's command and the console's stub for #32. Releases published,
+  promoted and withdrawn are (the hourly jobs).
 - **The console can't start a setup yet:** the `provision` request is done by
   the worker (and tested), but no button writes it
   (`apps/console/src/components/setup/Connected.tsx`, `TODO(#28)`).
