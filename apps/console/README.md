@@ -99,9 +99,11 @@ does and where it can be removed.
   answer has the shape of `deployer check`'s: connected, no access, or each
   missing permission with what it is for. Demo mode and the emulators
   simulate it (a project ID ending in `-noaccess` or `-missing` shows those
-  answers); against the real platform it waits for the backend's
-  `checkConnection` function, which runs `deployer check` (#28, see the
-  backend switch above).
+  answers); against the real platform the backend runs `deployer check` (see
+  [the backend switch](#three-backends)). With the backend on GitHub Actions
+  the check is a request it picks up on its next run: the page says this takes
+  a few minutes and shows whether CafeMenu has picked it up, until the answer
+  comes.
 - The deploy account's address comes from `NEXT_PUBLIC_DEPLOY_SERVICE_ACCOUNT`
   (a `demo-` stand-in in demo mode and the emulators). The exact role to pick
   and the screenshots of Google's consoles are marked `[[SPIKE #3: …]]` in
@@ -146,14 +148,26 @@ and three sections:
 
 **Requests to the backend.** The console never deploys anything. Upgrade,
 Roll back and Save in Branding are calls on `DeployRequests`
-([`src/lib/data/types.ts`](./src/lib/data/types.ts)); each becomes a `queued`
-record in `deployments/` that the backend (#28) picks up, runs the deployer for
-(`deployer deploy --version`, `deployer rollback`, `deployer sync-branding`),
-and writes the steps, the result and `release.current`/`previous` back to. The
-page watches that record. Until the backend exists the real platform answers
-`backend-pending` (src/lib/data/deploys.ts, the `TODO(#28)`s name each
-command), and the page says nothing was changed, or that the branding is saved
-and waits. Demo mode simulates the backend
+([`src/lib/data/types.ts`](./src/lib/data/types.ts)), which reach the backend
+([`apps/platform-functions`](../platform-functions/README.md)) one of two
+ways:
+
+- **As requests** (`NEXT_PUBLIC_BACKEND=requests`, the backend on GitHub
+  Actions, #77): each writes a `requests/{id}`
+  ([`src/lib/data/requests.ts`](./src/lib/data/requests.ts)) and returns at
+  once. The page says it takes a few minutes; the owner area watches the
+  owner's latest requests for the cafe, shows one until the backend has made
+  it a deployment (or refused it, with its reason), and holds the buttons
+  meanwhile.
+- **As calls** (`NEXT_PUBLIC_BACKEND=functions`, Cloud Functions on Blaze):
+  the backend queues a `deployments/{id}` at once.
+
+Either way the backend runs the deployer (`deployer deploy --version`,
+`deployer rollback`, `deployer sync-branding`) and writes the steps, the
+result and `release.current`/`previous` to the deployment, which the page
+watches. With neither, the real platform answers `backend-pending`
+(src/lib/data/deploys.ts), and the page says nothing was changed, or that the
+branding is saved and waits. Demo mode simulates the backend
 ([`src/lib/data/demo-deploys.ts`](./src/lib/data/demo-deploys.ts)): the
 deployer's own steps, one at a time, then the new version; the demo has no
 backend to finish setup, so a draft cafe in `/cafe` has a "Pretend setup
@@ -184,14 +198,76 @@ fail on permissions. It sends no verification email: `demoVerifyEmail()` in
 The emulators' ports (Auth 9199, Firestore 8180, UI 4010) differ from the cafe
 app's, so both can run at once.
 
-**The platform's backend** (`apps/platform-functions`, #28) is a switch on top
-of the last two modes: with `NEXT_PUBLIC_BACKEND_FUNCTIONS=1`, Check
-connection, Upgrade, Roll back and Save branding call its Cloud Functions
-([`src/lib/data/callables.ts`](./src/lib/data/callables.ts)) instead of
-answering from a stand-in or saying the backend is not there yet. Against the
-emulators, start that app's `npm run emulators` in place of this one's: it
-serves the same Auth and Firestore ports, plus Functions on 5101. Without the
-switch (and always in demo mode) nothing changes.
+**The platform's backend** (`apps/platform-functions`) is a switch on top of
+the last two modes, `NEXT_PUBLIC_BACKEND`:
+
+| Value       | Check connection, Upgrade, Roll back and Save branding                                                                     |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `requests`  | write a `requests/{id}` the backend's GitHub Actions job picks up within minutes, and follow it live. Free, on Spark (#77) |
+| `functions` | call its Cloud Functions ([`src/lib/data/callables.ts`](./src/lib/data/callables.ts)), which answer at once. Needs Blaze   |
+| (empty)     | a stand-in answers on the emulators; the real platform says the backend isn't switched on yet                              |
+
+(`NEXT_PUBLIC_BACKEND_FUNCTIONS=1`, the old switch, still means `functions`.)
+Against the emulators: with `requests`, run the worker beside this app's
+emulators (the platform-functions README, [Running it
+locally](../platform-functions/README.md#running-it-locally)); with
+`functions`, start that app's `npm run emulators` in place of this one's, on
+the same Auth and Firestore ports, plus Functions on 5101. In demo mode
+nothing changes.
+
+## Real mode (the platform project)
+
+What the maintainer does once to move the live console
+(<https://getcafemenu.web.app>) from demo mode onto the platform project
+`getcafemenu`, on the free Spark plan, with the backend on GitHub Actions.
+**Nothing here has been done yet**, and none of it can be undone without
+losing what owners have entered, so take it in order.
+
+1. **The Firestore database.** Firebase console → `getcafemenu` → **Build →
+   Firestore Database → Create database**: Standard edition, ID `(default)`,
+   location **`asia-south1` (Mumbai)**, starting in production mode (the
+   rules come next). The location can never be changed.
+2. **Sign-in.** **Build → Authentication → Get started → Sign-in method →
+   Email/Password → Enable** (the first switch, not "Email link"). Under
+   **Settings → Authorized domains**, `getcafemenu.web.app` is there already;
+   add a custom domain if the console gets one.
+3. **The rules and indexes**, from this folder:
+
+   ```bash
+   npx firebase-tools deploy --only firestore:rules,firestore:indexes --project getcafemenu
+   ```
+
+   The indexes take a few minutes to build; until they have, the backend's
+   and the owner area's queries fail.
+
+4. **The backend**: the service account, its key as the
+   `PLATFORM_SERVICE_ACCOUNT` secret, and the `production` environment, as
+   the platform-functions README's [Setting it
+   up](../platform-functions/README.md#setting-it-up) says.
+5. **The build values.** **Project settings → General → Your apps → Add app →
+   Web** (no Hosting), then copy its config into
+   `apps/console/.env.production.local` (git ignores it), which `next build`
+   reads:
+
+   ```bash
+   NEXT_PUBLIC_FIREBASE_API_KEY=…
+   NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=getcafemenu.firebaseapp.com
+   NEXT_PUBLIC_FIREBASE_PROJECT_ID=getcafemenu
+   NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=…
+   NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=…
+   NEXT_PUBLIC_FIREBASE_APP_ID=…
+   NEXT_PUBLIC_BACKEND=requests
+   NEXT_PUBLIC_DEPLOY_SERVICE_ACCOUNT=cafemenu-deploy@getcafemenu.iam.gserviceaccount.com
+   # NEXT_PUBLIC_SIGNUP_OPEN=1    only when sign-up should open
+   ```
+
+   None of these is a secret: they are in every page the console serves, and
+   the rules protect the data.
+
+6. **Rebuild and redeploy** both live sites: `./scripts/deploy-live.sh` from
+   the repository root. The console leaves demo mode (its demo notice goes).
+7. **Check:** sign up as a test owner, connect a test project, press **Check
+   connection** and wait for the answer (up to about 5 minutes).
 
 ## The platform database
 
@@ -204,6 +280,7 @@ Types in [`src/lib/platform/model.ts`](./src/lib/platform/model.ts), rules in
 | `releases/{version}` | one per published release, id `1.4.2`                      | the backend only                                                | any verified account         |
 | `deployments/{id}`   | one per setup, deploy, rollback or branding sync of a cafe | the backend only                                                | that cafe's owner, the admin |
 | `cafes/{id}/setup/…` | the logo and starting menu from sign-up                    | its owner, while the cafe is a draft (the logo also while live) | its owner, the admin         |
+| `requests/{id}`      | something asked of the backend (#77)                       | its asker once, queued, for their own cafe; then the backend    | its asker, the admin         |
 
 A cafe:
 
@@ -254,6 +331,14 @@ the progress screen, `error`, `createdAt` and `finishedAt`.
 A release carries `channel`, Markdown `notes`, `publishedAt`, the
 `schemaVersion` it expects in each cafe's database, and `withdrawn`.
 
+A request carries what its asker wrote (`cafeId`, `kind`: `check`,
+`provision`, `deploy`, `rollback` or `sync-branding`; `params`; `status`
+`queued`; `createdAt`; `by`) and what the backend answers (`status`
+`running`, `done` or `failed`; `progress`; `result`; `error`, `errorCode`;
+`deploymentId`). The shape is
+[`@cafemenu/shared/requests`](../../packages/shared/src/requests.mjs); the
+platform-functions README has [every field](../platform-functions/README.md#a-request).
+
 **Accounts.** Email and password, with email verification: the rules refuse
 every write from an unverified account, reading `email_verified` from the ID
 token, so the console refreshes the token after the link is clicked
@@ -261,12 +346,13 @@ token, so the console refreshes the token after the link is clicked
 `admin: true`, which only the Admin SDK can set; an admin reads everything,
 and writes through the backend like everyone else.
 
-**The backend** (the deployer, and the Cloud Functions to come in
-[#28](https://github.com/shreyashp47/cafemenu/issues/28)) writes with the
-platform service account, which Firestore does not hold to the rules. It is
-the only writer of releases, deployments, a cafe's status, its plan and
-`release.current`/`previous`. Upgrade and Roll back (#29) will be requests to
-it, not client writes.
+**The backend** (the deployer, run by
+[`apps/platform-functions`](../platform-functions/README.md) on GitHub
+Actions or as Cloud Functions) writes with the platform service account,
+which Firestore does not hold to the rules. It is the only writer of
+releases, deployments, a cafe's status, its plan, `release.current`/`previous`
+and the answers to requests. Upgrade and Roll back are requests to it, not
+client writes.
 
 ## The platform admin
 
