@@ -13,6 +13,14 @@
  *   cafes/{id}.emails             {releaseNotices: false} once the owner unsubscribed
  *   releases/{version}            read
  *   deployments/{id}              created, claimed and updated here
+ *   requests/{id}                 what people asked for (#77): read, claimed
+ *                                 and answered by the worker (src/worker/)
+ *   backend/worker                the worker's own bookkeeping: the releases
+ *                                 it has seen, when its email jobs last ran.
+ *                                 No rule matches it, so no client can read it.
+ *
+ * Accounts are read from the platform's Auth (`getAccount`, `getOwnerEmail`,
+ * `getOwnerName`), which needs the Firebase Authentication Viewer role.
  */
 import { FieldPath, FieldValue } from "firebase-admin/firestore";
 
@@ -25,9 +33,18 @@ const ms = (value) =>
       ? value.getTime()
       : value;
 
+const OPEN = ["queued", "running"];
+
 export function createFirestoreStore({ db, auth }) {
   const cafeRef = (id) => db.collection("cafes").doc(id);
   const deployments = db.collection("deployments");
+  const requests = db.collection("requests");
+  const workerRef = db.collection("backend").doc("worker");
+  const requestOf = (snap) => {
+    if (!snap.exists) return null;
+    const data = snap.data();
+    return { ...data, id: snap.id, createdAt: ms(data.createdAt) };
+  };
   const deploymentOf = (snap) => {
     if (!snap.exists) return null;
     const data = snap.data();
@@ -164,6 +181,28 @@ export function createFirestoreStore({ db, auth }) {
       await cafeRef(cafeId).update({ "emails.releaseNotices": releaseNotices });
     },
 
+    /**
+     * The account `uid` as the backend checks a request's asker: null when
+     * there is no such account. Any other failure is thrown, so a request is
+     * never refused because Auth was briefly unreachable.
+     */
+    async getAccount(uid) {
+      let user;
+      try {
+        user = await auth.getUser(uid);
+      } catch (error) {
+        if (error?.code === "auth/user-not-found") return null;
+        throw error;
+      }
+      return {
+        uid: user.uid,
+        email: user.email ?? null,
+        emailVerified: user.emailVerified === true,
+        disabled: user.disabled === true,
+        admin: user.customClaims?.admin === true,
+      };
+    },
+
     async getOwnerName(uid) {
       try {
         return (await auth.getUser(uid)).displayName ?? null;
@@ -188,6 +227,56 @@ export function createFirestoreStore({ db, auth }) {
         if (patch) tx.update(ref, patch);
         return result;
       });
+    },
+
+    /** Queued or running deployments, oldest first: the ones to run. */
+    async listActiveDeployments(limit) {
+      const snap = await deployments
+        .where("status", "in", OPEN)
+        .orderBy("createdAt")
+        .limit(limit)
+        .get();
+      return snap.docs.map(deploymentOf);
+    },
+
+    // -- requests (#77) ------------------------------------------------------
+
+    /** Queued or running requests, oldest first. */
+    async listActiveRequests(limit) {
+      const snap = await requests
+        .where("status", "in", OPEN)
+        .orderBy("createdAt")
+        .limit(limit)
+        .get();
+      return snap.docs.map(requestOf);
+    },
+
+    async getRequest(id) {
+      return requestOf(await requests.doc(id).get());
+    },
+
+    async updateRequest(id, patch) {
+      await requests.doc(id).update(patch);
+    },
+
+    /** Reads the request, lets `fn` decide ({patch, result}), writes the patch: atomically. */
+    transactRequest(id, fn) {
+      return db.runTransaction(async (tx) => {
+        const ref = requests.doc(id);
+        const { patch, result } = fn(requestOf(await tx.get(ref)));
+        if (patch) tx.update(ref, patch);
+        return result;
+      });
+    },
+
+    async getWorkerState() {
+      const snap = await workerRef.get();
+      return snap.exists ? snap.data() : null;
+    },
+
+    /** Replaces the worker's bookkeeping (not a merge: a release that is gone goes from it too). */
+    async setWorkerState(state) {
+      await workerRef.set(state);
     },
 
     /**

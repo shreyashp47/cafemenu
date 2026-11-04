@@ -3,13 +3,19 @@
 import { useEffect, useState } from "react";
 import type { DataBundle } from "@/lib/data/types";
 import { fill, messages } from "@/lib/messages";
-import type { Cafe, Deployment, Release } from "@/lib/platform/model";
+import type {
+  BackendRequest,
+  Cafe,
+  Deployment,
+  Release,
+} from "@/lib/platform/model";
 import { supportedLines, supportView } from "@/lib/owner/support";
-import { requestState } from "@/lib/owner/updates";
+import { requestState, requestsToShow } from "@/lib/owner/updates";
 import { NOTICE_DAYS } from "@cafemenu/shared/support-window";
 import { Rich } from "../Rich";
 import { FormSection } from "../form/Field";
 import { DeploymentList } from "./DeploymentList";
+import { RequestList } from "./RequestList";
 import { SupportNotice } from "./SupportNotice";
 import { UpdateChoice } from "./UpdateChoice";
 import { UpgradeRollback } from "./UpgradeRollback";
@@ -21,17 +27,21 @@ const { policy } = text;
  * Updates: the version running, how the cafe follows releases, Upgrade and
  * Roll back with the release notes, and what CafeMenu has done to the cafe.
  * A cafe that stays on a line the support window has dropped is told so, with
- * the date to upgrade by (#35). `now` is for tests.
+ * the date to upgrade by (#35). With the backend on GitHub Actions (#77),
+ * the owner's requests that are still waiting for it show too: `requests`
+ * are their latest for the cafe, newest first. `now` is for tests.
  */
 export function UpdatesPanel({
   data,
   cafe,
   deployments,
+  requests = [],
   now,
 }: {
   data: DataBundle;
   cafe: Cafe;
   deployments: readonly Deployment[];
+  requests?: readonly BackendRequest[];
   now?: number;
 }) {
   const [releases, setReleases] = useState<Release[] | null>(null);
@@ -94,8 +104,9 @@ export function UpdatesPanel({
         data={data}
         cafe={cafe}
         releases={releases}
-        state={requestState(cafe, deployments)}
+        state={requestState(cafe, deployments, requests)}
       />
+      <RequestList requests={requestsToShow(requests)} />
       <DeploymentList deployments={deployments} />
     </FormSection>
   );

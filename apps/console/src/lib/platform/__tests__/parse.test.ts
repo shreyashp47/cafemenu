@@ -5,6 +5,7 @@ import {
   parseCafe,
   parseDeployment,
   parseRelease,
+  parseRequest,
   toMillis,
 } from "../parse";
 import { newCafeRecord } from "../records";
@@ -201,5 +202,64 @@ describe("compareVersionsDesc", () => {
       "1.9.3",
       "1.2.0",
     ]);
+  });
+});
+
+describe("parseRequest", () => {
+  const record = {
+    cafeId: "c1",
+    kind: "deploy",
+    params: { version: "1.2.0" },
+    status: "running",
+    createdAt: stamp(5),
+    by: "u1",
+    progress: {
+      steps: [
+        { id: "rules", label: "Firestore rules", status: "done" },
+        { id: "hosting", label: "Hosting", status: "running" },
+        { nonsense: true },
+      ],
+      detail: "Hosting",
+    },
+    deploymentId: "d1",
+  };
+
+  it("reads what the console wrote and what the backend answered", () => {
+    expect(parseRequest("r1", record)).toEqual({
+      id: "r1",
+      cafeId: "c1",
+      kind: "deploy",
+      params: { version: "1.2.0" },
+      status: "running",
+      by: "u1",
+      createdAt: 5,
+      progress: {
+        steps: [
+          { id: "rules", label: "Firestore rules", status: "done" },
+          { id: "hosting", label: "Hosting", status: "running" },
+        ],
+        detail: "Hosting",
+      },
+      result: null,
+      error: null,
+      errorCode: null,
+      deploymentId: "d1",
+      finishedAt: null,
+    });
+  });
+
+  it("reads a request just written, before the server's time is back, as now", () => {
+    const parsed = parseRequest("r1", { ...record, createdAt: null });
+    expect(parsed?.createdAt).toBeGreaterThan(0);
+  });
+
+  it("drops what isn't a request", () => {
+    expect(parseRequest("r1", { ...record, kind: "format-disk" })).toBeNull();
+    expect(parseRequest("r1", { ...record, status: "maybe" })).toBeNull();
+    expect(parseRequest("r1", { ...record, by: 3 })).toBeNull();
+    expect(parseRequest("r1", null)).toBeNull();
+    expect(parseRequest("r1", { ...record, progress: "lots" })?.progress).toBe(
+      null,
+    );
   });
 });

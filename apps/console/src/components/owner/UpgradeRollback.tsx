@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { DataBundle } from "@/lib/data/types";
+import type { DataBundle, DeployReceipt } from "@/lib/data/types";
 import { formatDate } from "@/lib/format";
 import { errorText, fill, messages } from "@/lib/messages";
 import type { Cafe, Release } from "@/lib/platform/model";
@@ -70,13 +70,17 @@ export function UpgradeRollback({
 
   const run = async (
     which: "upgrade" | "rollback",
-    ask: () => Promise<unknown>,
+    ask: () => Promise<DeployReceipt>,
   ) => {
     setBusy(which);
     setMessage(null);
     try {
-      await ask();
-      setMessage({ ok: true, text: request.sent });
+      const receipt = await ask();
+      // A request the backend picks up on its next run takes minutes.
+      setMessage({
+        ok: true,
+        text: "requestId" in receipt ? request.queued : request.sent,
+      });
     } catch (error) {
       setMessage({ ok: false, text: errorText(error) });
     } finally {

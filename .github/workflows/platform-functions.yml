@@ -2,7 +2,8 @@ name: Platform functions
 
 # apps/platform-functions, and what it is built from: the deployer it runs,
 # the shared settings package, the release scripts the deployer imports, the
-# platform's Firestore rules (the emulators load a copy) and the lockfile.
+# platform's Firestore rules (the emulators load a copy) and the lockfile;
+# and the workflow that runs it as the backend (backend.yml).
 on:
   push:
     branches: [main]
@@ -15,6 +16,7 @@ on:
       - "scripts/release/**"
       - "package-lock.json"
       - ".github/workflows/platform-functions.yml"
+      - ".github/workflows/backend.yml"
   pull_request:
     branches: [main]
     paths:
@@ -26,6 +28,7 @@ on:
       - "scripts/release/**"
       - "package-lock.json"
       - ".github/workflows/platform-functions.yml"
+      - ".github/workflows/backend.yml"
 
 # Only one run per branch; a new push cancels the run it supersedes.
 concurrency:
@@ -87,6 +90,47 @@ jobs:
 
       - name: Provision a cafe on the emulators
         run: npm run test:emulator -w @cafemenu/platform-functions
+
+  # The backend as backend.yml runs it (#77): an owner writes requests through
+  # the platform's real rules with the client SDK, as the console does, and
+  # the worker does them against the deployer's fake Google. Only Auth and
+  # Firestore are emulated: the worker needs no Cloud Functions. Then again
+  # with the worker from the staged package, installed exactly as the
+  # workflow installs it.
+  worker:
+    name: requests done by the worker on the emulators
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install
+        run: npm ci
+
+      - name: Requests done by the worker
+        run: npm run test:emulator:worker -w @cafemenu/platform-functions
+
+      - name: Stage, and install as backend.yml does
+        run: |
+          npm run stage -w @cafemenu/platform-functions
+          cd apps/platform-functions/.deploy
+          npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+
+      - name: The same, by the staged worker
+        run: npm run test:emulator:worker -w @cafemenu/platform-functions
+        env:
+          CAFEMENU_WORKER_DIR: .deploy
 
   # What `firebase deploy` uploads is not the workspace: it is the staged copy
   # that Cloud Build installs on its own. Make it, install it as Cloud Build

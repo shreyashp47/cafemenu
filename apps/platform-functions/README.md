@@ -1,17 +1,29 @@
 # @cafemenu/platform-functions
 
-The platform's backend: the Cloud Functions (2nd gen) that set a cafe up and
-run its deploys, rollbacks and branding syncs, with
-[`@cafemenu/deployer`](../../packages/deployer/README.md) used as a library.
-They run in the **platform** Firebase project, as its runtime service account,
-which is the account every owner adds to their own project
-([PLAN.md](../../PLAN.md#how-it-fits-together)); no key file exists anywhere.
+The platform's backend: it sets a cafe up and runs its deploys, rollbacks and
+branding syncs, with [`@cafemenu/deployer`](../../packages/deployer/README.md)
+used as a library, and sends the owner emails. The same handlers run two ways:
+
+- **On GitHub Actions, every 5 minutes** (chosen: free, the platform stays on
+  Spark, #77). The console writes a request document; the worker
+  ([`src/worker/`](./src/worker)) picks it up, does it and answers on it. It
+  signs in as the platform service account with that account's JSON key,
+  which is a GitHub secret and nowhere else. See
+  [The backend on GitHub Actions](#the-backend-on-github-actions).
+- **As Cloud Functions (2nd gen)** ([`src/index.mjs`](./src/index.mjs)), kept
+  so that Blaze stays an option: callables answer at once and Firestore
+  triggers do the work, as the platform project's runtime service account,
+  with no key file at all. See [Deploying to the platform
+  project](#deploying-the-cloud-functions-blaze).
+
+Either way the account is the one every owner adds to their own project
+([PLAN.md](../../PLAN.md#how-it-fits-together)).
 
 > [!WARNING]
-> **Nothing here has run against real Google yet.** The functions are tested
+> **Nothing here has run against real Google yet.** The backend is tested
 > against the deployer's fake Google and the Firebase emulators. The platform
-> project (Blaze, on the maintainer's side) is not set up, and the Phase 0
-> spikes ([#2](https://github.com/shreyashp47/cafemenu/issues/2),
+> project's service account is not set up, and the Phase 0 spikes
+> ([#2](https://github.com/shreyashp47/cafemenu/issues/2),
 > [#3](https://github.com/shreyashp47/cafemenu/issues/3)) have not run. Every
 > assumption that waits for them is marked `[[SPIKE #3]]` below and in the
 > code.
@@ -30,10 +42,13 @@ which is the account every owner adds to their own project
 | `notifyOnDeployment`  | a `deployments/{id}` update        | emails the owner when it ended `failed` or `rolled-back`                                      |
 | `unsubscribe`         | the link in an email (HTTP)        | switches the release emails off (or on again) for one cafe                                    |
 
-The console reaches the first five through
+On Blaze, the console reaches the first five through
 [`apps/console/src/lib/data/callables.ts`](../console/src/lib/data/callables.ts),
-switched on with `NEXT_PUBLIC_BACKEND_FUNCTIONS=1` (off, and always in demo
-mode, nothing changes).
+switched on with `NEXT_PUBLIC_BACKEND=functions`. On GitHub Actions it writes
+requests instead ([`requests.ts`](../console/src/lib/data/requests.ts),
+`NEXT_PUBLIC_BACKEND=requests`), and the worker calls the same five handlers
+and the same `runDeploymentJob` work, and sends the same emails. Unset, and
+always in demo mode, nothing changes.
 
 ### Who may call
 
@@ -65,6 +80,225 @@ answers with an error the page can show at once. The trigger rather than the
 callable does the work because setup takes minutes (the HTTP request would
 have to be held open), and because a trigger with `retry: true` is run again
 by Cloud Functions when it fails, which the resumability below builds on.
+
+## The backend on GitHub Actions
+
+[`.github/workflows/backend.yml`](../../.github/workflows/backend.yml) runs
+`node src/worker/main.mjs` (`npm run worker -w @cafemenu/platform-functions`)
+every 5 minutes, GitHub's shortest schedule, and on **Run workflow**. A run
+takes from a few seconds (nothing to do) to a few minutes (a setup).
+
+### A request
+
+The console writes `requests/{id}`, and listens to it:
+
+| Field          | Written by | What                                                                                                        |
+| -------------- | ---------- | ----------------------------------------------------------------------------------------------------------- |
+| `cafeId`       | the asker  | the cafe it is about                                                                                        |
+| `kind`         | the asker  | `check`, `provision`, `deploy`, `rollback` or `sync-branding`                                               |
+| `params`       | the asker  | `{projectId}` for a check (only the project saved on the cafe), `{version}` for a deploy, `{}` for the rest |
+| `status`       | both       | `queued` when written; then `running`, and `done` or `failed`                                               |
+| `createdAt`    | the asker  | the server's time                                                                                           |
+| `by`           | the asker  | their uid                                                                                                   |
+| `progress`     | backend    | `{steps: [{id, label, status}], detail}`: the deployment's steps as they move, or the check's one step      |
+| `result`       | backend    | a check's `ConnectionResult`; for the others `{deploymentId, outcome, siteUrl?}`                            |
+| `error`        | backend    | why it failed, in words for the owner (the callables' words, or the deployment's)                           |
+| `errorCode`    | backend    | `permission-denied`, `failed-precondition`, `invalid-argument`, `unavailable`, a deployment's code…         |
+| `deploymentId` | backend    | the deployment it became                                                                                    |
+| (bookkeeping)  | backend    | `attempts`, `lease`, `startedAt`, `finishedAt`, `technical`                                                 |
+
+The shape is one module, [`@cafemenu/shared/requests`](../../packages/shared/src/requests.mjs),
+which the console uses to write requests and the rules mirror. The rules
+([`apps/console/firestore.rules`](../console/firestore.rules), tested in
+[`scripts/rules-test.mjs`](../console/scripts/rules-test.mjs)) let a verified
+owner create one only for their own cafe (the admin, for any cafe), in their
+own name, queued, at the server's time, with a kind and params that fit, and
+nothing the backend writes. Nobody can change or delete a request from a
+browser. Its asker and the admin can read it.
+
+### One run
+
+[`src/worker/worker.mjs`](./src/worker/worker.mjs):
+
+1. **Requests.** The queued ones, and running ones whose run died, oldest
+   first but taking turns between cafes. Each is **claimed in a transaction**
+   with a 30-minute lease (`decideClaim` in [`src/claim.mjs`](./src/claim.mjs),
+   the deployments' own): a second run that meets it leaves it alone, so no
+   request is done twice, and one whose run died is picked up again once its
+   lease is out, at most four times. The asker is looked up in the platform's
+   Auth (gone, disabled or unverified: refused), and the request goes to the
+   **same handlers the Cloud Functions use**
+   ([`src/worker/requests.mjs`](./src/worker/requests.mjs)): `checkConnection`,
+   or `startProvisioning` / `requestUpgrade` / `requestRollback` /
+   `requestSyncBranding` and then `runDeployment` from
+   [`src/jobs.mjs`](./src/jobs.mjs). So a request is refused for exactly the
+   reasons a callable is, with the same words, and runs exactly as a
+   deployment does: resumable, with retries and the explanations in
+   [`src/explain.mjs`](./src/explain.mjs). The deployment's steps are copied
+   to the request as they move. A deployment that has to wait (Google busy,
+   out of time) puts the request back in the queue with its `deploymentId`,
+   and the next run carries on from there. Anything unexpected fails the
+   request with a reference (its id) and turns the run red.
+2. **Deployments queued any other way** (a callable on Blaze, a rollout, one a
+   request put back) are run too: on Blaze a trigger would.
+3. **Emails and the support window**
+   ([`src/worker/background.mjs`](./src/worker/background.mjs)). A failed or
+   rolled-back deployment emails its owner as the worker finishes it. At most
+   hourly (or with `--jobs`, **Run workflow**'s checkbox), the releases are
+   compared with what the worker saw last time (`backend/worker`, a document
+   no rule lets a browser near), and each new or changed one goes through
+   `notifyRelease`, as the `notifyOnRelease` trigger would. Once a day, every
+   cafe on a line the support window has dropped is told to upgrade by its
+   date. Every email still goes once per cafe per thing.
+
+A run starts nothing new after 5 minutes or 25 requests; the rest wait for
+the next run. The workflow stops a run after 20 minutes.
+
+**One at a time.** The workflow's `concurrency` never starts a run beside
+another (a run that is due waits), and the transaction makes it safe even if
+two did meet, or the Cloud Functions ran too.
+
+### What the log shows
+
+The repository is public, so **its Actions logs are public**. The worker
+prints one line per request and deployment (its id, kind and outcome) and a
+summary of the emails, and nothing else: no email addresses, cafe names,
+project IDs, deployer output or error messages beyond fixed words
+([`src/worker/log.mjs`](./src/worker/log.mjs)). What happened in detail is on
+the request and deployment documents, which only their owner and the admin
+can read. `--verbose` prints everything, for your own machine only.
+
+### Setting it up
+
+Done once, by the maintainer, in this order. It assumes the platform's
+Firestore database exists and the console is switched to real mode: see the
+[console README](../console/README.md#real-mode-the-platform-project).
+
+1. **Create the service account in `getcafemenu`.** In the Google Cloud
+   console for the project: **IAM & Admin → Service accounts → Create
+   service account**, named `cafemenu-deploy`. Or:
+
+   ```bash
+   gcloud iam service-accounts create cafemenu-deploy \
+     --project getcafemenu --display-name "CafeMenu deploy"
+   ```
+
+   Its address, `cafemenu-deploy@getcafemenu.iam.gserviceaccount.com`, is the
+   one owners add to their projects: put it in the console's
+   `NEXT_PUBLIC_DEPLOY_SERVICE_ACCOUNT`.
+
+2. **Give it its platform roles**, in `getcafemenu` only:
+
+   | Role                                                         | For                                                                                      |
+   | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+   | Cloud Datastore User (`roles/datastore.user`)                | reading and writing the platform's Firestore: requests, cafes, deployments, releases     |
+   | Firebase Authentication Viewer (`roles/firebaseauth.viewer`) | looking up who asked (verified, disabled, admin), and the owner's name and email address |
+
+   ```bash
+   SA=cafemenu-deploy@getcafemenu.iam.gserviceaccount.com
+   for role in roles/datastore.user roles/firebaseauth.viewer; do
+     gcloud projects add-iam-policy-binding getcafemenu \
+       --member "serviceAccount:$SA" --role "$role"
+   done
+   ```
+
+   Nothing else in `getcafemenu`. What it may do in **owners'** projects is
+   the role each owner grants it there, which is `[[SPIKE #3]]`: the smallest
+   set is what the Phase 0 spike settles. Also `[[SPIKE #3]]`: whether
+   `getcafemenu` itself must have the Google APIs the deployer calls enabled
+   (Cloud Resource Manager, Service Usage, Firebase Management, Firestore,
+   Firebase Rules, Firebase Hosting, Identity Toolkit), since some Google APIs
+   count a service account's calls against its own project.
+
+3. **Make its JSON key**, and hand it straight to GitHub. **Service accounts
+   → cafemenu-deploy → Keys → Add key → Create new key → JSON** downloads it,
+   or:
+
+   ```bash
+   gcloud iam service-accounts keys create ~/cafemenu-deploy.json \
+     --iam-account "$SA"
+   ```
+
+   An organisation's policy can forbid keys (`iam.disableServiceAccountKeyCreation`,
+   on by default in organisations made since 2024); a personal Google account
+   has no organisation, so this works there.
+
+4. **Create the `production` environment**: the repository's **Settings →
+   Environments → New environment**, `production`. Under **Deployment
+   branches and tags**, choose **Selected branches and tags** and add `main`,
+   so nothing but `main` can use its secret. (Don't add required reviewers:
+   every run would wait for one.)
+
+5. **Store the key as its secret, then delete your copy:**
+
+   ```bash
+   gh secret set PLATFORM_SERVICE_ACCOUNT --env production \
+     --repo shreyashp47/cafemenu < ~/cafemenu-deploy.json
+   rm ~/cafemenu-deploy.json
+   ```
+
+   The key can rewrite the rules of every connected cafe: it must never be
+   committed, pasted anywhere else or kept on disk. Make a new one and delete
+   the old one (**Keys** tab) if it might have leaked, and once a year anyway.
+
+6. **Emails** (optional). Without them the worker sends no email (the `log`
+   provider, which writes nothing to the public log either). For Resend:
+   **Settings → Environments → production**, variables `MAIL_PROVIDER` =
+   `resend`, `MAIL_FROM` = `CafeMenu <hello@your-domain>` (a domain Resend has
+   verified) and `CONSOLE_URL` = the console's address, and the secret
+   `RESEND_API_KEY`. See [Emails](#emails). On GitHub Actions there is no
+   `unsubscribe` function to link to, so the one optional email,
+   `release-available`, isn't sent; failures and required upgrades are.
+
+7. **Switch the console** to `NEXT_PUBLIC_BACKEND=requests`, rebuild and
+   redeploy it (the console README).
+
+8. **Try it.** **Actions → Backend → Run workflow** on `main`. The log should
+   end with `nothing to do`, or a line per request. Then press **Check
+   connection** in the console as an owner: within about 5 minutes the page
+   shows the answer.
+
+Until step 5, every run stops at its first step, with a notice, and costs
+nothing.
+
+### When GitHub pauses the schedule
+
+**GitHub turns a public repository's scheduled workflows off after 60 days
+with no activity in it** (no commits). From then on nothing answers
+requests: owners see them wait. To keep it alive, push something now and
+then (any commit to `main` counts). To start it again: **Actions → Backend →
+Enable workflow**, then **Run workflow** once. Requests written in the meantime are still queued and are
+done on the next run.
+
+### Running it locally
+
+```bash
+npm run test:emulator:worker -w @cafemenu/platform-functions   # Java 21, Node 22.18+
+```
+
+starts the Auth and Firestore emulators (no Functions), serves the deployer's
+fake Google, signs an owner in with the Firebase client SDK as the console
+does, writes requests through the real rules, and runs the worker CLI on them,
+checking what the owner's listener sees, that two runs at once do a request
+once, and that the log holds no address or project ID. With
+`CAFEMENU_WORKER_DIR=.deploy` it runs the staged worker, installed as the
+workflow installs it (CI does both).
+
+To use the console against it: run the console's emulators
+(`npm run emulators -w @cafemenu/console`), set `NEXT_PUBLIC_FIREBASE_EMULATORS=1`
+and `NEXT_PUBLIC_BACKEND=requests` in `apps/console/.env.local`, and beside them:
+
+```bash
+cd apps/platform-functions
+FIRESTORE_EMULATOR_HOST=127.0.0.1:8180 FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9199 \
+GCLOUD_PROJECT=demo-cafemenu npm run worker -- --loop 10 --verbose
+```
+
+A check then fails ("couldn't be done"): Google isn't there. For setups and
+deploys, also serve the fake Google (`startFakeGoogle` in
+`tests/helpers/fake-google-server.mjs`) and add
+`CAFEMENU_FAKE_GOOGLE=http://127.0.0.1:8399`; the worker only takes it with
+the emulators and a `demo-` project.
 
 ## Provisioning
 
@@ -253,15 +487,16 @@ The templates ([`src/mail/templates.mjs`](./src/mail/templates.mjs)) are plain
 text and a simple HTML page with inline styles, no images or scripts, with
 everything an owner typed (the cafe's name) escaped.
 
-## Running it locally
+## Running the Cloud Functions locally
 
 ```bash
 npm test -w @cafemenu/platform-functions            # unit tests, any Node 20+
 npm run test:emulator -w @cafemenu/platform-functions
 ```
 
-The unit tests run the callables and the worker against the deployer's fake
-Google (`packages/deployer/tests/helpers/`) and the platform's data in memory.
+The unit tests run the callables, the deployment jobs and the GitHub Actions
+worker against the deployer's fake Google (`packages/deployer/tests/helpers/`)
+and the platform's data in memory.
 The emulator test needs **Node 22.18 or later** (firebase-admin 14, and
 `@cafemenu/shared` is TypeScript that Node imports as it is) and **Java 21**
 (`/opt/homebrew/opt/openjdk@21/bin` on this machine). It starts the Auth,
@@ -281,7 +516,7 @@ To use the console against them:
 npm run emulators -w @cafemenu/platform-functions     # instead of the console's own
 # apps/console/.env.local
 #   NEXT_PUBLIC_FIREBASE_EMULATORS=1
-#   NEXT_PUBLIC_BACKEND_FUNCTIONS=1
+#   NEXT_PUBLIC_BACKEND=functions
 ```
 
 It serves the console's ports (Auth 9199, Firestore 8180) and Functions on
@@ -295,10 +530,11 @@ pointing at `localhost:3100` and the local `unsubscribe` function.
 > Installing under Node 20 skips firebase-admin's optional Firestore package,
 > which wants Node 22. `npm ci` on Node 22 installs it.
 
-## Deploying to the platform project
+## Deploying the Cloud Functions (Blaze)
 
-Done once, by the maintainer. **All of this waits for the platform project and
-[[SPIKE #3]].**
+Only if the platform moves to Blaze; on Spark, [the GitHub Actions
+backend](#the-backend-on-github-actions) does this work. Done once, by the
+maintainer. **All of this waits for the platform project and [[SPIKE #3]].**
 
 1. **Blaze.** Cloud Functions (2nd gen) need the platform project on the Blaze
    plan. Provisioning and deploys run rarely, so expect around ₹0 to a few
@@ -359,10 +595,24 @@ Done once, by the maintainer. **All of this waits for the platform project and
    `CONSOLE_URL`) and deploy again. [Emails](#emails) says what is sent.
 7. **Firestore rules and indexes** are the console's: `firebase deploy --only
 firestore` from `apps/console`. The functions need no new index.
-8. **Console.** Build it with `NEXT_PUBLIC_BACKEND_FUNCTIONS=1`, and
+8. **Console.** Build it with `NEXT_PUBLIC_BACKEND=functions`, and
    `NEXT_PUBLIC_FUNCTIONS_REGION` if the region isn't `us-central1`.
+9. **Stop the GitHub Actions backend**, or leave it: both claim each request
+   and deployment before working on it, so they never do one twice.
 
 ## Not done here
+
+- **No rate limit on requests.** An owner can write as many as they like;
+  the worker takes turns between cafes and answers at most 25 a run, so a
+  flood from one cafe slows others down rather than stopping them. Each write
+  counts against the platform's free Firestore quota, as an owner's edits to
+  their cafe already do.
+- **On GitHub Actions, no `release-available` emails** (no unsubscribe
+  function to link to; see [Setting it up](#setting-it-up), step 6), and
+  answers take up to 5 minutes, or longer when GitHub's schedule runs late.
+- **The console can't start a setup yet:** the `provision` request is done by
+  the worker (and tested), but no button writes it
+  (`apps/console/src/components/setup/Connected.tsx`, `TODO(#28)`).
 
 - **No screen starts a setup or shows its progress yet.** The wizard stops at
   "connected" (`apps/console/src/components/setup/Connected.tsx` has the

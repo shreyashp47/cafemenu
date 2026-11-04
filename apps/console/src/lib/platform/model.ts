@@ -13,6 +13,9 @@
  *   releases/{version}     one per published release. Written by the backend.
  *   deployments/{id}       one per setup, deploy, rollback or branding sync.
  *                          Written by the backend.
+ *   requests/{id}          what an owner (or the admin) asked the backend for:
+ *                          written once by them, answered by the backend
+ *                          (#77; the shape is @cafemenu/shared/requests).
  *
  * firestore.rules is the real boundary; the checks in validate.ts mirror it so
  * the console can say what is wrong before a write is refused. Change all
@@ -23,6 +26,7 @@
  */
 
 import type { CafeSettings } from "@cafemenu/shared";
+import type { RequestKind, RequestStatus } from "@cafemenu/shared/requests";
 
 // -- releases ----------------------------------------------------------------
 
@@ -240,6 +244,49 @@ export interface Deployment {
   /** What went wrong, in words an owner can act on; null unless it failed. */
   error: string | null;
   createdAt: number;
+  finishedAt: number | null;
+}
+
+// -- requests to the backend (#77) -----------------------------------------------
+
+export type { RequestKind, RequestStatus };
+
+/**
+ * What a request has come to, as the backend writes it while it works: the
+ * steps of the deployment it became (or of the check), and what is
+ * happening now.
+ */
+export interface RequestProgress {
+  steps: DeploymentStep[];
+  detail: string | null;
+}
+
+/**
+ * One `requests/{id}`: written by a person (cafeId, kind, params, status
+ * "queued", createdAt, by), then only by the backend, which picks it up on
+ * its next run (every 5 minutes on GitHub Actions) and answers on it.
+ */
+export interface BackendRequest {
+  id: string;
+  cafeId: string;
+  kind: RequestKind;
+  params: Record<string, unknown>;
+  status: RequestStatus;
+  /** Who asked. */
+  by: string;
+  createdAt: number;
+  /** Null until the backend has started on it. */
+  progress: RequestProgress | null;
+  /**
+   * What came of it: a check's ConnectionResult, or for the other kinds
+   * {deploymentId, outcome, siteUrl?}. Null until it is done.
+   */
+  result: unknown;
+  /** Why it failed, in words for the owner; null unless it did. */
+  error: string | null;
+  errorCode: string | null;
+  /** The deployment it became, once the backend has queued it. */
+  deploymentId: string | null;
   finishedAt: number | null;
 }
 

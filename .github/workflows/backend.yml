@@ -1,0 +1,114 @@
+name: Backend
+
+# CafeMenu's backend (#77), for free: every 5 minutes, one run of the worker
+# in apps/platform-functions (src/worker/main.mjs). It answers the requests
+# the console wrote to the platform's Firestore (getcafemenu): connection
+# checks, setups, upgrades, roll backs and branding syncs, with the deployer;
+# and it sends the owner emails and the support window's notices. The same
+# code can run as Cloud Functions on Blaze instead (apps/platform-functions,
+# src/index.mjs); this is what runs on the free Spark plan.
+#
+# It signs in as the platform service account, whose JSON key is the
+# PLATFORM_SERVICE_ACCOUNT secret of the `production` environment. Until that
+# secret exists, every run stops at its first step and does nothing.
+#
+# Never on a pull request: nothing from a branch or a fork runs with the key.
+# Set-up, and what to do when GitHub pauses the schedule after 60 days with
+# no commits: apps/platform-functions/README.md, "The backend on GitHub
+# Actions".
+on:
+  schedule:
+    # GitHub's shortest interval. A run can start some minutes late when
+    # GitHub is busy.
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+    inputs:
+      jobs:
+        description: "Also run the email and support-window jobs now, even if they ran within the hour"
+        type: boolean
+        default: false
+
+# One run at a time, ever: a run that is due while another works waits for
+# it, and is never started beside it.
+concurrency:
+  group: backend
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    name: answer requests
+    # Scheduled runs use the default branch; a manual one only from main.
+    # And never in a fork, which has no key anyway.
+    if: github.repository == 'shreyashp47/cafemenu' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # A run stops taking new work after 5 minutes; a setup that is under way
+    # can take a few more. Anything longer is stuck: stop it, and the next run
+    # carries on from where it was.
+    timeout-minutes: 20
+    environment: production
+
+    steps:
+      - name: Is the backend set up?
+        id: ready
+        env:
+          PLATFORM_SERVICE_ACCOUNT: ${{ secrets.PLATFORM_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$PLATFORM_SERVICE_ACCOUNT" ]; then
+            echo "::notice::PLATFORM_SERVICE_ACCOUNT isn't set in the production environment, so this run does nothing. See apps/platform-functions/README.md."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v7
+        if: steps.ready.outputs.ok == 'true'
+        with:
+          persist-credentials: false
+
+      # firebase-admin needs Node 22, and @cafemenu/shared's TypeScript needs
+      # 22.18 or later to be imported as it is.
+      - uses: actions/setup-node@v7
+        if: steps.ready.outputs.ok == 'true'
+        with:
+          node-version: 22
+
+      # The backend alone, as a package of its own with the lockfile cut from
+      # the repository's (what `firebase deploy` would upload): its production
+      # dependencies only, and no install scripts, so as little as possible
+      # runs on the machine that holds the key.
+      - name: Stage the backend
+        if: steps.ready.outputs.ok == 'true'
+        run: node apps/platform-functions/scripts/stage.mjs
+
+      - name: Install it
+        if: steps.ready.outputs.ok == 'true'
+        working-directory: apps/platform-functions/.deploy
+        run: npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+
+      # The key goes to a file only this step's user can read, for this step
+      # alone, and is deleted when it ends. The worker never prints it, and
+      # its log names requests by id and nothing else: this log is public.
+      - name: Run the backend
+        if: steps.ready.outputs.ok == 'true'
+        working-directory: apps/platform-functions/.deploy
+        env:
+          PLATFORM_SERVICE_ACCOUNT: ${{ secrets.PLATFORM_SERVICE_ACCOUNT }}
+          RUN_JOBS: ${{ inputs.jobs }}
+          # Emails (optional; see the README). Without them, emails are
+          # written nowhere and sent to nobody.
+          MAIL_PROVIDER: ${{ vars.MAIL_PROVIDER }}
+          MAIL_FROM: ${{ vars.MAIL_FROM }}
+          CONSOLE_URL: ${{ vars.CONSOLE_URL }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+        run: |
+          umask 077
+          key="$RUNNER_TEMP/platform-service-account.json"
+          trap 'rm -f "$key"' EXIT
+          printf '%s' "$PLATFORM_SERVICE_ACCOUNT" > "$key"
+          unset PLATFORM_SERVICE_ACCOUNT
+          args=()
+          if [ "$RUN_JOBS" = "true" ]; then args+=(--jobs); fi
+          GOOGLE_APPLICATION_CREDENTIALS="$key" node src/worker/main.mjs "${args[@]}"

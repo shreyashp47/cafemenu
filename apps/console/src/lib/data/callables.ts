@@ -42,7 +42,8 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const malformed = () =>
   new CodedError("internal", "The backend's answer was not understood.");
 
-function parseConnection(value: unknown): ConnectionResult {
+/** The backend's answer to a check, from a callable or a request (requests.ts). */
+export function parseConnection(value: unknown): ConnectionResult {
   if (!isRecord(value)) throw malformed();
   if (value.status === "connected" || value.status === "no-access") {
     return { status: value.status };

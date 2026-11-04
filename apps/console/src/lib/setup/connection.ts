@@ -11,6 +11,7 @@
  */
 
 import { CodedError } from "../data/types";
+import type { BackendRequest } from "../platform/model";
 
 /** One permission the deploy account lacks, and what it is for. */
 export interface MissingPermission {
@@ -29,8 +30,19 @@ export type ConnectionResult =
   /** It can see the project, but its role lacks these. */
   | { status: "missing"; missing: MissingPermission[] };
 
+export interface CheckOptions {
+  /**
+   * The request as the backend moves it on, when the check is one (the
+   * backend on GitHub Actions answers within minutes, #77).
+   */
+  onProgress?: (request: BackendRequest) => void;
+}
+
 export interface ConnectionChecker {
-  check(cafe: { id: string; projectId: string }): Promise<ConnectionResult>;
+  check(
+    cafe: { id: string; projectId: string },
+    options?: CheckOptions,
+  ): Promise<ConnectionResult>;
 }
 
 /** What `deployer check` returns: {ok, missing: {command: [{permission, why}]}}. */

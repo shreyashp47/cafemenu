@@ -16,6 +16,7 @@ import { applyActionCode } from "firebase/auth";
 import { setLogLevel } from "firebase/firestore";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type {
+  BackendRequest,
   Cafe,
   Deployment,
   PlatformUser,
@@ -439,6 +440,81 @@ describe.runIf(PROJECT.startsWith("demo-"))("Firebase adapters", () => {
       }),
     ).rejects.toMatchObject({ code: "permission-denied" });
     expect((await setStatus("provisioning")).ok).toBe(true);
+  });
+
+  it("asks the backend through requests, and follows the answer live (#77)", async () => {
+    const asking = createFirebaseBundle(() => apps[0], "emulators", {
+      mode: "requests",
+    });
+    const requests = asking.requests!;
+    expect(requests).not.toBeNull();
+
+    // Save branding returns at once with the request, which waits for the
+    // backend's next run.
+    const receipt = await asking.deploys.syncBranding(cafe);
+    expect(receipt).toHaveProperty("requestId");
+    const requestId = (receipt as { requestId: string }).requestId;
+    const queued = await next<BackendRequest>((l, e) =>
+      requests.subscribe(requestId, l, e),
+    );
+    expect(queued).toMatchObject({
+      cafeId: cafe.id,
+      kind: "sync-branding",
+      status: "queued",
+      by: aliceUser.uid,
+    });
+
+    // A check is answered by the backend writing on the request: here, as
+    // the emulator's admin, which bypasses the rules as the backend does.
+    const answered = asking.connection.check({
+      id: cafe.id,
+      projectId: "alices-cafe-1a2b3",
+    });
+    const open = await next<BackendRequest[]>(
+      (l, e) => requests.subscribeForCafe(cafe, aliceUser.uid, l, e),
+      (list) => list.some((r) => r.kind === "check"),
+    );
+    expect(open.map((r) => r.kind)).toEqual(["check", "sync-branding"]);
+    const check = open[0];
+    const res = await fetch(
+      `${FS}/v1/projects/${PROJECT}/databases/(default)/documents/requests/${check.id}?updateMask.fieldPaths=status&updateMask.fieldPaths=result`,
+      {
+        method: "PATCH",
+        headers: ADMIN,
+        body: JSON.stringify({
+          fields: {
+            status: str("done"),
+            result: { mapValue: { fields: { status: str("connected") } } },
+          },
+        }),
+      },
+    );
+    expect(res.ok).toBe(true);
+    expect(await answered).toEqual({ status: "connected" });
+
+    // Only for the project saved on the cafe, and only for one's own cafe.
+    await expect(
+      requests.create({
+        cafeId: cafe.id,
+        kind: "check",
+        params: { projectId: "someone-elses-project" },
+      }),
+    ).rejects.toMatchObject({ code: "permission-denied" });
+    const bob = await owner("bob-asks", "bob.asks@owner.test");
+    apps.push(bob.handles);
+    const bobAsking = createFirebaseBundle(() => bob.handles, "emulators", {
+      mode: "requests",
+    });
+    await expect(bobAsking.deploys.rollback(cafe)).rejects.toMatchObject({
+      code: "permission-denied",
+    });
+    await expect(
+      next((l, e) => bobAsking.requests!.subscribe(requestId, l, e)),
+    ).rejects.toMatchObject({ code: "permission-denied" });
+    // A request the console can't even make is stopped before it is sent.
+    await expect(
+      requests.create({ cafeId: cafe.id, kind: "deploy", params: {} }),
+    ).rejects.toMatchObject({ code: "invalid-argument" });
   });
 
   it("gives the admin claim to the account the backend marked", async () => {
